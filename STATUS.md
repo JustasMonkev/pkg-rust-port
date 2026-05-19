@@ -189,3 +189,13 @@ Next: implement compressed manifest key-dictionary behavior and then executable 
 Decisions made: VFS pointers render as JavaScript-compatible `[offset, size]` arrays even though the Rust manifest keeps typed `PayloadPointer` structs internally.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Compressed producer manifest slice shipped
+
+Shipped: added real gzip and Brotli payload byte accounting, compressed VFS path-key dictionary generation, compressed symlink key/value mapping, and `%DICT%` rendering from the producer manifest. Added producer parity tests for gzip, Brotli, and compressed prelude dictionary output.
+
+Next: implement executable binary streaming and placeholder injection around the manifest/prelude data.
+
+Decisions made: use `flate2` for gzip and `brotli` for Brotli so compression is native Rust and the producer can compute actual compressed payload offsets instead of guessing.
+
+Blockers worked around: the sandbox could not unpack the new Cargo dependencies into `~/.cargo`, so the focused producer test was rerun with approved Cargo registry access.

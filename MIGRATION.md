@@ -86,6 +86,7 @@ The dictionary layer will normalize these JS module names by removing the traili
 | `prebuild-install` | external command wrapper | Keep behavior by invoking installed tool initially; later replace if tests require. |
 | `resolve` | `src/resolve.rs` | Implement Node resolution directly against fixtures. |
 | `stream-meter` | Counting writer wrapper | Removed; track bytes in Rust writer. |
+| Node `zlib` gzip/brotli | `flate2`, `brotli` | Rust encoders provide payload compression and byte accounting without shelling out. |
 | `@babel/core` | removed | Build-time JS transpilation not needed in Rust. |
 | `@types/*` | removed | Rust types replace TypeScript declarations. |
 | `eslint`, `prettier`, `typescript`, `lint-staged`, `simple-git-hooks` | `rustfmt`, `clippy`, CI | Removed from Rust crate. |

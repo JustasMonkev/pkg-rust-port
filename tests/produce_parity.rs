@@ -79,7 +79,7 @@ fn snapshotifies_symlinks_in_manifest() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[test]
-fn compressed_manifest_is_explicitly_not_implemented_yet() -> Result<(), PkgError> {
+fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
@@ -90,11 +90,40 @@ fn compressed_manifest_is_explicitly_not_implemented_yet() -> Result<(), PkgErro
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
     let packed = pack(refined, true)?;
-    let error = produce_manifest(packed, Compression::Gzip, PathStyle::Posix).err();
+    let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
 
-    assert!(
-        matches!(error, Some(PkgError::NotImplemented(message)) if message.contains("compressed producer"))
+    assert_eq!(manifest.compression, Compression::Gzip);
+    assert_eq!(manifest.entrypoint, "/snapshot/test-z-require-content.css");
+    assert_eq!(
+        manifest.path_dictionary.get("").map(String::as_str),
+        Some("0")
     );
+    assert_eq!(
+        manifest.path_dictionary.get("snapshot").map(String::as_str),
+        Some("1")
+    );
+    assert!(manifest.vfs.keys().any(|key| key.starts_with("0/1/")));
+    assert!(manifest.payload_size > 0);
+    Ok(())
+}
+
+#[test]
+fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let manifest = produce_manifest(packed, Compression::Brotli, PathStyle::Posix)?;
+
+    assert_eq!(manifest.compression, Compression::Brotli);
+    assert!(manifest.payload_size > 0);
+    assert!(manifest.vfs.keys().any(|key| key.starts_with("0/1/")));
     Ok(())
 }
 
@@ -123,5 +152,26 @@ fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
     assert!(rendered.contains("{}"));
     assert!(!rendered.ends_with('\n'));
     assert!(rendered.ends_with('0'));
+    Ok(())
+}
+
+#[test]
+fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
+    let rendered = render_prelude("%VIRTUAL_FILESYSTEM%\n%DICT%\n%DOCOMPRESS%", &manifest)?;
+
+    assert!(rendered.contains(r#""":"0""#));
+    assert!(rendered.contains(r#""snapshot":"1""#));
+    assert!(rendered.ends_with('1'));
     Ok(())
 }

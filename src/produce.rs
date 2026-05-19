@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Write};
 
 use crate::common::{PathStyle, snapshotify};
-use crate::compress::Compression;
+use crate::compress::Compression as PayloadCompression;
 use crate::error::PkgError;
 use crate::pack::{PackedOutput, Stripe};
 
@@ -24,10 +25,12 @@ pub struct ProducerManifest {
     pub symlinks: BTreeMap<String, String>,
     /// Virtual filesystem dictionary: snapshot path -> store index -> payload pointer.
     pub vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>>,
-    /// Total uncompressed payload size.
+    /// Dictionary used to compress VFS path components.
+    pub path_dictionary: BTreeMap<String, String>,
+    /// Total payload size after per-stripe compression.
     pub payload_size: u64,
     /// Compression mode for payload entries.
-    pub compression: Compression,
+    pub compression: PayloadCompression,
 }
 
 /// Build the producer manifest for uncompressed payload stripes.
@@ -48,22 +51,18 @@ pub struct ProducerManifest {
 /// ```
 pub fn produce_manifest(
     packed: PackedOutput,
-    compression: Compression,
+    compression: PayloadCompression,
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
-    if compression != Compression::None {
-        return Err(PkgError::NotImplemented(
-            "compressed producer payloads are not ported yet",
-        ));
-    }
-
     let mut offset = 0_u64;
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
+    let mut path_dictionary = PathDictionary::default();
 
     for stripe in packed.stripes {
-        let size = stripe_size(&stripe)?;
+        let size = stripe_payload_size(&stripe, compression)?;
         let snap = snapshotify(&stripe.snap, style);
-        vfs.entry(snap)
+        let vfs_key = path_dictionary.make_key(compression, &snap);
+        vfs.entry(vfs_key)
             .or_default()
             .insert(stripe.store.as_index(), PayloadPointer { offset, size });
         offset += size;
@@ -72,13 +71,21 @@ pub fn produce_manifest(
     let symlinks = packed
         .symlinks
         .into_iter()
-        .map(|(link, real)| (snapshotify(&link, style), snapshotify(&real, style)))
+        .map(|(link, real)| {
+            let link = snapshotify(&link, style);
+            let real = snapshotify(&real, style);
+            (
+                path_dictionary.make_key(compression, &link),
+                path_dictionary.make_key(compression, &real),
+            )
+        })
         .collect();
 
     Ok(ProducerManifest {
         entrypoint: snapshotify(&packed.entrypoint, style),
         symlinks,
         vfs,
+        path_dictionary: path_dictionary.entries,
         payload_size: offset,
         compression,
     })
@@ -93,6 +100,7 @@ pub fn produce_manifest(
 ///     entrypoint: "/snapshot/app.js".to_owned(),
 ///     symlinks: std::collections::BTreeMap::new(),
 ///     vfs: std::collections::BTreeMap::new(),
+///     path_dictionary: std::collections::BTreeMap::new(),
 ///     payload_size: 0,
 ///     compression: pkg_rust::Compression::None,
 /// };
@@ -121,7 +129,11 @@ pub fn render_prelude(template: &str, manifest: &ProducerManifest) -> Result<Str
             serde_json::to_string(&manifest.symlinks)
                 .map_err(|error| PkgError::Pack(format!("symlink json failed: {error}")))?,
         ),
-        ("%DICT%", "{}".to_owned()),
+        (
+            "%DICT%",
+            serde_json::to_string(&manifest.path_dictionary)
+                .map_err(|error| PkgError::Pack(format!("dictionary json failed: {error}")))?,
+        ),
         ("%DOCOMPRESS%", manifest.compression.as_index().to_string()),
     ];
 
@@ -146,7 +158,63 @@ fn manifest_vfs_json(manifest: &ProducerManifest) -> BTreeMap<String, BTreeMap<S
         .collect()
 }
 
-fn stripe_size(stripe: &Stripe) -> Result<u64, PkgError> {
+#[derive(Default)]
+struct PathDictionary {
+    entries: BTreeMap<String, String>,
+    counter: usize,
+}
+
+impl PathDictionary {
+    fn make_key(&mut self, compression: PayloadCompression, full_path: &str) -> String {
+        if compression == PayloadCompression::None {
+            return full_path.to_owned();
+        }
+
+        full_path
+            .split('/')
+            .map(|part| self.get_or_create_hash(part))
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+
+    fn get_or_create_hash(&mut self, value: &str) -> String {
+        if let Some(existing) = self.entries.get(value) {
+            return existing.clone();
+        }
+
+        let next = base36(self.counter);
+        self.counter += 1;
+        self.entries.insert(value.to_owned(), next.clone());
+        next
+    }
+}
+
+fn base36(mut value: usize) -> String {
+    const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    if value == 0 {
+        return "0".to_owned();
+    }
+
+    let mut output = Vec::new();
+    while value > 0 {
+        let digit = value % 36;
+        if let Some(byte) = DIGITS.get(digit) {
+            output.push(char::from(*byte));
+        }
+        value /= 36;
+    }
+    output.iter().rev().collect()
+}
+
+fn stripe_payload_size(stripe: &Stripe, compression: PayloadCompression) -> Result<u64, PkgError> {
+    if compression == PayloadCompression::None {
+        return uncompressed_stripe_size(stripe);
+    }
+
+    Ok(compress_payload(&stripe_bytes(stripe)?, compression)?.len() as u64)
+}
+
+fn uncompressed_stripe_size(stripe: &Stripe) -> Result<u64, PkgError> {
     if let Some(buffer) = stripe.buffer.as_ref() {
         return Ok(buffer.len() as u64);
     }
@@ -163,4 +231,51 @@ fn stripe_size(stripe: &Stripe) -> Result<u64, PkgError> {
             path: file.clone(),
             source,
         })
+}
+
+fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
+    if let Some(buffer) = stripe.buffer.as_ref() {
+        return Ok(buffer.clone());
+    }
+
+    let Some(file) = stripe.file.as_ref() else {
+        return Err(PkgError::Pack(format!(
+            "stripe '{}' has neither buffer nor file",
+            stripe.snap
+        )));
+    };
+    fs::read(file).map_err(|source| PkgError::Io {
+        path: file.clone(),
+        source,
+    })
+}
+
+fn compress_payload(payload: &[u8], compression: PayloadCompression) -> Result<Vec<u8>, PkgError> {
+    match compression {
+        PayloadCompression::None => Ok(payload.to_vec()),
+        PayloadCompression::Gzip => gzip_payload(payload),
+        PayloadCompression::Brotli => brotli_payload(payload),
+    }
+}
+
+fn gzip_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder
+        .write_all(payload)
+        .map_err(|error| PkgError::Pack(format!("gzip write failed: {error}")))?;
+    encoder
+        .finish()
+        .map_err(|error| PkgError::Pack(format!("gzip finish failed: {error}")))
+}
+
+fn brotli_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
+    // DECISION: Node's `createBrotliCompress()` uses zlib's default Brotli
+    // parameters. The Rust port uses the standard max-quality/window defaults
+    // exposed by the `brotli` crate until fixture parity requires tuning.
+    let mut reader = brotli::CompressorReader::new(payload, 4096, 11, 22);
+    let mut output = Vec::new();
+    reader
+        .read_to_end(&mut output)
+        .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
+    Ok(output)
 }
