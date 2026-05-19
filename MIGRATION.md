@@ -27,6 +27,7 @@ Single crate is the initial target.
 | `src/detect.rs` | JS import/require/path detection using a Rust JS parser. |
 | `src/walk.rs` | Dependency traversal and virtual file record collection. |
 | `src/resolve.rs` | Node-compatible resolution wrapper. |
+| `src/fetch.rs` | pkg-fetch-compatible target binary cache/download provider. |
 | `src/refine.rs` | Record pruning and denominator substitution. |
 | `src/pack.rs` | Stripe construction and prelude rendering. |
 | `src/fabricate.rs` | Bytecode-generation orchestration through target Node binaries. |

@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod fetch;
 mod fsx;
 mod pack;
 mod package;
@@ -50,6 +51,7 @@ pub use crate::dictionary::{
     lookup_dictionary,
 };
 pub use crate::error::PkgError;
+pub use crate::fetch::{BinaryKind, PkgFetchCache};
 pub use crate::fsx::plus_x;
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{

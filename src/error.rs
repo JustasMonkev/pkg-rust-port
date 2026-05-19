@@ -29,6 +29,10 @@ pub enum PkgError {
     #[error("packing failed: {0}")]
     Pack(String),
 
+    /// Target binary acquisition failed.
+    #[error("target binary fetch failed: {0}")]
+    Fetch(String),
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),

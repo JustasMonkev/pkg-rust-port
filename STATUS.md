@@ -259,3 +259,13 @@ Next: implement the real target binary provider backed by pkg-fetch-compatible c
 Decisions made: introduce a provider trait before network fetch so package orchestration can be parity-tested without depending on remote binary availability.
 
 Blockers worked around: none.
+
+## 2026-05-19 - pkg-fetch cache provider shipped
+
+Shipped: added `PkgFetchCache`, `BinaryKind`, and a cache-backed `TargetBinaryProvider` implementation using pkg-fetch 3.5 cache naming (`v3.5/fetched-v18.15.0-platform-arch` and `built-v...`). Added parity tests for cache paths, fetched-before-built precedence, and missing-cache errors.
+
+Next: add network download plus expected-hash verification, then use `PkgFetchCache::default_cache` from `exec`.
+
+Decisions made: make the first real provider cache-only so path compatibility and local reuse are tested before layering in remote GitHub release downloads.
+
+Blockers worked around: npm tarball inspection initially failed under sandbox DNS; reran `npm pack pkg-fetch@3.5.2` with approved network access to inspect the exact local/remote naming contract. The first doctest also failed because `TargetParseError` did not convert into `PkgError`; the example now maps that error explicitly.
