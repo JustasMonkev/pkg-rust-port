@@ -139,3 +139,13 @@ Next: add walker symlink discovery/tracking and then begin a typed packer stripe
 Decisions made: `refine` takes an explicit `PathStyle` so denominator/substitution behavior stays target-platform aware instead of depending on the host OS.
 
 Blockers worked around: the first tests passed relative paths into `refine`, while the JS refiner receives normalized absolute paths from the walker. The Rust API now canonicalizes entrypoint and symlink paths when possible, and tests use existing fixture files for symlink denomination.
+
+## 2026-05-19 - Packer stripe slice shipped
+
+Shipped: added a typed packer pass that converts refined records into ordered blob/content/link/stat stripes, serializes links and stat metadata, preserves file-vs-buffer payload shape, and enforces the JS `--no-bytecode` failure boundary when a blob has no source content. Added parity tests over refined `test-50-require-resolve` records.
+
+Next: add walker symlink discovery/tracking and then wire prelude/producer scaffolding around the stripe output.
+
+Decisions made: this slice stops at stripe generation and does not interpolate the JavaScript prelude yet, keeping executable production separate from record packing semantics.
+
+Blockers worked around: none.

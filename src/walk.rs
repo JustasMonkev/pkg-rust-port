@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::common::{AliasKind, StoreKind};
@@ -125,7 +126,7 @@ impl WalkerParams {
 }
 
 /// Filesystem metadata captured for a record.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileStat {
     /// Whether the path is a regular file.
     pub is_file: bool,

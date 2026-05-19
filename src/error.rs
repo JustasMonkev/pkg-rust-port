@@ -25,6 +25,10 @@ pub enum PkgError {
         source: std::io::Error,
     },
 
+    /// Packing records into payload stripes failed.
+    #[error("packing failed: {0}")]
+    Pack(String),
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),

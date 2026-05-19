@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod pack;
 mod refine;
 mod resolve;
 mod target;
@@ -46,6 +47,7 @@ pub use crate::dictionary::{
     lookup_dictionary,
 };
 pub use crate::error::PkgError;
+pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine};
 pub use crate::resolve::{ResolveOptions, resolve_module};
 pub use crate::target::{
