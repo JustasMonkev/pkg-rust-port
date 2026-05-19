@@ -249,3 +249,13 @@ Next: connect the plan to target binary acquisition and the walk/refine/pack/wri
 Decisions made: host target planning asks `node --version` for the default Node range and falls back to `node18` when Node is unavailable; this preserves JS behavior where possible without making planning fail on machines that can still parse explicit targets.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Provider-backed package build shipped
+
+Shipped: added `TargetBinaryProvider` plus `build_package_with_provider`, which consumes a `PackagePlan`, walks/refines/packs the entrypoint, writes each planned executable image, injects bakery options, and applies executable bits for non-Windows targets. Added parity coverage using a deterministic stub target binary.
+
+Next: implement the real target binary provider backed by pkg-fetch-compatible cache/download behavior, then wire `exec` through the provider-backed build path.
+
+Decisions made: introduce a provider trait before network fetch so package orchestration can be parity-tested without depending on remote binary availability.
+
+Blockers worked around: none.

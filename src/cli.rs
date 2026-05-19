@@ -10,6 +10,7 @@ use crate::compress::Compression;
 use crate::config::PackageJson;
 use crate::error::PkgError;
 use crate::target::{NodeTarget, Platform, TargetDefaults, output_names, parse_targets};
+use crate::walk::Marker;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -82,6 +83,12 @@ pub struct PackagePlan {
     pub input: PathBuf,
     /// Entrypoint file that will be walked and packed.
     pub entrypoint: PathBuf,
+    /// Package marker used by the dependency walker.
+    pub marker: Marker,
+    /// Optional extra config file to include in the package.
+    pub addition: Option<PathBuf>,
+    /// Root directory that bounds directory-link walking.
+    pub root: PathBuf,
     /// Compression algorithm requested for payload stripes.
     pub compression: Compression,
     /// Whether bytecode generation is enabled.
@@ -208,11 +215,31 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         ));
     }
 
-    let config = match cli.config.as_ref() {
-        Some(config) => Some(read_package_json(&absolute_path(config)?)?),
+    let config_path = cli
+        .config
+        .as_ref()
+        .map(|config| absolute_path(config))
+        .transpose()?;
+    let config = match config_path.as_ref() {
+        Some(config) => Some(read_package_json(config)?),
         None => None,
     };
     let entrypoint = resolve_entrypoint(&input, input_package.as_ref())?;
+    let marker = build_marker(
+        &input,
+        input_package.as_ref(),
+        config_path.as_deref(),
+        config.as_ref(),
+    )?;
+    let addition = if is_package_json(&input) {
+        Some(input.clone())
+    } else {
+        None
+    };
+    let root = entrypoint
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
     let auto_output = cli.output.is_none();
     let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
     let target_defaults = TargetDefaults::host(host_node_range());
@@ -234,11 +261,31 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     Ok(PackagePlan {
         input,
         entrypoint,
+        marker,
+        addition,
+        root,
         compression,
         bytecode: !cli.no_bytecode,
         bakes,
         outputs,
     })
+}
+
+fn build_marker(
+    input: &Path,
+    input_package: Option<&PackageJson>,
+    config_path: Option<&Path>,
+    config: Option<&PackageJson>,
+) -> Result<Marker, PkgError> {
+    if let Some(package) = input_package {
+        return Ok(Marker::with_package_path(package.clone(), input));
+    }
+    if let (Some(config_path), Some(config)) = (config_path, config) {
+        return Ok(Marker::with_package_path(config.clone(), config_path));
+    }
+
+    let package = PackageJson::parse("{}").map_err(|error| PkgError::Cli(error.to_string()))?;
+    Ok(Marker::new(package))
 }
 
 fn normalize_input_path(input: &Path) -> Result<PathBuf, PkgError> {

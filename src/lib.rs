@@ -27,6 +27,7 @@ mod dictionary;
 mod error;
 mod fsx;
 mod pack;
+mod package;
 mod produce;
 mod refine;
 mod resolve;
@@ -51,6 +52,9 @@ pub use crate::dictionary::{
 pub use crate::error::PkgError;
 pub use crate::fsx::plus_x;
 pub use crate::pack::{PackedOutput, Stripe, pack};
+pub use crate::package::{
+    PackageBuild, ProducedOutput, TargetBinaryProvider, build_package_with_provider,
+};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,
