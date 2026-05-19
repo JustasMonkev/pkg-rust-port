@@ -1,10 +1,10 @@
 #![allow(missing_docs)]
 
+use std::fs;
 use std::path::PathBuf;
 
 use pkg_rust::{
-    Marker, PackageJson, PathStyle, PkgError, StoreKind, SymlinkMap, WalkerParams, pack, refine,
-    walk,
+    Marker, PackageJson, PathStyle, PkgError, StoreKind, WalkerParams, pack, refine_walked, walk,
 };
 
 fn empty_marker() -> Result<Marker, PkgError> {
@@ -23,7 +23,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
         None,
         WalkerParams::new().with_root(&fixture_dir),
     )?;
-    let refined = refine(walked, &entrypoint, SymlinkMap::new(), PathStyle::Posix);
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
     let packed = pack(refined, true)?;
 
     assert_eq!(packed.entrypoint, "/test-x-index.js");
@@ -58,9 +58,40 @@ fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
         None,
         WalkerParams::new().with_root(&fixture_dir),
     )?;
-    let refined = refine(walked, &entrypoint, SymlinkMap::new(), PathStyle::Posix);
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
     let error = pack(refined, false).err();
 
     assert!(matches!(error, Some(PkgError::Pack(message)) if message.contains("--no-bytecode")));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn carries_walker_symlinks_into_packed_output() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        PathBuf::from("/private/tmp").join(format!("pkg-rust-pack-symlink-{}", std::process::id()));
+    let real_file = fixture_dir.join("real.js");
+    let link_file = fixture_dir.join("link.js");
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    fs::create_dir_all(&fixture_dir)?;
+    fs::write(&real_file, "'use strict';\nmodule.exports = 1;\n")?;
+    std::os::unix::fs::symlink(&real_file, &link_file)?;
+
+    let walked = walk(
+        empty_marker()?,
+        &link_file,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &link_file, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+
+    assert_eq!(packed.entrypoint, "/real.js");
+    assert_eq!(
+        packed.symlinks.get("/link.js").map(String::as_str),
+        Some("/real.js")
+    );
+
+    fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }

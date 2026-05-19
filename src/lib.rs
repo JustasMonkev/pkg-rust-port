@@ -48,7 +48,7 @@ pub use crate::dictionary::{
 };
 pub use crate::error::PkgError;
 pub use crate::pack::{PackedOutput, Stripe, pack};
-pub use crate::refine::{RefinedOutput, SymlinkMap, refine};
+pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
 pub use crate::resolve::{ResolveOptions, resolve_module};
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,

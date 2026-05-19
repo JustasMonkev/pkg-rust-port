@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::common::StoreKind;
 use crate::error::PkgError;
 use crate::refine::RefinedOutput;
@@ -21,6 +23,8 @@ pub struct Stripe {
 pub struct PackedOutput {
     /// Refined entrypoint path.
     pub entrypoint: String,
+    /// Refined symlink map.
+    pub symlinks: BTreeMap<String, String>,
     /// Ordered payload stripes.
     pub stripes: Vec<Stripe>,
 }
@@ -35,13 +39,14 @@ pub struct PackedOutput {
 /// let marker = pkg_rust::Marker::new(package);
 /// let entrypoint = "../test/test-50-require-resolve/test-z-require-content.css";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
-/// let refined = pkg_rust::refine(output, entrypoint, pkg_rust::SymlinkMap::new(), pkg_rust::PathStyle::Posix);
+/// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
 /// let packed = pkg_rust::pack(refined, true)?;
 /// assert!(!packed.stripes.is_empty());
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 pub fn pack(refined: RefinedOutput, bytecode: bool) -> Result<PackedOutput, PkgError> {
     let mut stripes = Vec::new();
+    let symlinks = refined.symlinks;
 
     for (snap, mut record) in refined.records {
         if !has_any_store(&record) {
@@ -69,6 +74,7 @@ pub fn pack(refined: RefinedOutput, bytecode: bool) -> Result<PackedOutput, PkgE
 
     Ok(PackedOutput {
         entrypoint: refined.entrypoint,
+        symlinks,
         stripes,
     })
 }

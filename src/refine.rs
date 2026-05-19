@@ -59,7 +59,7 @@ pub fn refine(
     let symlinks = symlinks
         .into_iter()
         .map(|(link, real)| {
-            let link = canonicalize_or_self(&link);
+            let link = canonicalize_link_path(&link);
             let real = canonicalize_or_self(&real);
             (
                 make_snap(&path_to_string(&link), denominator, style),
@@ -73,6 +73,30 @@ pub fn refine(
         entrypoint: make_snap(&path_to_string(&entrypoint), denominator, style),
         symlinks,
     }
+}
+
+/// Refine walker records using the symlink map collected by the walker.
+///
+/// # Example
+///
+/// ```
+/// let package = pkg_rust::PackageJson::parse("{}")
+///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
+/// let marker = pkg_rust::Marker::new(package);
+/// let entrypoint = "../test/test-50-require-resolve/test-z-require-code-1.js";
+/// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
+/// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
+/// assert_eq!(refined.entrypoint, "/test-z-require-code-1.js");
+/// # Ok::<(), pkg_rust::PkgError>(())
+/// ```
+#[must_use]
+pub fn refine_walked(
+    output: WalkOutput,
+    entrypoint: impl AsRef<Path>,
+    style: PathStyle,
+) -> RefinedOutput {
+    let symlinks = output.symlinks.clone();
+    refine(output, entrypoint, symlinks, style)
 }
 
 fn purge_top_directories(records: &mut BTreeMap<PathBuf, FileRecord>) {
@@ -134,5 +158,19 @@ fn path_to_string(path: &Path) -> String {
 
 fn canonicalize_or_self(path: &Path) -> PathBuf {
     path.canonicalize()
+        .unwrap_or_else(|_error| path.to_path_buf())
+}
+
+fn canonicalize_link_path(path: &Path) -> PathBuf {
+    let Some(parent) = path.parent() else {
+        return path.to_path_buf();
+    };
+    let Some(name) = path.file_name() else {
+        return path.to_path_buf();
+    };
+
+    parent
+        .canonicalize()
+        .map(|parent| parent.join(name))
         .unwrap_or_else(|_error| path.to_path_buf())
 }

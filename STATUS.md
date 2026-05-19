@@ -159,3 +159,13 @@ Next: wire the walker symlink map directly into the refiner/packer pipeline and 
 Decisions made: `walk` now preserves the raw entrypoint path until append-time so symlinked entrypoints are observable; normal non-symlink paths are still canonicalized when queued.
 
 Blockers worked around: the first symlink test showed entrypoint canonicalization erased the link before traversal, so canonicalization was moved to the append path where symlink metadata is still available.
+
+## 2026-05-19 - Symlink pipeline slice shipped
+
+Shipped: added `refine_walked` so the walker-collected symlink map flows directly into refinement, retained refined symlinks in `PackedOutput`, and added a Unix packer parity test proving a symlinked entrypoint survives through walk, refine, and pack.
+
+Next: start producer/prelude scaffolding that consumes packed stripes, entrypoint, and symlinks.
+
+Decisions made: symlink link paths now canonicalize only their parent directory during refinement; canonicalizing the full link path follows the symlink and collapses it into the real target.
+
+Blockers worked around: the first pipeline test exposed that full-path canonicalization erased `/link.js` from the refined symlink map. The refiner now preserves the link basename while still normalizing the containing directory.
