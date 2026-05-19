@@ -209,3 +209,13 @@ Next: connect packed payload/prelude bytes to an executable writer that streams 
 Decisions made: placeholder injection works on a mutable byte buffer first; file-backed writing can reuse the same validation and byte replacement logic when the producer starts writing target binaries.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Executable image slice shipped
+
+Shipped: added an in-memory producer image writer that appends payload and rendered prelude bytes to a binary buffer, computes payload/prelude positions and sizes, and injects bakery/payload/prelude placeholders. Added producer parity tests for successful image production and missing-placeholder failure.
+
+Next: turn the in-memory image into file-backed executable output, then integrate target binary selection/fetch and final CLI flow.
+
+Decisions made: keep this slice buffer-based so placeholder and layout semantics are verified before adding file I/O and platform-specific executable handling.
+
+Blockers worked around: the first public doc example omitted the bakery placeholder even though the producer requires it; the example now includes the full binary placeholder contract and passes doctests.

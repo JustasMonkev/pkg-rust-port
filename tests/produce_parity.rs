@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use pkg_rust::{
     Compression, Marker, PackageJson, PathStyle, PkgError, PlaceholderKind, PlaceholderValues,
-    StoreKind, WalkerParams, discover_placeholders, inject_placeholders, pack, produce_manifest,
-    refine_walked, render_prelude, walk,
+    StoreKind, WalkerParams, discover_placeholders, inject_placeholders, pack,
+    produce_executable_image, produce_manifest, refine_walked, render_prelude, walk,
 };
 
 fn empty_marker() -> Result<Marker, PkgError> {
@@ -243,6 +243,83 @@ fn injection_errors_when_placeholder_is_missing() {
     .err();
 
     assert!(matches!(error, Some(PkgError::Pack(message)) if message.contains("was not found")));
+}
+
+#[test]
+fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let binary = binary_with_placeholders();
+    let binary_len = binary.len();
+    let produced = produce_executable_image(
+        binary,
+        packed,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        Compression::None,
+        PathStyle::Posix,
+        b"--trace".to_vec(),
+    )?;
+
+    assert_eq!(produced.payload_position, binary_len as u64);
+    assert_eq!(
+        produced.prelude_position,
+        produced.payload_position + produced.manifest.payload_size
+    );
+    assert_eq!(
+        produced.bytes.len() as u64,
+        produced.prelude_position + produced.prelude_size
+    );
+    let binary_text = String::from_utf8_lossy(&produced.bytes[..binary_len]);
+    assert!(binary_text.contains("--trace"));
+    assert!(binary_text.contains(&produced.payload_position.to_string()));
+    assert!(binary_text.contains(&produced.manifest.payload_size.to_string()));
+    assert!(binary_text.contains(&produced.prelude_position.to_string()));
+    assert!(binary_text.contains(&produced.prelude_size.to_string()));
+    Ok(())
+}
+
+#[test]
+fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let error = produce_executable_image(
+        b"no placeholders".to_vec(),
+        packed,
+        "%VIRTUAL_FILESYSTEM%",
+        Compression::None,
+        PathStyle::Posix,
+        Vec::new(),
+    )
+    .err();
+
+    assert!(matches!(error, Some(PkgError::Pack(message)) if message.contains("was not found")));
+    Ok(())
+}
+
+fn binary_with_placeholders() -> Vec<u8> {
+    let mut binary = Vec::from(&b"prefix"[..]);
+    binary.extend_from_slice(&bakery_placeholder());
+    binary.extend_from_slice(b"// PAYLOAD_POSITION //");
+    binary.extend_from_slice(b"// PAYLOAD_SIZE //");
+    binary.extend_from_slice(b"// PRELUDE_POSITION //");
+    binary.extend_from_slice(b"// PRELUDE_SIZE //");
+    binary
 }
 
 fn bakery_placeholder() -> Vec<u8> {

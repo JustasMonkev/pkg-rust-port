@@ -38,6 +38,21 @@ pub struct ProducerManifest {
     pub compression: PayloadCompression,
 }
 
+/// Produced executable image and layout metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProducedExecutable {
+    /// Final executable bytes.
+    pub bytes: Vec<u8>,
+    /// Producer manifest used to render the prelude.
+    pub manifest: ProducerManifest,
+    /// Byte offset where the payload starts.
+    pub payload_position: u64,
+    /// Byte offset where the prelude starts.
+    pub prelude_position: u64,
+    /// Rendered prelude byte size.
+    pub prelude_size: u64,
+}
+
 /// One placeholder discovered in a target binary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Placeholder {
@@ -99,18 +114,118 @@ pub fn produce_manifest(
     compression: PayloadCompression,
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
+    let (manifest, _payload) = build_manifest_and_payload(packed, compression, style)?;
+    Ok(manifest)
+}
+
+/// Produce an executable image by appending payload and rendered prelude bytes.
+///
+/// This mirrors the JavaScript producer's byte layout while staying in memory:
+/// binary first, payload second, prelude last, then placeholder values patched
+/// back into the binary segment.
+///
+/// # Example
+///
+/// ```
+/// let mut binary = Vec::from([b'\0']);
+/// for _index in 0..20 {
+///     binary.extend_from_slice(b"// BAKERY ");
+/// }
+/// binary.extend_from_slice(b"// PAYLOAD_POSITION //// PAYLOAD_SIZE //// PRELUDE_POSITION //// PRELUDE_SIZE //");
+/// let package = pkg_rust::PackageJson::parse("{}")
+///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
+/// let walked = pkg_rust::walk(
+///     pkg_rust::Marker::new(package),
+///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     None,
+///     pkg_rust::WalkerParams::new(),
+/// )?;
+/// let refined = pkg_rust::refine_walked(
+///     walked,
+///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     pkg_rust::PathStyle::Posix,
+/// );
+/// let packed = pkg_rust::pack(refined, true)?;
+/// let produced = pkg_rust::produce_executable_image(
+///     binary,
+///     packed,
+///     "%VIRTUAL_FILESYSTEM% %DEFAULT_ENTRYPOINT% %SYMLINKS% %DICT% %DOCOMPRESS%",
+///     pkg_rust::Compression::None,
+///     pkg_rust::PathStyle::Posix,
+///     Vec::new(),
+/// )?;
+/// assert!(produced.bytes.len() > produced.payload_position as usize);
+/// # Ok::<(), pkg_rust::PkgError>(())
+/// ```
+pub fn produce_executable_image(
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    compression: PayloadCompression,
+    style: PathStyle,
+    bakery: Vec<u8>,
+) -> Result<ProducedExecutable, PkgError> {
+    let (manifest, payload) = build_manifest_and_payload(packed, compression, style)?;
+    let prelude = render_prelude(prelude_template, &manifest)?.into_bytes();
+    let payload_position = binary.len() as u64;
+    let payload_size = payload.len() as u64;
+    let prelude_position = payload_position + payload_size;
+    let prelude_size = prelude.len() as u64;
+
+    let mut bytes = binary;
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&prelude);
+
+    let placeholders = discover_placeholders(&bytes);
+    let values = PlaceholderValues {
+        bakery,
+        payload_position,
+        payload_size,
+        prelude_position,
+        prelude_size,
+    };
+    inject_placeholders(
+        &mut bytes,
+        &placeholders,
+        &values,
+        &[
+            PlaceholderKind::Bakery,
+            PlaceholderKind::PayloadPosition,
+            PlaceholderKind::PayloadSize,
+            PlaceholderKind::PreludePosition,
+            PlaceholderKind::PreludeSize,
+        ],
+    )?;
+
+    Ok(ProducedExecutable {
+        bytes,
+        manifest,
+        payload_position,
+        prelude_position,
+        prelude_size,
+    })
+}
+
+fn build_manifest_and_payload(
+    packed: PackedOutput,
+    compression: PayloadCompression,
+    style: PathStyle,
+) -> Result<(ProducerManifest, Vec<u8>), PkgError> {
     let mut offset = 0_u64;
+    let mut payload = Vec::new();
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
     let mut path_dictionary = PathDictionary::default();
 
     for stripe in packed.stripes {
-        let size = stripe_payload_size(&stripe, compression)?;
+        let payload_bytes = compress_payload(&stripe_bytes(&stripe)?, compression)?;
+        let size = payload_bytes.len() as u64;
         let snap = snapshotify(&stripe.snap, style);
         let vfs_key = path_dictionary.make_key(compression, &snap);
         vfs.entry(vfs_key)
             .or_default()
             .insert(stripe.store.as_index(), PayloadPointer { offset, size });
         offset += size;
+        payload.extend_from_slice(&payload_bytes);
     }
 
     let symlinks = packed
@@ -126,14 +241,17 @@ pub fn produce_manifest(
         })
         .collect();
 
-    Ok(ProducerManifest {
-        entrypoint: snapshotify(&packed.entrypoint, style),
-        symlinks,
-        vfs,
-        path_dictionary: path_dictionary.entries,
-        payload_size: offset,
-        compression,
-    })
+    Ok((
+        ProducerManifest {
+            entrypoint: snapshotify(&packed.entrypoint, style),
+            symlinks,
+            vfs,
+            path_dictionary: path_dictionary.entries,
+            payload_size: offset,
+            compression,
+        },
+        payload,
+    ))
 }
 
 /// Render a prelude template by replacing the JavaScript producer placeholders.
@@ -400,33 +518,6 @@ fn base36(mut value: usize) -> String {
         value /= 36;
     }
     output.iter().rev().collect()
-}
-
-fn stripe_payload_size(stripe: &Stripe, compression: PayloadCompression) -> Result<u64, PkgError> {
-    if compression == PayloadCompression::None {
-        return uncompressed_stripe_size(stripe);
-    }
-
-    Ok(compress_payload(&stripe_bytes(stripe)?, compression)?.len() as u64)
-}
-
-fn uncompressed_stripe_size(stripe: &Stripe) -> Result<u64, PkgError> {
-    if let Some(buffer) = stripe.buffer.as_ref() {
-        return Ok(buffer.len() as u64);
-    }
-
-    let Some(file) = stripe.file.as_ref() else {
-        return Err(PkgError::Pack(format!(
-            "stripe '{}' has neither buffer nor file",
-            stripe.snap
-        )));
-    };
-    fs::metadata(file)
-        .map(|metadata| metadata.len())
-        .map_err(|source| PkgError::Io {
-            path: file.clone(),
-            source,
-        })
 }
 
 fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
