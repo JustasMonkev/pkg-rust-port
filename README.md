@@ -78,10 +78,18 @@ cargo test --doc --all-features
 RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --all-features
 ```
 
+Release binary check:
+
+```sh
+cargo build --release --locked
+```
+
+The release profile strips symbols. On this machine, a warm-cache release
+rebuild completed in `0.13s` with `target/release/pkg` already stripped.
+
 To run the real JS API happy-path smoke after seeding a cache:
 
 ```sh
 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test js_api_happy_path_demo_runs_when_real_cache_is_configured -- --nocapture
 ```
-

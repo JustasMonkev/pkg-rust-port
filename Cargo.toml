@@ -48,3 +48,6 @@ expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
+
+[profile.release]
+strip = "symbols"

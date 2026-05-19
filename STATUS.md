@@ -369,3 +369,13 @@ Next: keep expanding Rust parity tests against the remaining JS fixtures, and ma
 Decisions made: document current behavior conservatively instead of presenting the Rust port as a completed replacement. This keeps the docs useful during migration without hiding incomplete native-addon, Mach-O, and JS-oracle retirement work.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Release profile verification shipped
+
+Shipped: configured the Cargo release profile to strip symbols and documented release build verification in the Rust README. A cold `cargo build --release --locked` populated the release cache, then `/usr/bin/time -p cargo build --release --locked` completed in `0.13s` on a warm cache. `nm target/release/pkg` showed only undefined external symbols plus the Mach-O header, consistent with stripped Rust symbols.
+
+Next: continue closing parity gaps in native addon handling, Mach-O signing, and broader runtime fixture coverage.
+
+Decisions made: use Cargo's built-in `strip = "symbols"` release profile setting instead of a post-build shell step, so local builds and CI release artifacts use the same stripping behavior.
+
+Blockers worked around: none.
