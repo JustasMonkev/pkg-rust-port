@@ -179,3 +179,13 @@ Next: implement compressed payload accounting/key dictionary behavior, then wire
 Decisions made: compressed producer payloads return an explicit `NotImplemented` error for now because this slice computes real byte offsets and sizes only for uncompressed stripes; guessing compressed lengths would create false producer parity.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Prelude rendering slice shipped
+
+Shipped: added prelude placeholder rendering for `%VIRTUAL_FILESYSTEM%`, `%DEFAULT_ENTRYPOINT%`, `%SYMLINKS%`, `%DICT%`, and `%DOCOMPRESS%` from the producer manifest. Added a producer parity test that verifies VFS pointer arrays, entrypoint JSON, dictionary placeholder, and compression enum replacement.
+
+Next: implement compressed manifest key-dictionary behavior and then executable binary streaming/placeholder injection.
+
+Decisions made: VFS pointers render as JavaScript-compatible `[offset, size]` arrays even though the Rust manifest keeps typed `PayloadPointer` structs internally.
+
+Blockers worked around: none.

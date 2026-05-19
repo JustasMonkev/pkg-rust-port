@@ -84,6 +84,68 @@ pub fn produce_manifest(
     })
 }
 
+/// Render a prelude template by replacing the JavaScript producer placeholders.
+///
+/// # Example
+///
+/// ```
+/// let manifest = pkg_rust::ProducerManifest {
+///     entrypoint: "/snapshot/app.js".to_owned(),
+///     symlinks: std::collections::BTreeMap::new(),
+///     vfs: std::collections::BTreeMap::new(),
+///     payload_size: 0,
+///     compression: pkg_rust::Compression::None,
+/// };
+/// let rendered = pkg_rust::render_prelude(
+///     "%VIRTUAL_FILESYSTEM% %DEFAULT_ENTRYPOINT% %SYMLINKS% %DICT% %DOCOMPRESS%",
+///     &manifest,
+/// )?;
+/// assert!(rendered.contains("\"/snapshot/app.js\""));
+/// # Ok::<(), pkg_rust::PkgError>(())
+/// ```
+pub fn render_prelude(template: &str, manifest: &ProducerManifest) -> Result<String, PkgError> {
+    let vfs = manifest_vfs_json(manifest);
+    let replacements = [
+        (
+            "%VIRTUAL_FILESYSTEM%",
+            serde_json::to_string(&vfs)
+                .map_err(|error| PkgError::Pack(format!("vfs json failed: {error}")))?,
+        ),
+        (
+            "%DEFAULT_ENTRYPOINT%",
+            serde_json::to_string(&manifest.entrypoint)
+                .map_err(|error| PkgError::Pack(format!("entrypoint json failed: {error}")))?,
+        ),
+        (
+            "%SYMLINKS%",
+            serde_json::to_string(&manifest.symlinks)
+                .map_err(|error| PkgError::Pack(format!("symlink json failed: {error}")))?,
+        ),
+        ("%DICT%", "{}".to_owned()),
+        ("%DOCOMPRESS%", manifest.compression.as_index().to_string()),
+    ];
+
+    let mut rendered = template.to_owned();
+    for (placeholder, value) in replacements {
+        rendered = rendered.replace(placeholder, &value);
+    }
+    Ok(rendered)
+}
+
+fn manifest_vfs_json(manifest: &ProducerManifest) -> BTreeMap<String, BTreeMap<String, [u64; 2]>> {
+    manifest
+        .vfs
+        .iter()
+        .map(|(path, stores)| {
+            let stores = stores
+                .iter()
+                .map(|(store, pointer)| (store.to_string(), [pointer.offset, pointer.size]))
+                .collect();
+            (path.clone(), stores)
+        })
+        .collect()
+}
+
 fn stripe_size(stripe: &Stripe) -> Result<u64, PkgError> {
     if let Some(buffer) = stripe.buffer.as_ref() {
         return Ok(buffer.len() as u64);

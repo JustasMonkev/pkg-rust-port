@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use pkg_rust::{
     Compression, Marker, PackageJson, PathStyle, PkgError, StoreKind, WalkerParams, pack,
-    produce_manifest, refine_walked, walk,
+    produce_manifest, refine_walked, render_prelude, walk,
 };
 
 fn empty_marker() -> Result<Marker, PkgError> {
@@ -95,5 +95,33 @@ fn compressed_manifest_is_explicitly_not_implemented_yet() -> Result<(), PkgErro
     assert!(
         matches!(error, Some(PkgError::NotImplemented(message)) if message.contains("compressed producer"))
     );
+    Ok(())
+}
+
+#[test]
+fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;
+    let rendered = render_prelude(
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        &manifest,
+    )?;
+
+    assert!(rendered.contains(r#""/snapshot/test-x-index.js""#));
+    assert!(rendered.contains(r#""0":["#));
+    assert!(rendered.contains(r#""3":["#));
+    assert!(rendered.contains(r#""/snapshot/test-x-index.js""#));
+    assert!(rendered.contains("{}"));
+    assert!(!rendered.ends_with('\n'));
+    assert!(rendered.ends_with('0'));
     Ok(())
 }
