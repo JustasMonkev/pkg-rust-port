@@ -21,6 +21,7 @@
 mod cli;
 mod common;
 mod compress;
+mod config;
 mod error;
 mod target;
 
@@ -30,6 +31,7 @@ pub use crate::common::{
     retrieve_denominator, snapshotify, strip_snapshot, substitute_denominator,
 };
 pub use crate::compress::{Compression, CompressionParseError};
+pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig};
 pub use crate::error::PkgError;
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
