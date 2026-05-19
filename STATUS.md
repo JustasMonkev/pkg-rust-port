@@ -219,3 +219,13 @@ Next: turn the in-memory image into file-backed executable output, then integrat
 Decisions made: keep this slice buffer-based so placeholder and layout semantics are verified before adding file I/O and platform-specific executable handling.
 
 Blockers worked around: the first public doc example omitted the bakery placeholder even though the producer requires it; the example now includes the full binary placeholder contract and passes doctests.
+
+## 2026-05-19 - Filesystem executable-bit helper shipped
+
+Shipped: ported the JS `chmod.plusx` leaf as `plus_x`, preserving existing Unix mode bits while OR-ing owner/group/other executable bits. Added parity tests for mode preservation and missing-file errors, and public docs with a compiling example.
+
+Next: use `plus_x` from file-backed producer output so non-Windows artifacts get executable permissions after payload/prelude writing.
+
+Decisions made: keep the non-Unix implementation as metadata validation plus no-op because POSIX executable bits are not available through `std::fs`, and the JS CLI only invokes this path for non-Windows targets.
+
+Blockers worked around: the new integration test initially failed under crate-wide `missing_docs`; adding a crate-level test doc fixed the compile gate without relaxing lints.

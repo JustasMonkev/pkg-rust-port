@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod fsx;
 mod pack;
 mod produce;
 mod refine;
@@ -48,6 +49,7 @@ pub use crate::dictionary::{
     lookup_dictionary,
 };
 pub use crate::error::PkgError;
+pub use crate::fsx::plus_x;
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
