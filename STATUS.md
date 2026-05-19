@@ -49,3 +49,13 @@ Next: start dictionary conversion and the dependency/config activation behavior 
 Decisions made: enabled `serde_json`'s `preserve_order` feature because JS object-form `bin` fallback uses the first key in JSON order.
 
 Blockers worked around: enabling order preservation added new registry packages that the sandbox could not unpack into `~/.cargo`, so Cargo tests were rerun with approved access.
+
+## 2026-05-19 - Dictionary activation slice shipped
+
+Shipped: added typed dictionary entries, lookup, package activation merge semantics, active dependency filtering, and parity tests for `sequelize`, `publicsuffixlist`, `express`, and the `opn` to `open` alias.
+
+Next: port JavaScript source detection (`detector.ts`) against `test-50-ast-parsing*` and require/import fixtures.
+
+Decisions made: dictionary entries are Rust data and do not execute JS. A disabled dictionary dependency is represented as JSON `null` because JavaScript used `undefined` and the downstream traversal only checks truthiness.
+
+Blockers worked around: none.

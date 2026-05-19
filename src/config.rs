@@ -128,7 +128,7 @@ pub enum BinField {
 }
 
 /// Parsed `pkg` configuration subset.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PkgConfig {
     /// Explicit script globs.
@@ -148,6 +148,56 @@ pub struct PkgConfig {
     /// Extra dictionary entries.
     #[serde(default)]
     pub dictionary: Map<String, Value>,
+}
+
+impl PkgConfig {
+    /// Build a `pkg` config with explicit script globs.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let config = pkg_rust::PkgConfig::with_scripts(["lib/**/*.js"]);
+    /// assert_eq!(config.scripts, serde_json::json!(["lib/**/*.js"]));
+    /// ```
+    pub fn with_scripts<I, S>(scripts: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self {
+            scripts: Value::Array(
+                scripts
+                    .into_iter()
+                    .map(|item| Value::String(item.into()))
+                    .collect(),
+            ),
+            ..Self::default()
+        }
+    }
+
+    /// Build a `pkg` config with explicit asset globs.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let config = pkg_rust::PkgConfig::with_assets(["data/**/*.dat"]);
+    /// assert_eq!(config.assets, serde_json::json!(["data/**/*.dat"]));
+    /// ```
+    pub fn with_assets<I, S>(assets: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self {
+            assets: Value::Array(
+                assets
+                    .into_iter()
+                    .map(|item| Value::String(item.into()))
+                    .collect(),
+            ),
+            ..Self::default()
+        }
+    }
 }
 
 /// Errors returned while parsing package metadata.
