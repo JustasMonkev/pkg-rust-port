@@ -40,7 +40,11 @@ pub fn refine(
     symlinks: SymlinkMap,
     style: PathStyle,
 ) -> RefinedOutput {
-    let mut records = output.records;
+    let WalkOutput {
+        mut records,
+        warnings: _,
+        ..
+    } = output;
     purge_top_directories(&mut records);
     let entrypoint = canonicalize_or_self(entrypoint.as_ref());
 
@@ -249,7 +253,11 @@ fn refine_with_snapshot_base(
     snapshot_base: impl AsRef<Path>,
     style: PathStyle,
 ) -> RefinedOutput {
-    let mut records = output.records;
+    let WalkOutput {
+        mut records,
+        warnings,
+        ..
+    } = output;
     purge_top_directories(&mut records);
     let entrypoint = canonicalize_or_self(entrypoint.as_ref());
     let snapshot_base = canonicalize_or_self(snapshot_base.as_ref());
@@ -266,6 +274,7 @@ fn refine_with_snapshot_base(
                 records,
                 symlinks: BTreeMap::new(),
                 task_log: Vec::new(),
+                warnings,
             },
             entrypoint,
             symlinks,

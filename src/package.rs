@@ -10,7 +10,7 @@ use crate::produce::{
 };
 use crate::refine::refine_walked_with_snapshot_base;
 use crate::target::{NodeTarget, Platform};
-use crate::walk::{WalkerParams, walk};
+use crate::walk::{PackageWarning, WalkerParams, walk};
 
 /// Target binary data plus optional cache path metadata.
 ///
@@ -94,6 +94,8 @@ pub struct ProducedOutput {
 pub struct PackageBuild {
     /// Outputs in plan order.
     pub outputs: Vec<ProducedOutput>,
+    /// Non-fatal warnings encountered while producing outputs.
+    pub warnings: Vec<PackageWarning>,
 }
 
 /// Build package outputs using an explicit target binary provider.
@@ -142,6 +144,7 @@ pub fn build_package_with_provider(
     prelude_template: &str,
 ) -> Result<PackageBuild, PkgError> {
     let mut outputs = Vec::new();
+    let mut warnings = Vec::new();
 
     for planned in &plan.outputs {
         let binary = provider.binary_artifact_for(&planned.target)?;
@@ -153,6 +156,7 @@ pub fn build_package_with_provider(
             plan.addition.clone(),
             WalkerParams::new().with_root(&plan.root),
         )?;
+        warnings.extend(walked.warnings.clone());
         let refined = refine_walked_with_snapshot_base(
             walked,
             &plan.entrypoint,
@@ -183,7 +187,7 @@ pub fn build_package_with_provider(
         });
     }
 
-    Ok(PackageBuild { outputs })
+    Ok(PackageBuild { outputs, warnings })
 }
 
 fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {

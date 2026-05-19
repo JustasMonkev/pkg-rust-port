@@ -86,6 +86,7 @@ fn purges_redundant_top_directory_chains() {
             records,
             symlinks: SymlinkMap::new(),
             task_log: Vec::new(),
+            warnings: Vec::new(),
         },
         "/project/app/src/index.js",
         SymlinkMap::new(),

@@ -178,7 +178,10 @@ where
     })
     .await
     .map_err(|error| PkgError::Cli(format!("package build join task failed: {error}")))?;
-    build_result?;
+    let build = build_result?;
+    for warning in build.warnings {
+        println!("> Warning {}", warning.to_cli_message());
+    }
     Ok(())
 }
 

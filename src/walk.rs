@@ -259,6 +259,48 @@ pub struct WalkOutput {
     pub symlinks: BTreeMap<PathBuf, PathBuf>,
     /// FIFO task processing log.
     pub task_log: Vec<WalkTaskRecord>,
+    /// Non-fatal warnings discovered while walking dependency metadata.
+    pub warnings: Vec<PackageWarning>,
+}
+
+/// Non-fatal package warning discovered during dependency walking.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PackageWarning {
+    /// A dependency package exists but does not provide a resolvable `main`
+    /// entrypoint.
+    MissingMainEntry {
+        /// Dependency alias from the package metadata.
+        alias: String,
+        /// Package metadata file that supplied the incomplete dependency.
+        package_json: PathBuf,
+    },
+}
+
+impl PackageWarning {
+    /// Render the warning with the original CLI wording.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let warning = pkg_rust::PackageWarning::MissingMainEntry {
+    ///     alias: "crusader".to_owned(),
+    ///     package_json: "node_modules/crusader/package.json".into(),
+    /// };
+    /// assert!(warning.to_cli_message().contains("Entry 'main' not found"));
+    /// ```
+    #[must_use]
+    pub fn to_cli_message(&self) -> String {
+        match self {
+            Self::MissingMainEntry {
+                alias,
+                package_json,
+            } => format!(
+                "Entry 'main' not found in '{}' while resolving '{}'",
+                package_json.display(),
+                alias
+            ),
+        }
+    }
 }
 
 impl WalkOutput {
@@ -614,12 +656,37 @@ impl WalkerState {
                 }
                 Ok(())
             }
-            Err(error) if optional => {
-                tracing::debug!(alias, error = %error, "skipping optional dependency");
-                Ok(())
+            Err(error) => {
+                if let Some(warning) = missing_dependency_main_warning(basedir, alias) {
+                    let PackageWarning::MissingMainEntry { package_json, .. } = &warning;
+                    self.append_missing_main_package_json(package_json, marker)?;
+                    self.output.warnings.push(warning);
+                    return Ok(());
+                }
+                if optional {
+                    tracing::debug!(alias, error = %error, "skipping optional dependency");
+                    return Ok(());
+                }
+                Err(error)
             }
-            Err(error) => Err(error),
         }
+    }
+
+    fn append_missing_main_package_json(
+        &mut self,
+        package_json: &Path,
+        marker: Marker,
+    ) -> Result<(), PkgError> {
+        if let Some(package_marker) = package_marker_for_file(package_json, &marker, &self.root)? {
+            self.append(
+                package_json.to_path_buf(),
+                StoreKind::Content,
+                package_marker,
+            );
+        } else {
+            self.append(package_json.to_path_buf(), StoreKind::Content, marker);
+        }
+        Ok(())
     }
 
     fn append(&mut self, file: PathBuf, store: StoreKind, marker: Marker) {
@@ -665,6 +732,28 @@ impl WalkerState {
             .entry(file.to_path_buf())
             .or_insert_with(|| FileRecord::new(file.to_path_buf()))
     }
+}
+
+fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<PackageWarning> {
+    if alias.ends_with("/package.json") || alias.starts_with('.') || Path::new(alias).is_absolute()
+    {
+        return None;
+    }
+
+    let package_json = basedir
+        .join("node_modules")
+        .join(alias)
+        .join("package.json");
+    let body = fs::read_to_string(&package_json).ok()?;
+    let package = PackageJson::parse(&body).ok()?;
+    if package.main.is_some() {
+        return None;
+    }
+
+    Some(PackageWarning::MissingMainEntry {
+        alias: alias.to_owned(),
+        package_json,
+    })
 }
 
 /// Walk an entrypoint and collect virtual filesystem records.

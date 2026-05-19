@@ -20,6 +20,16 @@ Decisions made: start as a single crate, convert dictionary JS modules into type
 
 Blockers worked around: none.
 
+## 2026-05-19 - Missing dependency main warning parity shipped
+
+Shipped: added typed walker warnings and CLI stdout rendering for the warning-only `test-50-invalid-package-json-2` fixture. A direct `require` of a dependency package that has package metadata but no resolvable `main` now succeeds with a JS-style warning instead of failing the build.
+
+Next: continue through the remaining invalid/config/error-path fixtures, then broaden runtime smoke coverage for fixtures still outside the Rust suite.
+
+Decisions made: warnings are collected as `PackageWarning` values in the library and rendered by the CLI, keeping stdout formatting out of lower-level modules. The missing-main path queues the dependency `package.json` as content so package metadata remains visible to later walker activation.
+
+Blockers worked around: the first implementation only treated dependency-list aliases as warning-capable; the fixture proved a direct `require('crusader')` needs the same specific non-fatal handling when the package metadata exists but lacks `main`.
+
 ## 2026-05-19 - Skeleton shipped
 
 Shipped: created the Cargo binary/library package, pinned MSRV to Rust 1.85.0, added typed public skeleton seams, compileable doc examples, parity seed tests, and Rust CI for check/clippy/fmt/test/doctest/doc.

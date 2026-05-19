@@ -233,6 +233,25 @@ fn dependency_without_main_still_activates_package_json_dependencies() -> Result
 }
 
 #[test]
+fn dependency_without_main_records_js_warning() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-invalid-package-json-2");
+    let package = PackageJson::parse("{}")
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::new(package),
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert_eq!(output.warnings.len(), 1);
+    let message = output.warnings[0].to_cli_message();
+    assert!(message.contains("Entry 'main' not found"));
+    assert!(message.contains("crusader/package.json"));
+    Ok(())
+}
+
+#[test]
 fn dependency_package_self_subpath_require_includes_target() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-package-json-6b");
     let package = PackageJson::parse("{}")

@@ -71,5 +71,5 @@ pub use crate::target::{
     parse_targets,
 };
 pub use crate::walk::{
-    FileRecord, FileStat, Marker, WalkOutput, WalkTaskRecord, WalkerParams, walk,
+    FileRecord, FileStat, Marker, PackageWarning, WalkOutput, WalkTaskRecord, WalkerParams, walk,
 };
