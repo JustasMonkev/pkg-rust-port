@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde_json::Value;
+
 use crate::common::{AliasKind, StoreKind};
 use crate::config::{PackageJson, PackageJsonError};
 use crate::detect::{DetectionKind, detect};
@@ -341,6 +343,42 @@ impl WalkerState {
             let package_json = format!("{dependency}/package.json");
             self.append_resolvable(base_dir, &package_json, marker.clone(), false)?;
         }
+
+        self.append_files_from_config(marker, base_dir)?;
+        Ok(())
+    }
+
+    fn append_files_from_config(
+        &mut self,
+        marker: &Marker,
+        base_dir: &Path,
+    ) -> Result<(), PkgError> {
+        if let Some(pkg_config) = marker.package.pkg.as_ref() {
+            for script in expand_config_value(&pkg_config.scripts, base_dir)? {
+                if script.is_file() {
+                    self.append(script, StoreKind::Blob, marker.clone());
+                }
+            }
+
+            for asset in expand_config_value(&pkg_config.assets, base_dir)? {
+                if asset.is_file() {
+                    self.append(asset, StoreKind::Content, marker.clone());
+                }
+            }
+
+            return Ok(());
+        }
+
+        for file in expand_config_strings(&marker.package.files, base_dir)? {
+            if file.is_file() {
+                let store = if is_javascript_file(&file) {
+                    StoreKind::Blob
+                } else {
+                    StoreKind::Content
+                };
+                self.append(file, store, marker.clone());
+            }
+        }
         Ok(())
     }
 
@@ -530,6 +568,115 @@ pub fn walk(
 fn should_retag_blob_as_content(path: &Path) -> bool {
     !is_javascript_file(path)
         && path.extension().and_then(|extension| extension.to_str()) != Some("node")
+}
+
+fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => Ok(Vec::new()),
+        Value::String(pattern) => expand_config_strings(std::slice::from_ref(pattern), base_dir),
+        Value::Array(patterns) => {
+            let mut strings = Vec::new();
+            for pattern in patterns {
+                if let Some(pattern) = pattern.as_str() {
+                    strings.push(pattern.to_owned());
+                }
+            }
+            expand_config_strings(&strings, base_dir)
+        }
+    }
+}
+
+fn expand_config_strings(patterns: &[String], base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
+    let mut files = Vec::new();
+    for pattern in patterns {
+        files.extend(expand_pattern(pattern, base_dir)?);
+    }
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
+fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
+    if pattern.starts_with('!') {
+        // DECISION: current Rust parity fixtures only use positive package config
+        // globs. Negated globby patterns need an ordered include/exclude matcher,
+        // which belongs with the broader config-glob parity slice.
+        return Ok(Vec::new());
+    }
+
+    let pattern_path = base_dir.join(pattern);
+    if !pattern.contains('*') {
+        return Ok(if pattern_path.is_file() {
+            vec![canonicalize_or_self(&pattern_path)]
+        } else {
+            Vec::new()
+        });
+    }
+
+    let Some(directory) = pattern_path.parent() else {
+        return Ok(Vec::new());
+    };
+    let Some(file_pattern) = pattern_path.file_name().and_then(|name| name.to_str()) else {
+        return Ok(Vec::new());
+    };
+
+    let mut files = Vec::new();
+    match fs::read_dir(directory) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(|source| io_error(directory, source))?;
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if path.is_file() && star_pattern_matches(file_pattern, name) {
+                    files.push(canonicalize_or_self(&path));
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(io_error(directory, error)),
+    }
+
+    Ok(files)
+}
+
+fn star_pattern_matches(pattern: &str, candidate: &str) -> bool {
+    if !pattern.contains('*') {
+        return pattern == candidate;
+    }
+
+    let mut remainder = candidate;
+    let mut parts = pattern.split('*').peekable();
+    let mut first = true;
+
+    while let Some(part) = parts.next() {
+        if part.is_empty() {
+            first = false;
+            continue;
+        }
+
+        if first {
+            let Some(next) = remainder.strip_prefix(part) else {
+                return false;
+            };
+            remainder = next;
+        } else if parts.peek().is_none() {
+            return remainder.ends_with(part);
+        } else {
+            let Some(index) = remainder.find(part) else {
+                return false;
+            };
+            let Some(next) = remainder.get(index + part.len()..) else {
+                return false;
+            };
+            remainder = next;
+        }
+
+        first = false;
+    }
+
+    pattern.ends_with('*') || remainder.is_empty()
 }
 
 fn is_javascript_file(path: &Path) -> bool {

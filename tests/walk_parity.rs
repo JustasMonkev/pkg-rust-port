@@ -84,3 +84,35 @@ fn explicit_addition_is_stored_as_content() -> Result<(), PkgError> {
     assert!(output.contains_store(addition, StoreKind::Content));
     Ok(())
 }
+
+#[test]
+fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-with-config");
+    let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
+    let output = walk(
+        marker,
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(
+        fixture_dir.join("test-z-require-code-I.js"),
+        StoreKind::Blob
+    ));
+    assert!(output.contains_store(
+        fixture_dir.join("test-z-require-code-J.js"),
+        StoreKind::Blob
+    ));
+    assert!(output.contains_store(fixture_dir.join("test-y-resolve-A.txt"), StoreKind::Content));
+    assert!(output.contains_store(fixture_dir.join("test-y-resolve-H.txt"), StoreKind::Content));
+    assert!(output.contains_store(
+        fixture_dir.join("test-z-require-content-K.txt"),
+        StoreKind::Content
+    ));
+    assert!(output.contains_store(
+        fixture_dir.join("test-z-require-content-N.txt"),
+        StoreKind::Content
+    ));
+    Ok(())
+}
