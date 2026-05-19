@@ -70,7 +70,7 @@ pub struct PackageBuild {
 /// let build = pkg_rust::build_package_with_provider(
 ///     &plan,
 ///     &StubBinary,
-///     "%VIRTUAL_FILESYSTEM% %DEFAULT_ENTRYPOINT% %SYMLINKS% %DICT% %DOCOMPRESS%",
+///     &pkg_rust::prelude_template(false),
 /// )?;
 /// assert_eq!(build.outputs.len(), 1);
 /// let _ = std::fs::remove_file(output);

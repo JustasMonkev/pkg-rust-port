@@ -299,3 +299,13 @@ Next: replace the temporary producer prelude template with the real runtime boot
 Decisions made: split cache construction into offline `new` and download-enabled `with_downloads`/`default_cache` so tests do not accidentally perform network I/O, but the real CLI can fetch when the cache is empty.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Runtime prelude template slice shipped
+
+Shipped: added `prelude_template`, which assembles the producer prelude wrapper with the original bootstrap runtime, optional diagnostic runtime, a generated common-helper body, and the producer placeholders. `exec` now uses this real prelude template instead of the temporary placeholder-only string. Added parity tests for wrapper shape and diagnostic inclusion.
+
+Next: validate the generated common-helper behavior against runtime expectations, then add a cached/download-backed CLI smoke test using a real placeholder-bearing target binary.
+
+Decisions made: during migration, reference the original bootstrap and diagnostic files from the parent JS repo at compile time instead of copying them into `rust-port`; this preserves runtime parity while avoiding vendoring those JS files into the Rust target tree. The common helper body is generated in Rust because the source `lib/common.ts` is TypeScript, while the runtime prelude needs plain JavaScript.
+
+Blockers worked around: none.

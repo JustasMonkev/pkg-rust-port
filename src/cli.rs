@@ -11,11 +11,9 @@ use crate::config::PackageJson;
 use crate::error::PkgError;
 use crate::fetch::PkgFetchCache;
 use crate::package::build_package_with_provider;
+use crate::prelude::prelude_template;
 use crate::target::{NodeTarget, Platform, TargetDefaults, output_names, parse_targets};
 use crate::walk::Marker;
-
-const DEFAULT_PRELUDE_TEMPLATE: &str =
-    "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -158,7 +156,8 @@ where
     };
     let plan = plan_from_cli(cli)?;
     let cache = PkgFetchCache::default_cache()?;
-    build_package_with_provider(&plan, &cache, DEFAULT_PRELUDE_TEMPLATE)?;
+    let prelude = prelude_template(false);
+    build_package_with_provider(&plan, &cache, &prelude)?;
     Ok(())
 }
 

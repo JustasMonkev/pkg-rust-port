@@ -29,6 +29,7 @@ mod fetch;
 mod fsx;
 mod pack;
 mod package;
+mod prelude;
 mod produce;
 mod refine;
 mod resolve;
@@ -57,6 +58,7 @@ pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinaryProvider, build_package_with_provider,
 };
+pub use crate::prelude::prelude_template;
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,
