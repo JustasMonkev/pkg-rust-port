@@ -329,15 +329,16 @@ fn build_marker(
 
 fn normalize_input_path(input: &Path) -> Result<PathBuf, PkgError> {
     let input = absolute_path(input)?;
-    let metadata = fs::metadata(&input).map_err(|source| PkgError::Io {
-        path: input.display().to_string(),
-        source,
+    // DECISION: JS `pkg` collapses missing and inaccessible CLI inputs into a
+    // user-facing "does not exist" error; keep that wording at the CLI planning
+    // boundary while lower-level file operations still return structured IO.
+    let metadata = fs::metadata(&input).map_err(|_source| {
+        PkgError::Cli(format!("Input file does not exist: {}", input.display()))
     })?;
     if metadata.is_dir() {
         let package = input.join("package.json");
-        fs::metadata(&package).map_err(|source| PkgError::Io {
-            path: package.display().to_string(),
-            source,
+        fs::metadata(&package).map_err(|_source| {
+            PkgError::Cli(format!("Input file does not exist: {}", package.display()))
         })?;
         return Ok(package);
     }
@@ -351,9 +352,13 @@ fn resolve_entrypoint(input: &Path, package: Option<&PackageJson>) -> Result<Pat
                 "Property 'bin' does not exist in package.json".to_owned(),
             ));
         };
-        fs::metadata(&entrypoint).map_err(|source| PkgError::Io {
-            path: entrypoint.display().to_string(),
-            source,
+        // DECISION: keep the package.json provenance in the missing-bin error
+        // because the JS suite asserts that the path came from the `bin` field.
+        fs::metadata(&entrypoint).map_err(|_source| {
+            PkgError::Cli(format!(
+                "Bin file does not exist (taken from package.json 'bin' property): {}",
+                entrypoint.display()
+            ))
         })?;
         return Ok(entrypoint);
     }

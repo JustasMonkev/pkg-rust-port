@@ -194,6 +194,8 @@ Initial Rust parity order:
 - Synthesize POSIX parent directory records during common-denominator refinement. Bounded walking can discover escaped files without their parent directory links; the runtime prelude still needs those links for module traversal.
 - Serialize stat payloads with the JS prelude field names (`isFileValue`, `isDirectoryValue`, `isSocketValue`, `isSymbolicLinkValue`) while keeping Rust's `FileStat` fields idiomatic with serde renames.
 - Run CLI packaging on a dedicated larger-stack OS thread. This keeps `reqwest::blocking` outside the Tokio runtime and avoids stack overflow on larger VFS/prelude builds without requiring users to set `RUST_MIN_STACK`.
+- Render fatal CLI packaging errors to stdout with the `> Error!` marker and no ANSI escapes. This preserves the JS invalid-fixture contract even though Rust library callers still receive typed `PkgError` values.
+- Map CLI input and package-bin metadata misses to JS-style "does not exist" messages at the planning boundary. Lower-level filesystem operations keep structured `Io` errors, but user-facing invalid fixtures assert the original CLI wording.
 - Keep Node bytecode fabrication as an external process interaction. Rust cannot produce V8 cached data directly without a major V8 embedder dependency, so `fabricate` remains process-based.
 - Implement Node resolution directly. A subprocess bridge to Node's `resolve` package would be faster to write but would retain the JS resolver as part of the Rust product.
 

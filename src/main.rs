@@ -8,7 +8,9 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     if let Err(error) = pkg_rust::exec(std::env::args_os().skip(1)).await {
-        eprintln!("{error}");
+        // DECISION: the JS CLI writes fatal packaging errors to stdout with this
+        // marker, and the oracle tests assert that channel and wording.
+        println!("> Error! {error}");
         std::process::exit(2);
     }
 

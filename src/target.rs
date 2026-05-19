@@ -176,8 +176,16 @@ pub struct ParsedTargets {
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum TargetParseError {
     /// The target contains an unknown token.
-    #[error("unknown token '{0}' in target")]
+    #[error("Unknown token '{0}' in target")]
     UnknownToken(String),
+    /// The target item contains an unknown token.
+    #[error("Unknown token '{token}' in target '{target}'")]
+    UnknownTargetToken {
+        /// Unrecognized token.
+        token: String,
+        /// Target item being parsed.
+        target: String,
+    },
 }
 
 /// Parse comma-separated pkg target items.
@@ -260,7 +268,10 @@ fn parse_target_item(
             } else if let Ok(arch) = Arch::from_str(token) {
                 target.arch = arch;
             } else {
-                return Err(TargetParseError::UnknownToken(token.to_owned()));
+                return Err(TargetParseError::UnknownTargetToken {
+                    token: token.to_owned(),
+                    target: item.to_owned(),
+                });
             }
         }
     }

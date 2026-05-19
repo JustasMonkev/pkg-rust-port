@@ -459,3 +459,13 @@ Next: move into invalid package/config/error-path fixtures, then broader runtime
 Decisions made: keep `.node` files stored as content when they are encountered as blob tasks, matching JS walker behavior. When records escape a forced snapshot base, fall back to common-denominator snapshotting and synthesize POSIX parent directory records so the runtime prelude can traverse generated paths.
 
 Blockers worked around: `test-50-native-addon-3` initially generated a broken `e_modules/dependency/time-d.node` snapshot key by slicing a sibling `node_modules` path against the `lib/` base. After the denominator fallback, the file existed but module resolution still needed a synthetic `/snapshot/node_modules` directory link.
+
+## 2026-05-19 - Hard invalid CLI parity shipped
+
+Shipped: added CLI smoke parity coverage for the hard invalid fixtures: missing input, missing package.json for a directory input, missing package `bin`, missing package `bin` target file, and unknown target token. The Rust CLI now exits with code 2, writes the JS-style `> Error!` line to stdout, leaves stderr empty, and avoids ANSI escapes for those paths.
+
+Next: cover the warning-only invalid package-json fixture where dependency package metadata has no `main`, then continue through config/error-path fixtures.
+
+Decisions made: keep fatal CLI formatting at the binary boundary while preserving typed `PkgError` values for library callers. CLI input and package-bin metadata misses use JS-style "does not exist" wording because those messages are part of the behavioral oracle.
+
+Blockers worked around: none.

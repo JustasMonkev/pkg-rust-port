@@ -3,13 +3,17 @@
 //! End-to-end CLI smoke coverage for cached target-binary packaging.
 
 use std::fs;
+use std::path::Path;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use pkg_rust::{BinaryKind, PkgFetchCache, TargetDefaults, parse_targets};
 
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
 #[test]
-fn cli_packages_with_cached_built_target_binary() -> Result<(), Box<dyn std::error::Error>> {
-    let temp_root = std::env::temp_dir().join(format!("pkg-rust-cli-smoke-{}", std::process::id()));
+fn cli_packages_with_cached_built_target_binary() -> TestResult {
+    let temp_root = temp_root("cached-built-binary")?;
     let cache_root = temp_root.join("cache");
     let output = temp_root.join("demo-bin");
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -65,6 +69,103 @@ fn cli_packages_with_cached_built_target_binary() -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+#[test]
+fn cli_reports_missing_input_like_js_invalid_fixture() -> TestResult {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = run_cli(
+        manifest_dir,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            "no-output",
+            "12345",
+        ],
+    )?;
+
+    assert_cli_error(&output, ["Error!", "does not exist", "12345"]);
+    Ok(())
+}
+
+#[test]
+fn cli_reports_missing_package_json_like_js_invalid_fixture() -> TestResult {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-invalid-package-json");
+    let output = run_cli(
+        &fixture,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            "no-output",
+            ".",
+        ],
+    )?;
+
+    assert_cli_error(&output, ["Error!", "does not exist", "package.json"]);
+    Ok(())
+}
+
+#[test]
+fn cli_reports_missing_package_bin_like_js_invalid_fixture() -> TestResult {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-invalid-package-json-bin");
+    let output = run_cli(
+        &fixture,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            "no-output",
+            ".",
+        ],
+    )?;
+
+    assert_cli_error(
+        &output,
+        ["Error!", "Property 'bin' does not exist", "package.json"],
+    );
+    Ok(())
+}
+
+#[test]
+fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-invalid-package-json-bin-2");
+    let output = run_cli(
+        &fixture,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            "no-output",
+            ".",
+        ],
+    )?;
+
+    assert_cli_error(&output, ["Error!", "does not exist", "package.json"]);
+    Ok(())
+}
+
+#[test]
+fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-invalid-unknown-token");
+    let output = run_cli(
+        &fixture,
+        [
+            "--target",
+            "node7-x6",
+            "--output",
+            "no-output",
+            "test-x-index.js",
+        ],
+    )?;
+
+    assert_cli_error(&output, ["Error!", "Unknown token", "node7-x6"]);
+    Ok(())
+}
+
 fn binary_with_placeholders() -> Vec<u8> {
     let mut binary = Vec::from([b'\0']);
     for _index in 0..20 {
@@ -75,4 +176,53 @@ fn binary_with_placeholders() -> Vec<u8> {
     binary.extend_from_slice(b"// PRELUDE_POSITION //");
     binary.extend_from_slice(b"// PRELUDE_SIZE //");
     binary
+}
+
+fn temp_root(name: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    Ok(std::env::temp_dir().join(format!(
+        "pkg-rust-cli-smoke-{name}-{}-{nanos}",
+        std::process::id()
+    )))
+}
+
+fn run_cli<I, S>(
+    current_dir: &Path,
+    args: I,
+) -> Result<std::process::Output, Box<dyn std::error::Error>>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    Ok(Command::new(env!("CARGO_BIN_EXE_pkg"))
+        .current_dir(current_dir)
+        .args(args)
+        .output()?)
+}
+
+fn assert_cli_error<const N: usize>(output: &std::process::Output, needles: [&str; N]) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "pkg CLI unexpectedly succeeded: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.stderr.is_empty(),
+        "expected JS-style errors on stdout, got stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !stdout.as_bytes().contains(&0x1b),
+        "stdout contains ANSI escape bytes: {stdout}"
+    );
+    for needle in needles {
+        assert!(
+            stdout.contains(needle),
+            "stdout did not contain {needle:?}: {stdout}"
+        );
+    }
 }
