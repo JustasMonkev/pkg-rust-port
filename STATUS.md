@@ -449,3 +449,13 @@ Next: move into native-addon runtime fixtures and invalid/error-path fixtures.
 Decisions made: keep spawn parity in the runtime smoke suite because the behavior lives mostly in the JS prelude and must be verified by executing the produced binary. Treat top-level `return` as valid detector input because Node wraps CommonJS modules before execution.
 
 Blockers worked around: `test-cluster.js` initially failed SWC parsing with `ReturnNotAllowed`, and `test-cpfork-a-1.js` initially omitted `test-cpfork-a-child.js` because assignment RHS expressions were not traversed.
+
+## 2026-05-19 - Native-addon runtime parity shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-50-native-addon`, `2`, `3`, and `4`. Fixed escaped dependency snapshot refinement so an entrypoint under `lib/` can still bundle and resolve sibling `node_modules` `.node` files.
+
+Next: move into invalid package/config/error-path fixtures, then broader runtime fixtures not yet covered by the Rust smoke suite.
+
+Decisions made: keep `.node` files stored as content when they are encountered as blob tasks, matching JS walker behavior. When records escape a forced snapshot base, fall back to common-denominator snapshotting and synthesize POSIX parent directory records so the runtime prelude can traverse generated paths.
+
+Blockers worked around: `test-50-native-addon-3` initially generated a broken `e_modules/dependency/time-d.node` snapshot key by slicing a sibling `node_modules` path against the `lib/` base. After the denominator fallback, the file existed but module resolution still needed a synthetic `/snapshot/node_modules` directory link.

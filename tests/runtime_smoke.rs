@@ -75,6 +75,43 @@ fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std:
 }
 
 #[test]
+fn native_addon_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    for (name, fixture, input) in [
+        ("native-addon", "test-50-native-addon", "test-x-index.js"),
+        (
+            "native-addon-2",
+            "test-50-native-addon-2",
+            "test-x-index.js",
+        ),
+        (
+            "native-addon-3-x",
+            "test-50-native-addon-3",
+            "lib/test-x-index.js",
+        ),
+        (
+            "native-addon-3-y",
+            "test-50-native-addon-3",
+            "lib/community/test-y-index.js",
+        ),
+        (
+            "native-addon-3-z",
+            "test-50-native-addon-3",
+            "lib/enterprise/test-z-index.js",
+        ),
+        (
+            "native-addon-4",
+            "test-50-native-addon-4",
+            "test-x-index.js",
+        ),
+    ] {
+        package_and_compare_fixture(name, &root.join(fixture), input, input)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn package_json_files_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");

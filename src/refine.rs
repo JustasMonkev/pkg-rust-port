@@ -48,7 +48,7 @@ pub fn refine(
     let file_refs: Vec<&str> = files.iter().map(String::as_str).collect();
     let denominator = retrieve_denominator(&file_refs, style);
 
-    let records = records
+    let mut records = records
         .into_iter()
         .map(|(file, record)| {
             (
@@ -57,6 +57,7 @@ pub fn refine(
             )
         })
         .collect();
+    ensure_parent_directory_records(&mut records, style);
     let symlinks = symlinks
         .into_iter()
         .map(|(link, real)| {
@@ -135,6 +136,42 @@ fn ensure_directory_record(
     }
 
     records.insert(key.to_owned(), synthetic_directory_record(file, child));
+}
+
+fn ensure_parent_directory_records(records: &mut BTreeMap<String, FileRecord>, style: PathStyle) {
+    let PathStyle::Posix = style else {
+        // The current runtime fixtures that require synthetic parent chains are
+        // POSIX-only. Keep Windows unchanged until platform-specific parity
+        // expectations are ported.
+        return;
+    };
+
+    let keys = records.keys().cloned().collect::<Vec<_>>();
+    for key in keys {
+        if key == "/" {
+            continue;
+        }
+        let parts = key
+            .trim_start_matches('/')
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let mut parent = "/".to_owned();
+        for child in parts.iter().take(parts.len() - 1) {
+            let child = (*child).to_owned();
+            ensure_directory_record(records, &parent, PathBuf::from(&parent), child.clone());
+            if parent == "/" {
+                parent.push_str(&child);
+            } else {
+                parent.push('/');
+                parent.push_str(&child);
+            }
+        }
+    }
 }
 
 fn synthetic_directory_record(file: PathBuf, child: String) -> FileRecord {
@@ -216,6 +253,25 @@ fn refine_with_snapshot_base(
     purge_top_directories(&mut records);
     let entrypoint = canonicalize_or_self(entrypoint.as_ref());
     let snapshot_base = canonicalize_or_self(snapshot_base.as_ref());
+    if records
+        .keys()
+        .any(|file| !inside_root(&snapshot_base, file))
+    {
+        // DECISION: A forced snapshot base is only valid while every walked
+        // record stays under it. Some file-entry fixtures resolve dependencies
+        // through sibling node_modules directories, so fall back to the JS-style
+        // common denominator instead of slicing those paths into invalid keys.
+        return refine(
+            WalkOutput {
+                records,
+                symlinks: BTreeMap::new(),
+                task_log: Vec::new(),
+            },
+            entrypoint,
+            symlinks,
+            style,
+        );
+    }
     let denominator = path_to_string(&snapshot_base).len();
 
     let mut records: BTreeMap<String, FileRecord> = records
@@ -307,6 +363,11 @@ fn path_to_string(path: &Path) -> String {
 fn canonicalize_or_self(path: &Path) -> PathBuf {
     path.canonicalize()
         .unwrap_or_else(|_error| path.to_path_buf())
+}
+
+fn inside_root(root: &Path, path: &Path) -> bool {
+    let path = canonicalize_or_self(path);
+    path == root || path.starts_with(root)
 }
 
 fn canonicalize_link_path(path: &Path) -> PathBuf {

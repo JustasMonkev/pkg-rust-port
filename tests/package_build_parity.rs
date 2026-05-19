@@ -117,6 +117,40 @@ fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
 }
 
 #[test]
+fn escaped_dependency_falls_back_to_common_snapshot_denominator()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-package-native-escape-{}",
+        std::process::id()
+    ));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "../test/test-50-native-addon-3/lib/test-x-index.js",
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = String::from_utf8_lossy(&build.outputs[0].image.bytes);
+    assert!(image.contains("\"/snapshot/lib/test-x-index.js\""));
+    assert!(image.contains("\"/snapshot/node_modules\""));
+    assert!(image.contains("\"/snapshot/node_modules/dependency/time-d.node\""));
+    assert!(!image.contains("\"e_modules/dependency/time-d.node\""));
+
+    std::fs::remove_file(output)?;
+    Ok(())
+}
+
+#[test]
 fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join(format!(
         "pkg-rust-package-output-dir-{}",
