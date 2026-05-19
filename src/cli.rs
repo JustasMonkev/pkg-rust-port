@@ -9,8 +9,13 @@ use crate::common::PathStyle;
 use crate::compress::Compression;
 use crate::config::PackageJson;
 use crate::error::PkgError;
+use crate::fetch::PkgFetchCache;
+use crate::package::build_package_with_provider;
 use crate::target::{NodeTarget, Platform, TargetDefaults, output_names, parse_targets};
 use crate::walk::Marker;
+
+const DEFAULT_PRELUDE_TEMPLATE: &str =
+    "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -151,11 +156,10 @@ where
     let Some(cli) = parse_cli_or_display(argv)? else {
         return Ok(());
     };
-    let _plan = plan_from_cli(cli)?;
-
-    Err(PkgError::NotImplemented(
-        "CLI planning is wired; target binary fetch and production orchestration are next",
-    ))
+    let plan = plan_from_cli(cli)?;
+    let cache = PkgFetchCache::default_cache()?;
+    build_package_with_provider(&plan, &cache, DEFAULT_PRELUDE_TEMPLATE)?;
+    Ok(())
 }
 
 fn parse_cli<I, S>(argv: I) -> Result<Cli, PkgError>

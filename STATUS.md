@@ -289,3 +289,13 @@ Next: wire `exec` to use `PkgFetchCache::default_cache` and `build_package_with_
 Decisions made: keep the reusable byte-storage verifier separate from the HTTP request so cache write, permission, hash, and cleanup semantics remain testable without external network access.
 
 Blockers worked around: local `TcpListener` test setup failed in the sandbox with `Operation not permitted`, so the tests were moved down to the storage/verifier layer while leaving the production HTTP download path intact.
+
+## 2026-05-19 - CLI provider integration shipped
+
+Shipped: `exec` now plans arguments, creates `PkgFetchCache::default_cache`, and calls `build_package_with_provider` with the default producer prelude template. `PkgFetchCache::new` remains offline/cache-only for deterministic tests, while `default_cache` enables GitHub release downloads on cache misses.
+
+Next: replace the temporary producer prelude template with the real runtime bootstrap data and add a cached/download-backed CLI smoke test.
+
+Decisions made: split cache construction into offline `new` and download-enabled `with_downloads`/`default_cache` so tests do not accidentally perform network I/O, but the real CLI can fetch when the cache is empty.
+
+Blockers worked around: none.

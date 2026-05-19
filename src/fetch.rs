@@ -52,16 +52,44 @@ impl BinaryKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PkgFetchCache {
     root: PathBuf,
+    download_on_miss: bool,
 }
 
 impl PkgFetchCache {
-    /// Create a cache provider rooted at `root`.
+    /// Create an offline cache provider rooted at `root`.
+    ///
+    /// Use [`PkgFetchCache::with_downloads`] to enable GitHub release downloads
+    /// when neither fetched nor built cache entries exist.
     #[must_use]
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            download_on_miss: false,
+        }
     }
 
-    /// Create a cache provider from `$PKG_CACHE_PATH` or `~/.pkg-cache`.
+    /// Enable downloading fetched binaries on cache misses.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let cache = pkg_rust::PkgFetchCache::new(std::env::temp_dir()).with_downloads();
+    /// let defaults = pkg_rust::TargetDefaults::host("node18");
+    /// let target = pkg_rust::parse_targets("linux-x64", &defaults)
+    ///     .map_err(|error| pkg_rust::PkgError::Fetch(error.to_string()))?
+    ///     .targets
+    ///     .remove(0);
+    /// let path = cache.binary_path(&target, pkg_rust::BinaryKind::Fetched)?;
+    /// assert!(path.to_string_lossy().contains("v3.5"));
+    /// # Ok::<(), pkg_rust::PkgError>(())
+    /// ```
+    #[must_use]
+    pub fn with_downloads(mut self) -> Self {
+        self.download_on_miss = true;
+        self
+    }
+
+    /// Create a download-enabled cache provider from `$PKG_CACHE_PATH` or `~/.pkg-cache`.
     ///
     /// # Example
     ///
@@ -71,14 +99,14 @@ impl PkgFetchCache {
     /// ```
     pub fn default_cache() -> Result<Self, PkgError> {
         if let Some(path) = std::env::var_os("PKG_CACHE_PATH") {
-            return Ok(Self::new(path));
+            return Ok(Self::new(path).with_downloads());
         }
         let Some(home) = std::env::var_os("HOME") else {
             return Err(PkgError::Fetch(
                 "HOME is not set and PKG_CACHE_PATH was not provided".to_owned(),
             ));
         };
-        Ok(Self::new(PathBuf::from(home).join(".pkg-cache")))
+        Ok(Self::new(PathBuf::from(home).join(".pkg-cache")).with_downloads())
     }
 
     /// Return the cache path for a target and cache artifact kind.
@@ -201,10 +229,12 @@ impl TargetBinaryProvider for PkgFetchCache {
         if built.is_file() {
             return read_binary(&built);
         }
+        if self.download_on_miss {
+            return self.download_fetched(target);
+        }
 
-        // DECISION: this provider is cache-only until the next slice adds
-        // GitHub release download; verified cache reuse is still useful and
-        // keeps package builds deterministic in tests.
+        // DECISION: explicit `new` caches stay offline so tests and callers can
+        // opt out of network access; `default_cache` enables downloads for CLI use.
         Err(PkgError::Fetch(format!(
             "no cached binary for target {target}; expected {} or {}",
             fetched.display(),
