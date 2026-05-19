@@ -319,3 +319,13 @@ Next: add a cached/download-backed CLI smoke path using a placeholder-bearing ta
 Decisions made: keep the generated helper as plain JavaScript inside `src/prelude.rs`, but test it by executing the generated source rather than only checking template text; this catches runtime drift while still avoiding vendored TypeScript source under `rust-port`.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Cached CLI smoke path shipped
+
+Shipped: added an integration smoke test that spawns the compiled `pkg` binary, points `PKG_CACHE_PATH` at a temp pkg-fetch-compatible cache containing a built placeholder target, and packages the JS require-resolve fixture through the real `exec` path. The test verifies bake-option injection, manifest rendering, placeholder replacement, and executable permissions.
+
+Next: port bytecode/fabricator behavior or explicitly route `--no-bytecode`-style fallbacks where JS behavior requires bytecode generation; then cover the next high-value JS fixture end to end.
+
+Decisions made: use a `built-v18.15.0-macos-arm64` placeholder cache entry instead of a fetched entry so the smoke test avoids network downloads and expected-SHA validation while still exercising the real `PkgFetchCache::default_cache` path through `PKG_CACHE_PATH`.
+
+Blockers worked around: none.
