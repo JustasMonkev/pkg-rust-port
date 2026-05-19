@@ -127,6 +127,26 @@ fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
 }
 
 #[test]
+fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-config-log");
+    let package = PackageJson::parse("{}")
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::new(package),
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.warnings.iter().any(|warning| {
+        let message = warning.to_cli_message();
+        message.contains("stylus options to resolve imports")
+            && message.contains("stylus/package.json")
+    }));
+    Ok(())
+}
+
+#[test]
 fn activates_package_files_directories_and_absolute_style_entries() -> Result<(), PkgError> {
     for fixture in [
         "../test/test-50-package-json-8",

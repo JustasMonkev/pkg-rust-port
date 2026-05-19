@@ -2,7 +2,9 @@
 
 use serde_json::json;
 
-use pkg_rust::{PackageJson, active_dependencies, apply_dictionary_entry, lookup_dictionary};
+use pkg_rust::{
+    DictionaryLog, PackageJson, active_dependencies, apply_dictionary_entry, lookup_dictionary,
+};
 
 #[test]
 fn sequelize_dictionary_replaces_pkg_scripts() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,6 +33,18 @@ fn dynamic_require_dictionaries_carry_script_globs() -> Result<(), Box<dyn std::
         log4js.pkg.as_ref().map(|pkg| &pkg.scripts),
         Some(&json!(["lib/appenders/*.js"]))
     );
+    Ok(())
+}
+
+#[test]
+fn stylus_dictionary_carries_asset_glob_and_log() -> Result<(), Box<dyn std::error::Error>> {
+    let stylus = lookup_dictionary("stylus").ok_or("missing stylus dictionary")?;
+
+    assert_eq!(
+        stylus.pkg.as_ref().map(|pkg| &pkg.assets),
+        Some(&json!(["lib/**/*.styl"]))
+    );
+    assert_eq!(stylus.logs, vec![DictionaryLog::StylusResolveImports]);
     Ok(())
 }
 

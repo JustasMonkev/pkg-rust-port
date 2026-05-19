@@ -62,6 +62,8 @@ pub struct DictionaryEntry {
     pub dependencies: Vec<DictionaryDependency>,
     /// Replacement `pkg` config from the dictionary.
     pub pkg: Option<PkgConfig>,
+    /// Warning/log directives emitted when the dictionary activates.
+    pub logs: Vec<DictionaryLog>,
 }
 
 impl DictionaryEntry {
@@ -90,6 +92,7 @@ impl DictionaryEntry {
         Self {
             dependencies: Vec::new(),
             pkg: Some(pkg),
+            logs: Vec::new(),
         }
     }
 
@@ -107,6 +110,28 @@ impl DictionaryEntry {
         self.dependencies.push(dependency);
         self
     }
+
+    /// Add a warning/log directive.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let entry = pkg_rust::DictionaryEntry::empty()
+    ///     .with_log(pkg_rust::DictionaryLog::StylusResolveImports);
+    /// assert_eq!(entry.logs.len(), 1);
+    /// ```
+    #[must_use]
+    pub fn with_log(mut self, log: DictionaryLog) -> Self {
+        self.logs.push(log);
+        self
+    }
+}
+
+/// Data-only representation of dictionary log callbacks.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DictionaryLog {
+    /// Stylus import resolution warning from `dictionary/stylus.js`.
+    StylusResolveImports,
 }
 
 /// Look up a typed dictionary entry by package name.
@@ -129,6 +154,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "open" | "opn" => Some(open()),
         "publicsuffixlist" => Some(publicsuffixlist()),
         "sequelize" => Some(sequelize()),
+        "stylus" => Some(stylus()),
         _ => None,
     }
 }
@@ -241,4 +267,9 @@ fn publicsuffixlist() -> DictionaryEntry {
 
 fn sequelize() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/**/*.js"]))
+}
+
+fn stylus() -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig::with_assets(["lib/**/*.styl"]))
+        .with_log(DictionaryLog::StylusResolveImports)
 }

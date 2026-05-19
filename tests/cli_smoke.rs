@@ -117,6 +117,51 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
 }
 
 #[test]
+fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
+    let temp_root = temp_root("dictionary-config-log")?;
+    let cache_root = temp_root.join("cache");
+    seed_cached_binary(&cache_root, "node18-macos-arm64")?;
+    let output_path = temp_root.join("test-output.exe");
+    let output_text = output_path
+        .to_str()
+        .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-config-log");
+    let output = run_cli_with_env(
+        &fixture,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            output_text,
+            "./test-x-index.js",
+        ],
+        [("PKG_CACHE_PATH", cache_root.as_os_str())],
+    )?;
+
+    assert!(
+        output.status.success(),
+        "pkg CLI failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.stderr.is_empty(),
+        "expected warning on stdout, got stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !stdout.as_bytes().contains(&0x1b),
+        "stdout contains ANSI escape bytes: {stdout}"
+    );
+    assert!(stdout.contains("stylus options to resolve imports"));
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
 fn cli_reports_missing_input_like_js_invalid_fixture() -> TestResult {
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let output = run_cli(

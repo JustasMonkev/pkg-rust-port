@@ -8,7 +8,9 @@ use serde_json::Value;
 use crate::common::{AliasKind, StoreKind};
 use crate::config::{PackageJson, PackageJsonError};
 use crate::detect::{DetectionKind, detect};
-use crate::dictionary::{active_dependencies, apply_dictionary_entry, lookup_dictionary};
+use crate::dictionary::{
+    DictionaryLog, active_dependencies, apply_dictionary_entry, lookup_dictionary,
+};
 use crate::error::PkgError;
 use crate::resolve::{ResolveOptions, resolve_module};
 
@@ -274,6 +276,11 @@ pub enum PackageWarning {
         /// Package metadata file that supplied the incomplete dependency.
         package_json: PathBuf,
     },
+    /// A dictionary entry emitted a package-specific warning.
+    StylusResolveImports {
+        /// Package metadata file that activated the dictionary entry.
+        package_json: PathBuf,
+    },
 }
 
 impl PackageWarning {
@@ -298,6 +305,10 @@ impl PackageWarning {
                 "Entry 'main' not found in '{}' while resolving '{}'",
                 package_json.display(),
                 alias
+            ),
+            Self::StylusResolveImports { package_json } => format!(
+                "Add {{ paths: [ __dirname ] }} to stylus options to resolve imports in '{}'",
+                package_json.display()
             ),
         }
     }
@@ -448,6 +459,7 @@ impl WalkerState {
         if let Some(name) = marker.package.name.as_deref()
             && let Some(entry) = lookup_dictionary(name)
         {
+            self.append_dictionary_logs(marker.package_path.as_deref(), &entry.logs);
             apply_dictionary_entry(&mut marker.package, &entry);
         }
 
@@ -471,6 +483,23 @@ impl WalkerState {
 
         self.append_files_from_config(marker, base_dir)?;
         Ok(())
+    }
+
+    fn append_dictionary_logs(&mut self, package_path: Option<&Path>, logs: &[DictionaryLog]) {
+        let Some(package_json) = package_path else {
+            return;
+        };
+        for log in logs {
+            match log {
+                DictionaryLog::StylusResolveImports => {
+                    self.output
+                        .warnings
+                        .push(PackageWarning::StylusResolveImports {
+                            package_json: package_json.to_path_buf(),
+                        });
+                }
+            }
+        }
     }
 
     fn register_patches(&mut self, marker: &Marker, base_dir: &Path) {
@@ -658,8 +687,9 @@ impl WalkerState {
             }
             Err(error) => {
                 if let Some(warning) = missing_dependency_main_warning(basedir, alias) {
-                    let PackageWarning::MissingMainEntry { package_json, .. } = &warning;
-                    self.append_missing_main_package_json(package_json, marker)?;
+                    if let PackageWarning::MissingMainEntry { package_json, .. } = &warning {
+                        self.append_missing_main_package_json(package_json, marker)?;
+                    }
                     self.output.warnings.push(warning);
                     return Ok(());
                 }

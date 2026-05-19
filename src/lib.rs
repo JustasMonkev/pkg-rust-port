@@ -48,8 +48,8 @@ pub use crate::detect::{
     successful_debug_lines,
 };
 pub use crate::dictionary::{
-    DictionaryDependency, DictionaryEntry, active_dependencies, apply_dictionary_entry,
-    lookup_dictionary,
+    DictionaryDependency, DictionaryEntry, DictionaryLog, active_dependencies,
+    apply_dictionary_entry, lookup_dictionary,
 };
 pub use crate::error::PkgError;
 pub use crate::fetch::{BinaryKind, PkgFetchCache};
