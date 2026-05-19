@@ -22,6 +22,7 @@ mod cli;
 mod common;
 mod compress;
 mod config;
+mod detect;
 mod dictionary;
 mod error;
 mod target;
@@ -33,6 +34,10 @@ pub use crate::common::{
 };
 pub use crate::compress::{Compression, CompressionParseError};
 pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig};
+pub use crate::detect::{
+    Derivative, DetectedUse, DetectionKind, detect, non_literal_and_cwd_debug_lines,
+    successful_debug_lines,
+};
 pub use crate::dictionary::{
     DictionaryDependency, DictionaryEntry, active_dependencies, apply_dictionary_entry,
     lookup_dictionary,

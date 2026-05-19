@@ -7,6 +7,10 @@ pub enum PkgError {
     #[error("{0}")]
     Cli(String),
 
+    /// JavaScript parsing failed.
+    #[error("javascript parse failed: {0}")]
+    JavaScriptParse(String),
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),
