@@ -54,7 +54,7 @@ pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,
-    produce_executable_image, produce_manifest, render_prelude,
+    produce_executable_image, produce_manifest, render_prelude, write_executable_image,
 };
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
 pub use crate::resolve::{ResolveOptions, resolve_module};

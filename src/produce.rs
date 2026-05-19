@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
+use std::path::Path;
 
 use crate::common::{PathStyle, snapshotify};
 use crate::compress::Compression as PayloadCompression;
@@ -204,6 +205,65 @@ pub fn produce_executable_image(
         prelude_position,
         prelude_size,
     })
+}
+
+/// Produce an executable image and write it to disk.
+///
+/// The returned value contains the same bytes written to `output`, which keeps
+/// tests and later CLI orchestration able to inspect the computed layout.
+///
+/// # Example
+///
+/// ```
+/// let mut binary = Vec::from([b'\0']);
+/// for _index in 0..20 {
+///     binary.extend_from_slice(b"// BAKERY ");
+/// }
+/// binary.extend_from_slice(b"// PAYLOAD_POSITION //// PAYLOAD_SIZE //// PRELUDE_POSITION //// PRELUDE_SIZE //");
+/// let packed = pkg_rust::PackedOutput {
+///     entrypoint: "/project/app.js".to_owned(),
+///     symlinks: std::collections::BTreeMap::new(),
+///     stripes: vec![pkg_rust::Stripe {
+///         snap: "/project/app.js".to_owned(),
+///         store: pkg_rust::StoreKind::Content,
+///         file: None,
+///         buffer: Some(b"console.log('hi');".to_vec()),
+///     }],
+/// };
+/// let output = std::env::temp_dir().join(format!("pkg-rust-output-{}", std::process::id()));
+/// let produced = pkg_rust::write_executable_image(
+///     &output,
+///     binary,
+///     packed,
+///     "%VIRTUAL_FILESYSTEM% %DEFAULT_ENTRYPOINT% %SYMLINKS% %DICT% %DOCOMPRESS%",
+///     pkg_rust::Compression::None,
+///     pkg_rust::PathStyle::Posix,
+///     Vec::new(),
+/// )?;
+/// assert_eq!(std::fs::read(&output).map_err(|source| pkg_rust::PkgError::Io {
+///     path: output.display().to_string(),
+///     source,
+/// })?, produced.bytes);
+/// let _ = std::fs::remove_file(output);
+/// # Ok::<(), pkg_rust::PkgError>(())
+/// ```
+pub fn write_executable_image(
+    output: impl AsRef<Path>,
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    compression: PayloadCompression,
+    style: PathStyle,
+    bakery: Vec<u8>,
+) -> Result<ProducedExecutable, PkgError> {
+    let output = output.as_ref();
+    let produced =
+        produce_executable_image(binary, packed, prelude_template, compression, style, bakery)?;
+    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
+        path: output.display().to_string(),
+        source,
+    })?;
+    Ok(produced)
 }
 
 fn build_manifest_and_payload(

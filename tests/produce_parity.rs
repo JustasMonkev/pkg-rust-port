@@ -7,6 +7,7 @@ use pkg_rust::{
     Compression, Marker, PackageJson, PathStyle, PkgError, PlaceholderKind, PlaceholderValues,
     StoreKind, WalkerParams, discover_placeholders, inject_placeholders, pack,
     produce_executable_image, produce_manifest, refine_walked, render_prelude, walk,
+    write_executable_image,
 };
 
 fn empty_marker() -> Result<Marker, PkgError> {
@@ -309,6 +310,35 @@ fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), Pk
     .err();
 
     assert!(matches!(error, Some(PkgError::Pack(message)) if message.contains("was not found")));
+    Ok(())
+}
+
+#[test]
+fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let output =
+        std::env::temp_dir().join(format!("pkg-rust-produced-image-{}", std::process::id()));
+    let produced = write_executable_image(
+        &output,
+        binary_with_placeholders(),
+        packed,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        Compression::None,
+        PathStyle::Posix,
+        Vec::new(),
+    )?;
+
+    assert_eq!(fs::read(&output)?, produced.bytes);
+    fs::remove_file(output)?;
     Ok(())
 }
 

@@ -229,3 +229,13 @@ Next: use `plus_x` from file-backed producer output so non-Windows artifacts get
 Decisions made: keep the non-Unix implementation as metadata validation plus no-op because POSIX executable bits are not available through `std::fs`, and the JS CLI only invokes this path for non-Windows targets.
 
 Blockers worked around: the new integration test initially failed under crate-wide `missing_docs`; adding a crate-level test doc fixed the compile gate without relaxing lints.
+
+## 2026-05-19 - File-backed producer output shipped
+
+Shipped: added `write_executable_image`, which reuses the in-memory producer image builder and writes the resulting bytes to an output path. Added parity coverage that verifies the output file exactly matches the produced executable image.
+
+Next: integrate target/platform decisions so the CLI can select a binary, write each requested output, and apply executable permissions for non-Windows targets.
+
+Decisions made: keep permission changes outside `write_executable_image` because the JS producer only writes bytes; the CLI orchestration applies signing and `plusx` after production based on target platform.
+
+Blockers worked around: none.
