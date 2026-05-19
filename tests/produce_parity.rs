@@ -1,11 +1,12 @@
 #![allow(missing_docs)]
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
 use pkg_rust::{
     Compression, Marker, PackageJson, PathStyle, PkgError, PlaceholderKind, PlaceholderValues,
-    StoreKind, WalkerParams, discover_placeholders, inject_placeholders, pack,
+    StoreKind, Stripe, WalkerParams, discover_placeholders, inject_placeholders, pack,
     produce_executable_image, produce_manifest, refine_walked, render_prelude, walk,
     write_executable_image,
 };
@@ -175,6 +176,46 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
     assert!(rendered.contains(r#""":"0""#));
     assert!(rendered.contains(r#""snapshot":"1""#));
     assert!(rendered.ends_with('1'));
+    Ok(())
+}
+
+#[test]
+fn blob_stripes_are_fabricated_as_bytecode_payload() -> Result<(), PkgError> {
+    let source = b"module.exports = 42;".to_vec();
+    let packed = pkg_rust::PackedOutput {
+        entrypoint: "/app.js".to_owned(),
+        symlinks: BTreeMap::new(),
+        stripes: vec![Stripe {
+            snap: "/app.js".to_owned(),
+            store: StoreKind::Blob,
+            file: None,
+            buffer: Some(source.clone()),
+        }],
+    };
+    let produced = produce_executable_image(
+        binary_with_placeholders(),
+        packed,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        Compression::None,
+        PathStyle::Posix,
+        Vec::new(),
+    )?;
+    let pointer = produced
+        .manifest
+        .vfs
+        .get("/snapshot/app.js")
+        .and_then(|stores| stores.get(&StoreKind::Blob.as_index()))
+        .cloned()
+        .ok_or_else(|| PkgError::Pack("blob payload pointer was not written".to_owned()))?;
+    let start = produced.payload_position as usize + pointer.offset as usize;
+    let end = start + pointer.size as usize;
+    let payload = produced
+        .bytes
+        .get(start..end)
+        .ok_or_else(|| PkgError::Pack("blob payload range was outside image".to_owned()))?;
+
+    assert_ne!(payload, source.as_slice());
+    assert!(pointer.size > 0);
     Ok(())
 }
 

@@ -329,3 +329,13 @@ Next: port bytecode/fabricator behavior or explicitly route `--no-bytecode`-styl
 Decisions made: use a `built-v18.15.0-macos-arm64` placeholder cache entry instead of a fetched entry so the smoke test avoids network downloads and expected-SHA validation while still exercising the real `PkgFetchCache::default_cache` path through `PKG_CACHE_PATH`.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Host bytecode fabrication slice shipped
+
+Shipped: producer blob stripes now run through a Node `vm.Script(... produceCachedData: true)` fabricator before payload insertion, so `STORE_BLOB` entries contain V8 cached data instead of source bytes. Added payload-level coverage for fabricated blob data. While validating this, fixed a walker parity bug where retagged non-JS blob tasks were still marked as blob stores; JSON and other non-JS files now remain content-only like the JS walker.
+
+Next: replace the host-`node` interim fabricator with target-binary fabrication once the provider layer carries binary paths, then cover real executable runtime smoke with an actual cached pkg-fetch binary.
+
+Decisions made: use host `node` as the interim bytecode fabricator and leave a `// DECISION:` comment in `src/produce.rs`; this is closer to JS behavior than mislabeled source blobs, but target-specific bytecode generation still remains to be ported.
+
+Blockers worked around: the first full test run exposed JSON and CSS files being compiled as JavaScript bytecode. Root cause was in the walker, not the fabricator: Rust retagged them as content but still marked the original blob task complete. Fixed the store-completion path and added fixture assertions so this does not regress.

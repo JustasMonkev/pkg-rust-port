@@ -48,9 +48,17 @@ fn walks_require_resolve_fixture_dependencies_in_fifo_order() -> Result<(), PkgE
         fixture_dir.join("test-z-require-json-1.json"),
         StoreKind::Content
     ));
+    assert!(!output.contains_store(
+        fixture_dir.join("test-z-require-json-1.json"),
+        StoreKind::Blob
+    ));
     assert!(output.contains_store(
         fixture_dir.join("test-z-require-json-5.json"),
         StoreKind::Content
+    ));
+    assert!(!output.contains_store(
+        fixture_dir.join("test-z-require-json-5.json"),
+        StoreKind::Blob
     ));
     assert!(
         output

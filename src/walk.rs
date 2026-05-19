@@ -328,14 +328,25 @@ impl WalkerState {
             self.activate_marker(&mut task.marker)?;
         }
 
-        match task.store {
+        let completed_store = match task.store {
             StoreKind::Blob => self.step_blob(&task.file, &task.marker)?,
-            StoreKind::Content => self.step_content(&task.file)?,
-            StoreKind::Links => self.step_links(&task.file, &task.marker)?,
-            StoreKind::Stat => self.step_stat(&task.file, &task.marker)?,
-        }
+            StoreKind::Content => {
+                self.step_content(&task.file)?;
+                true
+            }
+            StoreKind::Links => {
+                self.step_links(&task.file, &task.marker)?;
+                true
+            }
+            StoreKind::Stat => {
+                self.step_stat(&task.file, &task.marker)?;
+                true
+            }
+        };
 
-        self.record_mut(&task.file).set_store(task.store);
+        if completed_store {
+            self.record_mut(&task.file).set_store(task.store);
+        }
         Ok(())
     }
 
@@ -430,14 +441,10 @@ impl WalkerState {
         Ok(())
     }
 
-    fn step_blob(&mut self, file: &Path, marker: &Marker) -> Result<(), PkgError> {
+    fn step_blob(&mut self, file: &Path, marker: &Marker) -> Result<bool, PkgError> {
         if should_retag_blob_as_content(file) {
             self.append(file.to_path_buf(), StoreKind::Content, marker.clone());
-            return Ok(());
-        }
-
-        if !is_javascript_file(file) {
-            return Ok(());
+            return Ok(false);
         }
 
         let mut body = read_to_string(file)?;
@@ -479,7 +486,7 @@ impl WalkerState {
             }
         }
 
-        Ok(())
+        Ok(true)
     }
 
     fn step_content(&mut self, file: &Path) -> Result<(), PkgError> {
@@ -659,7 +666,6 @@ pub fn walk(
 
 fn should_retag_blob_as_content(path: &Path) -> bool {
     !is_javascript_file(path)
-        && path.extension().and_then(|extension| extension.to_str()) != Some("node")
 }
 
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {

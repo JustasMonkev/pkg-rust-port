@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
 
-use crate::common::{PathStyle, snapshotify};
+use crate::common::{PathStyle, StoreKind, snapshotify};
 use crate::compress::Compression as PayloadCompression;
 use crate::error::PkgError;
 use crate::pack::{PackedOutput, Stripe};
@@ -12,6 +13,30 @@ const PAYLOAD_POSITION_PLACEHOLDER: &str = "// PAYLOAD_POSITION //";
 const PAYLOAD_SIZE_PLACEHOLDER: &str = "// PAYLOAD_SIZE //";
 const PRELUDE_POSITION_PLACEHOLDER: &str = "// PRELUDE_POSITION //";
 const PRELUDE_SIZE_PLACEHOLDER: &str = "// PRELUDE_SIZE //";
+const BYTECODE_FABRICATOR_SCRIPT: &str = r#"
+const vm = require('vm');
+const module = require('module');
+const snap = process.argv[1];
+const chunks = [];
+
+process.stdin.on('data', (chunk) => chunks.push(chunk));
+process.stdin.on('end', () => {
+  const body = Buffer.concat(chunks);
+  const code = module.wrap(body);
+  const script = new vm.Script(code, {
+    filename: snap,
+    produceCachedData: true,
+    sourceless: true
+  });
+
+  if (!script.cachedDataProduced) {
+    console.error('Pkg: Cached data not produced.');
+    process.exit(2);
+  }
+
+  process.stdout.write(script.cachedData);
+});
+"#;
 
 /// Byte range for one store inside the payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -277,9 +302,19 @@ fn build_manifest_and_payload(
     let mut path_dictionary = PathDictionary::default();
 
     for stripe in packed.stripes {
-        let payload_bytes = compress_payload(&stripe_bytes(&stripe)?, compression)?;
-        let size = payload_bytes.len() as u64;
         let snap = snapshotify(&stripe.snap, style);
+        let stripe_bytes = stripe_bytes(&stripe)?;
+        let payload_bytes = if stripe.store == StoreKind::Blob {
+            // DECISION: full JS parity compiles bytecode with the target binary.
+            // Until the provider layer carries target binary paths, use host
+            // `node` here so blob stripes contain V8 cached data instead of
+            // mislabeled JavaScript source.
+            fabricate_bytecode_with_host_node(&snap, &stripe_bytes)?
+        } else {
+            stripe_bytes
+        };
+        let payload_bytes = compress_payload(&payload_bytes, compression)?;
+        let size = payload_bytes.len() as u64;
         let vfs_key = path_dictionary.make_key(compression, &snap);
         vfs.entry(vfs_key)
             .or_default()
@@ -595,6 +630,49 @@ fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
         path: file.clone(),
         source,
     })
+}
+
+fn fabricate_bytecode_with_host_node(snap: &str, source: &[u8]) -> Result<Vec<u8>, PkgError> {
+    let mut child = Command::new("node")
+        .arg("-e")
+        .arg(BYTECODE_FABRICATOR_SCRIPT)
+        .arg(snap)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| PkgError::Io {
+            path: "node".to_owned(),
+            source,
+        })?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| PkgError::Pack("node bytecode stdin was not available".to_owned()))?;
+    stdin.write_all(source).map_err(|source| PkgError::Io {
+        path: "node stdin".to_owned(),
+        source,
+    })?;
+    drop(stdin);
+
+    let output = child.wait_with_output().map_err(|source| PkgError::Io {
+        path: "node".to_owned(),
+        source,
+    })?;
+    if !output.status.success() {
+        return Err(PkgError::Pack(format!(
+            "failed to make bytecode for {snap}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    if output.stdout.is_empty() {
+        return Err(PkgError::Pack(format!(
+            "failed to make bytecode for {snap}: empty cached data"
+        )));
+    }
+
+    Ok(output.stdout)
 }
 
 fn compress_payload(payload: &[u8], compression: PayloadCompression) -> Result<Vec<u8>, PkgError> {
