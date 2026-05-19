@@ -181,6 +181,9 @@ Initial Rust parity order:
 - Convert dictionary JS modules into inert typed data. Executing JS dictionary modules from Rust would violate the no-vendored-JS-source direction and keep dynamic mutation in the design.
 - Keep deterministic walker order. The JS code explicitly forbids multiple workers because task order affects output; Rust will use `VecDeque` FIFO and test this.
 - Bound walker directory-link expansion to the entry tree by default. The JS walker can recurse through host parent links, but that makes Rust parity records depend on the developer machine outside the package under test.
+- Separate walker root from snapshot base for package-directory inputs. The bounded Rust walker avoids enumerating host siblings, then refinement synthesizes the `/snapshot` directory record and keeps the package directory name in snapshot paths so runtime `realpath` and parent-directory reads match the JS suite.
+- Serialize stat payloads with the JS prelude field names (`isFileValue`, `isDirectoryValue`, `isSocketValue`, `isSymbolicLinkValue`) while keeping Rust's `FileStat` fields idiomatic with serde renames.
+- Run CLI packaging on a dedicated larger-stack OS thread. This keeps `reqwest::blocking` outside the Tokio runtime and avoids stack overflow on larger VFS/prelude builds without requiring users to set `RUST_MIN_STACK`.
 - Keep Node bytecode fabrication as an external process interaction. Rust cannot produce V8 cached data directly without a major V8 embedder dependency, so `fabricate` remains process-based.
 - Implement Node resolution directly. A subprocess bridge to Node's `resolve` package would be faster to write but would retain the JS resolver as part of the Rust product.
 

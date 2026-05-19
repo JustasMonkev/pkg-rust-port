@@ -399,3 +399,13 @@ Next: use the same gated runtime-smoke pattern for filesystem asset fixtures, th
 Decisions made: compute the oracle output by running `node test-x-index.js` in the fixture directory instead of hardcoding the long expected text. That keeps the Rust test pinned to the JS suite as the source of truth while still exercising the packaged binary path when a real cache is present.
 
 Blockers worked around: the real cache is machine-local and intentionally not required by default CI, so the new test remains opt-in through `PKG_RUST_REAL_CACHE`.
+
+## 2026-05-19 - Filesystem asset runtime parity shipped
+
+Shipped: added a gated real-runtime smoke test for `test/test-50-fs-runtime-layer` and made it pass against the Node oracle. Fixed three parity gaps exposed by that fixture: CLI packaging now runs on a dedicated larger-stack build thread, stat payload JSON now uses the field names expected by the JS prelude, and package-directory snapshot refinement now preserves the package directory name while synthesizing the bounded `/snapshot` root record.
+
+Next: continue runtime fixture expansion into package-json, spawn, and native-addon edges; keep the real-cache tests opt-in until CI has a seeded target binary strategy.
+
+Decisions made: keep the walker bounded for deterministic records and handle package-directory snapshot shape in refinement instead of walking every sibling directory under the host `test/` tree. The stat struct remains idiomatic Rust and uses serde renames at the prelude boundary.
+
+Blockers worked around: the first filesystem fixture attempt stack-overflowed in Tokio's default blocking worker; the larger-stack build thread avoids requiring `RUST_MIN_STACK` from users or CI.

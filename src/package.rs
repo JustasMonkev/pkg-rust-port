@@ -8,7 +8,7 @@ use crate::pack::pack;
 use crate::produce::{
     ProducedExecutable, ProducerBuildOptions, write_executable_image_with_fabricator,
 };
-use crate::refine::refine_walked;
+use crate::refine::refine_walked_with_snapshot_base;
 use crate::target::{NodeTarget, Platform};
 use crate::walk::{WalkerParams, walk};
 
@@ -153,7 +153,12 @@ pub fn build_package_with_provider(
             plan.addition.clone(),
             WalkerParams::new().with_root(&plan.root),
         )?;
-        let refined = refine_walked(walked, &plan.entrypoint, planned.path_style);
+        let refined = refine_walked_with_snapshot_base(
+            walked,
+            &plan.entrypoint,
+            &plan.snapshot_base,
+            planned.path_style,
+        );
         let packed = pack(refined, plan.bytecode)?;
         prepare_output_path(&planned.output)?;
         let image = write_executable_image_with_fabricator(

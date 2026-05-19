@@ -10,7 +10,8 @@ use std::process::Command;
 fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-api");
-    let Some(run_result) = package_and_run_real_fixture("api", &fixture_dir)? else {
+    let Some(run_result) = package_and_run_real_fixture("api", &fixture_dir, "test-x-index.js")?
+    else {
         return Ok(());
     };
     assert_eq!(String::from_utf8_lossy(&run_result.stdout), "42\n");
@@ -33,7 +34,32 @@ fn require_resolve_fixture_runs_when_real_cache_is_configured()
         String::from_utf8_lossy(&expected.stderr)
     );
 
-    let Some(run_result) = package_and_run_real_fixture("require-resolve", &fixture_dir)? else {
+    let Some(run_result) =
+        package_and_run_real_fixture("require-resolve", &fixture_dir, "test-x-index.js")?
+    else {
+        return Ok(());
+    };
+    assert_eq!(run_result.stdout, expected.stdout);
+    Ok(())
+}
+
+#[test]
+fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer");
+    let expected = Command::new("node")
+        .current_dir(&fixture_dir)
+        .arg("test-x-index.js")
+        .output()?;
+    assert!(
+        expected.status.success(),
+        "node oracle failed: {}{}",
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    let Some(run_result) = package_and_run_real_fixture("fs-runtime", &fixture_dir, ".")? else {
         return Ok(());
     };
     assert_eq!(run_result.stdout, expected.stdout);
@@ -43,6 +69,7 @@ fn require_resolve_fixture_runs_when_real_cache_is_configured()
 fn package_and_run_real_fixture(
     name: &str,
     fixture_dir: &Path,
+    input: &str,
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
     let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
@@ -57,7 +84,7 @@ fn package_and_run_real_fixture(
         .arg("node18-macos-x64")
         .arg("--output")
         .arg(&output)
-        .arg("test-x-index.js")
+        .arg(input)
         .output()?;
     assert!(
         package_result.status.success(),

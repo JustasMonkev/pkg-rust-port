@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::common::{PathStyle, retrieve_denominator, substitute_denominator};
-use crate::walk::{FileRecord, WalkOutput};
+use crate::walk::{FileRecord, FileStat, WalkOutput};
 
 /// Symbolic link map keyed by link path and valued by real path.
 pub type SymlinkMap = BTreeMap<PathBuf, PathBuf>;
@@ -75,6 +76,74 @@ pub fn refine(
     }
 }
 
+fn ensure_snapshot_base_record(
+    records: &mut BTreeMap<String, FileRecord>,
+    entrypoint: &Path,
+    snapshot_base: &Path,
+    style: PathStyle,
+) {
+    let root = match style {
+        PathStyle::Posix => "/",
+        PathStyle::Windows => {
+            // The current package-directory runtime parity smoke is POSIX-only.
+            // Windows keeps the natural refined records until that fixture is
+            // ported with platform-specific expectations.
+            return;
+        }
+    };
+    if records.contains_key(root) {
+        return;
+    }
+
+    let Some(child) = entrypoint
+        .strip_prefix(snapshot_base)
+        .ok()
+        .and_then(|relative| relative.components().next())
+        .and_then(|component| component.as_os_str().to_str())
+    else {
+        return;
+    };
+
+    records.insert(
+        root.to_owned(),
+        synthetic_directory_record(snapshot_base.to_path_buf(), child.to_owned()),
+    );
+}
+
+fn synthetic_directory_record(file: PathBuf, child: String) -> FileRecord {
+    FileRecord {
+        file: file.clone(),
+        blob: false,
+        content: false,
+        links: true,
+        stat: true,
+        body: None,
+        children: vec![child],
+        metadata: Some(directory_stat(&file)),
+    }
+}
+
+fn directory_stat(file: &Path) -> FileStat {
+    match fs::metadata(file) {
+        Ok(metadata) => FileStat {
+            is_file: false,
+            is_directory: true,
+            is_socket: false,
+            is_symbolic_link: false,
+            size: metadata.len(),
+            mode: file_mode(&metadata),
+        },
+        Err(_error) => FileStat {
+            is_file: false,
+            is_directory: true,
+            is_socket: false,
+            is_symbolic_link: false,
+            size: 0,
+            mode: default_directory_mode(),
+        },
+    }
+}
+
 /// Refine walker records using the symlink map collected by the walker.
 ///
 /// # Example
@@ -97,6 +166,58 @@ pub fn refine_walked(
 ) -> RefinedOutput {
     let symlinks = output.symlinks.clone();
     refine(output, entrypoint, symlinks, style)
+}
+
+pub(crate) fn refine_walked_with_snapshot_base(
+    output: WalkOutput,
+    entrypoint: impl AsRef<Path>,
+    snapshot_base: impl AsRef<Path>,
+    style: PathStyle,
+) -> RefinedOutput {
+    let symlinks = output.symlinks.clone();
+    refine_with_snapshot_base(output, entrypoint, symlinks, snapshot_base, style)
+}
+
+fn refine_with_snapshot_base(
+    output: WalkOutput,
+    entrypoint: impl AsRef<Path>,
+    symlinks: SymlinkMap,
+    snapshot_base: impl AsRef<Path>,
+    style: PathStyle,
+) -> RefinedOutput {
+    let mut records = output.records;
+    purge_top_directories(&mut records);
+    let entrypoint = canonicalize_or_self(entrypoint.as_ref());
+    let snapshot_base = canonicalize_or_self(snapshot_base.as_ref());
+    let denominator = path_to_string(&snapshot_base).len();
+
+    let mut records: BTreeMap<String, FileRecord> = records
+        .into_iter()
+        .map(|(file, record)| {
+            (
+                make_snap(&path_to_string(&file), denominator, style),
+                record,
+            )
+        })
+        .collect();
+    ensure_snapshot_base_record(&mut records, &entrypoint, &snapshot_base, style);
+    let symlinks = symlinks
+        .into_iter()
+        .map(|(link, real)| {
+            let link = canonicalize_link_path(&link);
+            let real = canonicalize_or_self(&real);
+            (
+                make_snap(&path_to_string(&link), denominator, style),
+                make_snap(&path_to_string(&real), denominator, style),
+            )
+        })
+        .collect();
+
+    RefinedOutput {
+        records,
+        entrypoint: make_snap(&path_to_string(&entrypoint), denominator, style),
+        symlinks,
+    }
 }
 
 fn purge_top_directories(records: &mut BTreeMap<PathBuf, FileRecord>) {
@@ -173,4 +294,26 @@ fn canonicalize_link_path(path: &Path) -> PathBuf {
         .canonicalize()
         .map(|parent| parent.join(name))
         .unwrap_or_else(|_error| path.to_path_buf())
+}
+
+#[cfg(unix)]
+fn file_mode(metadata: &fs::Metadata) -> u32 {
+    use std::os::unix::fs::MetadataExt;
+
+    metadata.mode()
+}
+
+#[cfg(not(unix))]
+fn file_mode(_metadata: &fs::Metadata) -> u32 {
+    default_directory_mode()
+}
+
+#[cfg(unix)]
+fn default_directory_mode() -> u32 {
+    0o40755
+}
+
+#[cfg(not(unix))]
+fn default_directory_mode() -> u32 {
+    0
 }

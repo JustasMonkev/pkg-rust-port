@@ -92,6 +92,8 @@ pub struct PackagePlan {
     pub addition: Option<PathBuf>,
     /// Root directory that bounds directory-link walking.
     pub root: PathBuf,
+    /// Host directory stripped from snapshot paths during refinement.
+    pub snapshot_base: PathBuf,
     /// Compression algorithm requested for payload stripes.
     pub compression: Compression,
     /// Whether bytecode generation is enabled.
@@ -157,9 +159,26 @@ where
     let plan = plan_from_cli(cli)?;
     let cache = PkgFetchCache::default_cache()?;
     let prelude = prelude_template(false);
-    tokio::task::spawn_blocking(move || build_package_with_provider(&plan, &cache, &prelude))
-        .await
-        .map_err(|error| PkgError::Cli(format!("package build task failed: {error}")))??;
+    // DECISION: larger fixtures overflow Tokio's default blocking-worker stack
+    // during synchronous packaging. A dedicated 8 MiB OS thread keeps reqwest's
+    // blocking client outside the async runtime and gives the pack/produce path
+    // enough stack without requiring callers to set RUST_MIN_STACK.
+    let build_thread = std::thread::Builder::new()
+        .name("pkg-rust-build".to_owned())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || build_package_with_provider(&plan, &cache, &prelude))
+        .map_err(|source| PkgError::Io {
+            path: "pkg-rust-build thread".to_owned(),
+            source,
+        })?;
+    let build_result = tokio::task::spawn_blocking(move || {
+        build_thread
+            .join()
+            .map_err(|_payload| PkgError::Cli("package build task panicked".to_owned()))?
+    })
+    .await
+    .map_err(|error| PkgError::Cli(format!("package build join task failed: {error}")))?;
+    build_result?;
     Ok(())
 }
 
@@ -245,6 +264,15 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
+    let snapshot_base = if input_package.is_some() {
+        input
+            .parent()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| root.clone())
+    } else {
+        root.clone()
+    };
     let auto_output = cli.output.is_none();
     let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
     let target_defaults = TargetDefaults::host(host_node_range());
@@ -269,6 +297,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         marker,
         addition,
         root,
+        snapshot_base,
         compression,
         bytecode: !cli.no_bytecode,
         bakes,

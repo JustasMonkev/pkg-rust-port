@@ -45,6 +45,17 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
             && stripe.store == StoreKind::Stat
             && stripe.buffer.is_some()
     }));
+    let stat_text = packed
+        .stripes
+        .iter()
+        .find(|stripe| stripe.snap == "/test-x-index.js" && stripe.store == StoreKind::Stat)
+        .and_then(|stripe| stripe.buffer.as_ref())
+        .and_then(|buffer| std::str::from_utf8(buffer).ok())
+        .ok_or_else(|| PkgError::Pack("test stat stripe missing".to_owned()))?;
+    assert!(stat_text.contains(r#""isFileValue":true"#));
+    assert!(stat_text.contains(r#""isDirectoryValue":false"#));
+    assert!(stat_text.contains(r#""isSocketValue":false"#));
+    assert!(stat_text.contains(r#""isSymbolicLinkValue":false"#));
     Ok(())
 }
 

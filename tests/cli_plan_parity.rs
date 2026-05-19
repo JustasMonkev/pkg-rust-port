@@ -19,6 +19,7 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
     ])?;
 
     assert!(plan.entrypoint.ends_with("test-x-index.js"));
+    assert!(plan.snapshot_base.ends_with("test"));
     assert_eq!(plan.compression, Compression::None);
     assert!(plan.bytecode);
     assert_eq!(plan.outputs.len(), 2);
@@ -55,6 +56,7 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
     ])?;
 
     assert_eq!(plan.compression, Compression::Brotli);
+    assert!(plan.snapshot_base.ends_with("test-50-require-resolve"));
     assert!(!plan.bytecode);
     assert_eq!(
         plan.bakes,

@@ -129,9 +129,17 @@ impl WalkerParams {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileStat {
     /// Whether the path is a regular file.
+    #[serde(rename = "isFileValue")]
     pub is_file: bool,
     /// Whether the path is a directory.
+    #[serde(rename = "isDirectoryValue")]
     pub is_directory: bool,
+    /// Whether the path is a socket.
+    #[serde(rename = "isSocketValue")]
+    pub is_socket: bool,
+    /// Whether the path is a symbolic link.
+    #[serde(rename = "isSymbolicLinkValue")]
+    pub is_symbolic_link: bool,
     /// File size in bytes.
     pub size: u64,
     /// Unix mode when available; zero on platforms without Unix metadata.
@@ -532,6 +540,8 @@ impl WalkerState {
             self.record_mut(file).metadata = Some(FileStat {
                 is_file: metadata.is_file(),
                 is_directory: metadata.is_dir(),
+                is_socket: is_socket(&metadata),
+                is_symbolic_link: metadata.file_type().is_symlink(),
                 size: metadata.len(),
                 mode: file_mode(&metadata),
             });
@@ -1038,4 +1048,16 @@ fn file_mode(metadata: &fs::Metadata) -> u32 {
 #[cfg(not(unix))]
 fn file_mode(_metadata: &fs::Metadata) -> u32 {
     0
+}
+
+#[cfg(unix)]
+fn is_socket(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+
+    metadata.file_type().is_socket()
+}
+
+#[cfg(not(unix))]
+fn is_socket(_metadata: &fs::Metadata) -> bool {
+    false
 }
