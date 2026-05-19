@@ -169,3 +169,13 @@ Next: start producer/prelude scaffolding that consumes packed stripes, entrypoin
 Decisions made: symlink link paths now canonicalize only their parent directory during refinement; canonicalizing the full link path follows the symlink and collapses it into the real target.
 
 Blockers worked around: the first pipeline test exposed that full-path canonicalization erased `/link.js` from the refined symlink map. The refiner now preserves the link basename while still normalizing the containing directory.
+
+## 2026-05-19 - Producer manifest slice shipped
+
+Shipped: added an uncompressed producer manifest stage that consumes packed stripes, computes VFS payload pointers, snapshotifies entrypoint and symlinks, and reports total payload size. Added parity tests for VFS manifest shape and symlink snapshotification.
+
+Next: implement compressed payload accounting/key dictionary behavior, then wire manifest data into prelude rendering and executable placeholder injection.
+
+Decisions made: compressed producer payloads return an explicit `NotImplemented` error for now because this slice computes real byte offsets and sizes only for uncompressed stripes; guessing compressed lengths would create false producer parity.
+
+Blockers worked around: none.
