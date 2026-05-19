@@ -597,7 +597,7 @@ impl WalkerState {
         let options = ResolveOptions::new(basedir);
         match resolve_module(alias, &options) {
             Ok(file) => {
-                if let Some(package_marker) = package_marker_for_file(&file, &marker)? {
+                if let Some(package_marker) = package_marker_for_file(&file, &marker, &self.root)? {
                     if let Some(package_path) = package_marker.package_path.as_deref() {
                         self.append(
                             package_path.to_path_buf(),
@@ -972,6 +972,7 @@ fn read_to_string(path: &Path) -> Result<String, PkgError> {
 fn package_marker_for_file(
     file: &Path,
     current_marker: &Marker,
+    root: &Path,
 ) -> Result<Option<Marker>, PkgError> {
     let current_package_path = current_marker
         .package_path
@@ -983,7 +984,10 @@ fn package_marker_for_file(
         let package_path = candidate_dir.join("package.json");
         if package_path.is_file() {
             let package_path = canonicalize_or_self(&package_path);
-            if !path_has_node_modules(&package_path) {
+            // DECISION: Local packages need their package.json for runtime main
+            // resolution, but marker discovery stays bounded to the active walk
+            // root so host ancestor packages do not leak into the bundle.
+            if !inside_root(root, &package_path) {
                 return Ok(None);
             }
             if current_package_path.as_ref() == Some(&package_path) {
@@ -997,11 +1001,6 @@ fn package_marker_for_file(
     }
 
     Ok(None)
-}
-
-fn path_has_node_modules(path: &Path) -> bool {
-    path.components()
-        .any(|component| component.as_os_str() == "node_modules")
 }
 
 fn io_error(path: &Path, source: std::io::Error) -> PkgError {

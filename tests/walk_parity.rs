@@ -192,6 +192,24 @@ fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Resu
 }
 
 #[test]
+fn local_package_directory_requires_include_package_json_for_runtime_resolution()
+-> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-6c");
+    let package = PackageJson::parse("{}")
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::new(package),
+        fixture_dir.join("beta/alpha.js"),
+        None,
+        WalkerParams::new().with_root(fixture_dir.join("beta")),
+    )?;
+
+    assert!(output.contains_store(fixture_dir.join("beta/package.json"), StoreKind::Content));
+    assert!(output.contains_store(fixture_dir.join("beta/beta.js"), StoreKind::Blob));
+    Ok(())
+}
+
+#[test]
 fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-package-json-3");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;

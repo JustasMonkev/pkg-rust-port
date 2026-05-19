@@ -419,3 +419,13 @@ Next: continue into package-json edge fixtures that are not yet runtime-smoked, 
 Decisions made: represent marker role as an explicit typed boolean on `Marker` rather than inferring from path shape or `node_modules` repeatedly. The dependency marker constructor stays private so public callers keep creating top-level markers through `new`, `with_package_path`, or `from_package_path`.
 
 Blockers worked around: `test-50-package-json-9` initially failed at runtime with `AssertionError: no "test" in main`; the failing path proved dependency `files` JavaScript was bytecode/blob instead of source/content.
+
+## 2026-05-19 - Package main runtime parity shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-50-package-json-6c`, `7p`, and `8p`. File inputs inside an immediate package now keep that package directory under `/snapshot`, and local package directories now include their `package.json` so runtime `require('../package-dir')` can resolve `main`.
+
+Next: continue package-json runtime coverage for the remaining edge fixtures, then move into spawn and native-addon paths.
+
+Decisions made: only the immediate parent `package.json` influences file-input snapshot base selection, and local package marker discovery is bounded to the active walker root. That covers local package-main resolution without accidentally treating repository ancestor packages as fixture package metadata.
+
+Blockers worked around: `test-50-package-json-6c` first packaged as `/snapshot/alpha.js`, then as `/snapshot/beta/alpha.js` without package metadata; both failed `require('../beta')`. The final shape preserves `/snapshot/beta/alpha.js` and includes `/snapshot/beta/package.json`.

@@ -45,8 +45,20 @@ fn package_json_files_fixtures_run_when_real_cache_is_configured()
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
     for (name, fixture, node_input, package_input) in [
         (
+            "package-json-6c",
+            "test-50-package-json-6c",
+            "beta/alpha.js",
+            "beta/alpha.js",
+        ),
+        (
             "package-json-7",
             "test-50-package-json-7",
+            "test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-7p",
+            "test-50-package-json-7p",
             "test-x-index.js",
             ".",
         ),
@@ -59,6 +71,12 @@ fn package_json_files_fixtures_run_when_real_cache_is_configured()
         (
             "package-json-8b",
             "test-50-package-json-8b",
+            "sub/test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-8p",
+            "test-50-package-json-8p",
             "sub/test-x-index.js",
             ".",
         ),

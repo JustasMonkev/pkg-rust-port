@@ -264,10 +264,17 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    let snapshot_base = if input_package.is_some() {
-        input
+    // DECISION: Treat only the immediate parent package as the snapshot package
+    // for file inputs; ancestor packages would accidentally make repo roots part
+    // of unrelated fixture packages.
+    let package_dir = if input_package.is_some() {
+        input.parent().map(Path::to_path_buf)
+    } else {
+        immediate_package_dir(&entrypoint)
+    };
+    let snapshot_base = if let Some(package_dir) = package_dir {
+        package_dir
             .parent()
-            .and_then(Path::parent)
             .map(Path::to_path_buf)
             .unwrap_or_else(|| root.clone())
     } else {
@@ -353,6 +360,12 @@ fn resolve_entrypoint(input: &Path, package: Option<&PackageJson>) -> Result<Pat
         return Ok(entrypoint);
     }
     Ok(input.to_path_buf())
+}
+
+fn immediate_package_dir(file: &Path) -> Option<PathBuf> {
+    file.parent()
+        .filter(|directory| directory.join("package.json").is_file())
+        .map(Path::to_path_buf)
 }
 
 fn output_base(
