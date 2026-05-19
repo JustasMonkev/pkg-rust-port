@@ -220,6 +220,8 @@ pub struct WalkTaskRecord {
 pub struct WalkOutput {
     /// Records keyed by path.
     pub records: BTreeMap<PathBuf, FileRecord>,
+    /// Symbolic links discovered while resolving blob/content tasks.
+    pub symlinks: BTreeMap<PathBuf, PathBuf>,
     /// FIFO task processing log.
     pub task_log: Vec<WalkTaskRecord>,
 }
@@ -574,6 +576,26 @@ impl WalkerState {
     }
 
     fn append(&mut self, file: PathBuf, store: StoreKind, marker: Marker) {
+        if matches!(
+            store,
+            StoreKind::Blob | StoreKind::Content | StoreKind::Links
+        ) && is_symlink(&file)
+            && let Some(real_file) = canonicalize(&file)
+        {
+            let link_file = normalize_symlink_path(&file);
+            self.output
+                .symlinks
+                .entry(link_file)
+                .or_insert(real_file.clone());
+            self.ensure_record(real_file.clone());
+            self.tasks.push_back(Task {
+                file: real_file,
+                store,
+                marker,
+            });
+            return;
+        }
+
         let normalized = canonicalize(&file).unwrap_or(file);
         self.ensure_record(normalized.clone());
         self.tasks.push_back(Task {
@@ -619,7 +641,7 @@ pub fn walk(
     addition: Option<PathBuf>,
     params: WalkerParams,
 ) -> Result<WalkOutput, PkgError> {
-    let entrypoint = canonicalize_or_self(entrypoint.as_ref());
+    let entrypoint = entrypoint.as_ref().to_path_buf();
     let root = params
         .root
         .as_deref()
@@ -876,6 +898,24 @@ fn canonicalize(path: &Path) -> Option<PathBuf> {
 
 fn canonicalize_or_self(path: &Path) -> PathBuf {
     canonicalize(path).unwrap_or_else(|| path.to_path_buf())
+}
+
+fn is_symlink(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
+fn normalize_symlink_path(path: &Path) -> PathBuf {
+    let Some(parent) = path.parent() else {
+        return path.to_path_buf();
+    };
+    let Some(name) = path.file_name() else {
+        return path.to_path_buf();
+    };
+    canonicalize(parent)
+        .map(|parent| parent.join(name))
+        .unwrap_or_else(|| path.to_path_buf())
 }
 
 fn canonicalize_or_join(parent: &Path, alias: &str) -> PathBuf {

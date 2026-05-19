@@ -84,6 +84,7 @@ fn purges_redundant_top_directory_chains() {
     let refined = refine(
         WalkOutput {
             records,
+            symlinks: SymlinkMap::new(),
             task_log: Vec::new(),
         },
         "/project/app/src/index.js",

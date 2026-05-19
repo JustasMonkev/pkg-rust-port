@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use pkg_rust::{Marker, PackageJson, PkgError, StoreKind, WalkerParams, walk};
@@ -200,5 +201,31 @@ fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError
         })
     }));
 
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn tracks_blob_symlinks_to_real_files() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        PathBuf::from("/private/tmp").join(format!("pkg-rust-symlink-{}", std::process::id()));
+    let real_file = fixture_dir.join("real.js");
+    let link_file = fixture_dir.join("link.js");
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    fs::create_dir_all(&fixture_dir)?;
+    fs::write(&real_file, "'use strict';\nmodule.exports = 1;\n")?;
+    std::os::unix::fs::symlink(&real_file, &link_file)?;
+
+    let output = walk(
+        empty_marker()?,
+        &link_file,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert_eq!(output.symlinks.get(&link_file), Some(&real_file));
+    assert!(output.contains_store(&real_file, StoreKind::Blob));
+
+    fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }

@@ -149,3 +149,13 @@ Next: add walker symlink discovery/tracking and then wire prelude/producer scaff
 Decisions made: this slice stops at stripe generation and does not interpolate the JavaScript prelude yet, keeping executable production separate from record packing semantics.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Walker symlink tracking slice shipped
+
+Shipped: added symlink discovery to walker enqueueing for blob/content/link tasks, exposed discovered symlinks on `WalkOutput`, and added a Unix parity test that walks a symlinked entrypoint and records the real file as the blob target.
+
+Next: wire the walker symlink map directly into the refiner/packer pipeline and begin prelude/producer scaffolding.
+
+Decisions made: `walk` now preserves the raw entrypoint path until append-time so symlinked entrypoints are observable; normal non-symlink paths are still canonicalized when queued.
+
+Blockers worked around: the first symlink test showed entrypoint canonicalization erased the link before traversal, so canonicalization was moved to the append path where symlink metadata is still available.
