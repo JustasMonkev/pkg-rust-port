@@ -409,3 +409,13 @@ Next: continue runtime fixture expansion into package-json, spawn, and native-ad
 Decisions made: keep the walker bounded for deterministic records and handle package-directory snapshot shape in refinement instead of walking every sibling directory under the host `test/` tree. The stat struct remains idiomatic Rust and uses serde renames at the prelude boundary.
 
 Blockers worked around: the first filesystem fixture attempt stack-overflowed in Tokio's default blocking worker; the larger-stack build thread avoids requiring `RUST_MIN_STACK` from users or CI.
+
+## 2026-05-19 - Package.json files runtime parity shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-50-package-json-7`, `8`, `8b`, `9`, and `9p`. Fixed dependency package `files` semantics by tracking top-level vs dependency markers: top-level JavaScript `files` remain blobs, while dependency JavaScript `files` are stored as content, matching the JS suite's function source visibility expectations.
+
+Next: continue into package-json edge fixtures that are not yet runtime-smoked, then spawn and native-addon paths.
+
+Decisions made: represent marker role as an explicit typed boolean on `Marker` rather than inferring from path shape or `node_modules` repeatedly. The dependency marker constructor stays private so public callers keep creating top-level markers through `new`, `with_package_path`, or `from_package_path`.
+
+Blockers worked around: `test-50-package-json-9` initially failed at runtime with `AssertionError: no "test" in main`; the failing path proved dependency `files` JavaScript was bytecode/blob instead of source/content.

@@ -23,24 +23,12 @@ fn require_resolve_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-require-resolve");
-    let expected = Command::new("node")
-        .current_dir(&fixture_dir)
-        .arg("test-x-index.js")
-        .output()?;
-    assert!(
-        expected.status.success(),
-        "node oracle failed: {}{}",
-        String::from_utf8_lossy(&expected.stdout),
-        String::from_utf8_lossy(&expected.stderr)
-    );
-
-    let Some(run_result) =
-        package_and_run_real_fixture("require-resolve", &fixture_dir, "test-x-index.js")?
-    else {
-        return Ok(());
-    };
-    assert_eq!(run_result.stdout, expected.stdout);
-    Ok(())
+    package_and_compare_fixture(
+        "require-resolve",
+        &fixture_dir,
+        "test-x-index.js",
+        "test-x-index.js",
+    )
 }
 
 #[test]
@@ -48,9 +36,59 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer");
+    package_and_compare_fixture("fs-runtime", &fixture_dir, "test-x-index.js", ".")
+}
+
+#[test]
+fn package_json_files_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    for (name, fixture, node_input, package_input) in [
+        (
+            "package-json-7",
+            "test-50-package-json-7",
+            "test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-8",
+            "test-50-package-json-8",
+            "sub/test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-8b",
+            "test-50-package-json-8b",
+            "sub/test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-9",
+            "test-50-package-json-9",
+            "test-x-index.js",
+            "test-x-index.js",
+        ),
+        (
+            "package-json-9p",
+            "test-50-package-json-9p",
+            "test-x-index.js",
+            "test-x-index.js",
+        ),
+    ] {
+        package_and_compare_fixture(name, &root.join(fixture), node_input, package_input)?;
+    }
+    Ok(())
+}
+
+fn package_and_compare_fixture(
+    name: &str,
+    fixture_dir: &Path,
+    node_input: &str,
+    package_input: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let expected = Command::new("node")
-        .current_dir(&fixture_dir)
-        .arg("test-x-index.js")
+        .current_dir(fixture_dir)
+        .arg(node_input)
         .output()?;
     assert!(
         expected.status.success(),
@@ -59,7 +97,7 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
         String::from_utf8_lossy(&expected.stderr)
     );
 
-    let Some(run_result) = package_and_run_real_fixture("fs-runtime", &fixture_dir, ".")? else {
+    let Some(run_result) = package_and_run_real_fixture(name, fixture_dir, package_input)? else {
         return Ok(());
     };
     assert_eq!(run_result.stdout, expected.stdout);

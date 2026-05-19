@@ -18,6 +18,7 @@ pub struct Marker {
     package: PackageJson,
     package_path: Option<PathBuf>,
     activated: bool,
+    top_level: bool,
 }
 
 impl Marker {
@@ -37,6 +38,7 @@ impl Marker {
             package,
             package_path: None,
             activated: false,
+            top_level: true,
         }
     }
 
@@ -57,6 +59,16 @@ impl Marker {
             package,
             package_path: Some(package_path.into()),
             activated: false,
+            top_level: true,
+        }
+    }
+
+    fn dependency(package: PackageJson, package_path: impl Into<PathBuf>) -> Self {
+        Self {
+            package,
+            package_path: Some(package_path.into()),
+            activated: false,
+            top_level: false,
         }
     }
 
@@ -86,6 +98,21 @@ impl Marker {
     #[must_use]
     pub fn package_path(&self) -> Option<&Path> {
         self.package_path.as_deref()
+    }
+
+    /// Whether this marker represents the package being explicitly packaged.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let package = pkg_rust::PackageJson::parse(r#"{"name":"demo"}"#)?;
+    /// let marker = pkg_rust::Marker::new(package);
+    /// assert!(marker.is_top_level());
+    /// # Ok::<(), pkg_rust::PackageJsonError>(())
+    /// ```
+    #[must_use]
+    pub fn is_top_level(&self) -> bool {
+        self.top_level
     }
 }
 
@@ -438,7 +465,7 @@ impl WalkerState {
 
         for file in expand_config_strings(&marker.package.files, base_dir)? {
             if file.is_file() {
-                let store = if is_javascript_file(&file) {
+                let store = if marker.top_level && is_javascript_file(&file) {
                     StoreKind::Blob
                 } else {
                     StoreKind::Content
@@ -964,7 +991,7 @@ fn package_marker_for_file(
             }
             let body = read_to_string(&package_path)?;
             let package = PackageJson::parse(&body).map_err(package_error)?;
-            return Ok(Some(Marker::with_package_path(package, package_path)));
+            return Ok(Some(Marker::dependency(package, package_path)));
         }
         directory = candidate_dir.parent();
     }

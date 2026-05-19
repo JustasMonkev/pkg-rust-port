@@ -154,10 +154,12 @@ fn activates_package_files_directories_and_absolute_style_entries() -> Result<()
 
 #[test]
 fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Result<(), PkgError> {
-    for fixture in [
-        "../test/test-50-package-json-9",
-        "../test/test-50-package-json-9p",
-    ] {
+    let cases = [
+        ("../test/test-50-package-json-9", StoreKind::Content),
+        ("../test/test-50-package-json-9p", StoreKind::Blob),
+    ];
+
+    for (fixture, dependency_main_store) in cases {
         let fixture_dir = PathBuf::from(fixture);
         let package = PackageJson::parse("{}")
             .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
@@ -174,7 +176,7 @@ fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Resu
         ));
         assert!(output.contains_store(
             fixture_dir.join("node_modules/test-y-require/sub/sub/test-y-require.js"),
-            StoreKind::Blob
+            dependency_main_store
         ));
         assert!(output.contains_store(
             fixture_dir.join("node_modules/test-y-require/sub/test-z-require.js"),
