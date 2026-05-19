@@ -239,3 +239,13 @@ Next: integrate target/platform decisions so the CLI can select a binary, write 
 Decisions made: keep permission changes outside `write_executable_image` because the JS producer only writes bytes; the CLI orchestration applies signing and `plusx` after production based on target platform.
 
 Blockers worked around: none.
+
+## 2026-05-19 - CLI planning slice shipped
+
+Shipped: added `plan_package`, `PackagePlan`, and `PlannedOutput` so CLI arguments now resolve input/package-json entrypoints, output names, targets, compression, bytecode mode, bake options, and path style before fetch/production. `exec --version` and help/version display paths now exit successfully instead of returning the skeleton not-implemented error.
+
+Next: connect the plan to target binary acquisition and the walk/refine/pack/write pipeline for a minimal host-target packaging flow.
+
+Decisions made: host target planning asks `node --version` for the default Node range and falls back to `node18` when Node is unavailable; this preserves JS behavior where possible without making planning fail on machines that can still parse explicit targets.
+
+Blockers worked around: none.

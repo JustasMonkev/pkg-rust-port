@@ -33,7 +33,7 @@ mod resolve;
 mod target;
 mod walk;
 
-pub use crate::cli::exec;
+pub use crate::cli::{PackagePlan, PlannedOutput, exec, plan_package};
 pub use crate::common::{
     AliasKind, PathStyle, StoreKind, inside_snapshot, normalize_path_text, remove_uplevels,
     retrieve_denominator, snapshotify, strip_snapshot, substitute_denominator,
