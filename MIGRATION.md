@@ -146,7 +146,7 @@ The JS package exposes the CLI binary and `exec(argv2)` as the public API. Other
 | `fabricateTwice` | `pub fn fabricate_twice(pool: &mut FabricatorPool, request: FabricateRequest<'_>) -> Result<Vec<u8>, PkgError>` |
 | `shutdown` | `pub fn shutdown_fabricators(pool: &mut FabricatorPool)` |
 | `packer default` | `pub fn pack(options: PackOptions<'_>) -> Result<Backpack, PkgError>` |
-| `walker default` | `pub async fn walk(marker: Marker, entrypoint: PathBuf, addition: Option<PathBuf>, params: WalkerParams) -> Result<WalkOutput, PkgError>` |
+| `walker default` | `pub fn walk(marker: Marker, entrypoint: impl AsRef<Path>, addition: Option<PathBuf>, params: WalkerParams) -> Result<WalkOutput, PkgError>` |
 | `patchMachOExecutable` | `pub fn patch_macho_executable(file: &mut [u8]) -> Result<(), PkgError>` |
 | `signMachOExecutable` | `pub fn sign_macho_executable(path: &Path) -> Result<(), PkgError>` |
 
@@ -178,6 +178,7 @@ Initial Rust parity order:
 - Keep sync library APIs by default. Network fetch, child process bytecode fabrication, and final production may expose async wrappers because they are I/O-bound.
 - Convert dictionary JS modules into inert typed data. Executing JS dictionary modules from Rust would violate the no-vendored-JS-source direction and keep dynamic mutation in the design.
 - Keep deterministic walker order. The JS code explicitly forbids multiple workers because task order affects output; Rust will use `VecDeque` FIFO and test this.
+- Bound walker directory-link expansion to the entry tree by default. The JS walker can recurse through host parent links, but that makes Rust parity records depend on the developer machine outside the package under test.
 - Keep Node bytecode fabrication as an external process interaction. Rust cannot produce V8 cached data directly without a major V8 embedder dependency, so `fabricate` remains process-based.
 - Implement Node resolution directly. A subprocess bridge to Node's `resolve` package would be faster to write but would retain the JS resolver as part of the Rust product.
 

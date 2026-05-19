@@ -27,6 +27,7 @@ mod dictionary;
 mod error;
 mod resolve;
 mod target;
+mod walk;
 
 pub use crate::cli::exec;
 pub use crate::common::{
@@ -48,4 +49,7 @@ pub use crate::resolve::{ResolveOptions, resolve_module};
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
     parse_targets,
+};
+pub use crate::walk::{
+    FileRecord, FileStat, Marker, WalkOutput, WalkTaskRecord, WalkerParams, walk,
 };

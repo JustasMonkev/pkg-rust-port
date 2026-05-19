@@ -15,6 +15,16 @@ pub enum PkgError {
     #[error("module resolution failed: {0}")]
     Resolve(String),
 
+    /// Filesystem access failed.
+    #[error("filesystem access failed for {path}: {source}")]
+    Io {
+        /// Path being accessed.
+        path: String,
+        /// Underlying I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),
