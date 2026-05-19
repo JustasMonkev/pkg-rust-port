@@ -157,7 +157,9 @@ where
     let plan = plan_from_cli(cli)?;
     let cache = PkgFetchCache::default_cache()?;
     let prelude = prelude_template(false);
-    build_package_with_provider(&plan, &cache, &prelude)?;
+    tokio::task::spawn_blocking(move || build_package_with_provider(&plan, &cache, &prelude))
+        .await
+        .map_err(|error| PkgError::Cli(format!("package build task failed: {error}")))??;
     Ok(())
 }
 

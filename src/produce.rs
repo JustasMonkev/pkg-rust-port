@@ -192,7 +192,7 @@ pub fn produce_executable_image(
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
     let (manifest, payload) = build_manifest_and_payload(packed, compression, style, None)?;
-    let prelude = render_prelude(prelude_template, &manifest)?.into_bytes();
+    let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
     let payload_size = payload.len() as u64;
     let prelude_position = payload_position + payload_size;
@@ -316,7 +316,7 @@ pub(crate) fn write_executable_image_with_fabricator(
         options.style,
         options.fabricator_path,
     )?;
-    let prelude = render_prelude(prelude_template, &manifest)?.into_bytes();
+    let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
     let payload_size = payload.len() as u64;
     let prelude_position = payload_position + payload_size;
@@ -418,6 +418,13 @@ fn build_manifest_and_payload(
         },
         payload,
     ))
+}
+
+fn prelude_buffer_from_prelude(prelude: &str) -> Vec<u8> {
+    format!(
+        "(function(process, require, console, EXECPATH_FD, PAYLOAD_POSITION, PAYLOAD_SIZE) {{ {prelude}\n}})"
+    )
+    .into_bytes()
 }
 
 /// Render a prelude template by replacing the JavaScript producer placeholders.

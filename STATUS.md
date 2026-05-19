@@ -349,3 +349,13 @@ Next: seed or download a real pkg-fetch binary and add a runtime smoke test that
 Decisions made: keep byte-only provider implementations source-compatible through a default `binary_artifact_for` method. When a cached file is not recognizably executable, the producer falls back to host `node`; this keeps placeholder-binary tests deterministic while real ELF/Mach-O/PE/shebang target binaries use target-specific fabrication.
 
 Blockers worked around: no `~/.pkg-cache` exists on this machine, so real-binary runtime smoke remains blocked until a binary is downloaded or seeded. The cached CLI smoke uses a placeholder file and therefore intentionally exercises the non-runnable fallback path.
+
+## 2026-05-19 - Real API runtime smoke shipped
+
+Shipped: fixed the async CLI boundary by moving synchronous packaging into `tokio::task::spawn_blocking`, fixed producer prelude serialization by wrapping the rendered prelude the way JS `makePreludeBufferFromPrelude` does, and added a gated real runtime smoke test for the JS API happy-path demo. With `PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache`, the Rust CLI packaged `test/test-50-api/test-x-index.js` with `node18-macos-x64`, executed the produced binary, and got `42\n`.
+
+Next: make the real runtime smoke portable in CI by either seeding a cache artifact or adding an explicit network-enabled job, then expand runtime smoke coverage beyond the trivial API fixture.
+
+Decisions made: keep the real runtime smoke opt-in through `PKG_RUST_REAL_CACHE` so normal CI does not download a large pkg-fetch binary or require Rosetta. The test still lives in the suite and runs the complete package-and-execute path when the cache is provided.
+
+Blockers worked around: `node18-macos-arm64` is absent from the embedded pkg-fetch expected-hash table, so the real smoke used the supported `node18-macos-x64` binary. The first x64 attempt also exposed a Tokio/`reqwest::blocking` panic, now fixed by running the blocking package build off the async runtime.
