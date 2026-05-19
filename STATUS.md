@@ -279,3 +279,13 @@ Next: add GitHub release download into the fetched cache path, verify the downlo
 Decisions made: use RustCrypto `sha2` 0.11.0 for SHA-256 because it is pure Rust, maintained under the RustCrypto hashes repository, MIT/Apache licensed, and supports this crate's MSRV.
 
 Blockers worked around: sandbox DNS blocked the first dependency resolution; reran the focused fetch test with approved Cargo registry access to lock and download `sha2`.
+
+## 2026-05-19 - pkg-fetch download primitive shipped
+
+Shipped: added `PkgFetchCache::download_fetched`, which downloads a fetched target binary from the pkg-fetch GitHub release path, writes it through a `.downloading` temp file, applies executable bits, verifies SHA-256, and renames it into the fetched cache location. Added unit coverage for successful verified storage and hash-mismatch cleanup.
+
+Next: wire `exec` to use `PkgFetchCache::default_cache` and `build_package_with_provider`, then exercise a cached/download-backed host packaging smoke path.
+
+Decisions made: keep the reusable byte-storage verifier separate from the HTTP request so cache write, permission, hash, and cleanup semantics remain testable without external network access.
+
+Blockers worked around: local `TcpListener` test setup failed in the sandbox with `Operation not permitted`, so the tests were moved down to the storage/verifier layer while leaving the production HTTP download path intact.
