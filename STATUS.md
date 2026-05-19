@@ -389,3 +389,13 @@ Next: broaden runtime fixture parity beyond the API happy path, with require/res
 Decisions made: keep output preparation inside `build_package_with_provider` so all callers, including tests with custom binary providers, pass through the same preflight checks before the producer writes the executable image.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Require.resolve runtime smoke shipped
+
+Shipped: added a gated real-runtime smoke test for `test/test-50-require-resolve`. The test compares the packaged executable output with the Node oracle output when `PKG_RUST_REAL_CACHE` points at a seeded pkg-fetch cache, and otherwise skips cleanly in normal CI.
+
+Next: use the same gated runtime-smoke pattern for filesystem asset fixtures, then continue into harder gaps like native addons and platform patching.
+
+Decisions made: compute the oracle output by running `node test-x-index.js` in the fixture directory instead of hardcoding the long expected text. That keeps the Rust test pinned to the JS suite as the source of truth while still exercising the packaged binary path when a real cache is present.
+
+Blockers worked around: the real cache is machine-local and intentionally not required by default CI, so the new test remains opt-in through `PKG_RUST_REAL_CACHE`.
