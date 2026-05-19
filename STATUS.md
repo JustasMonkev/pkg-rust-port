@@ -129,3 +129,13 @@ Next: add symlink tracking and start a typed refiner/VFS output layer over walke
 Decisions made: patch operations are represented as a private enum instead of raw JSON arrays so the walker applies explicit replace/erase/prepend/append behavior without stringly typed control flow at use sites.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Refiner slice shipped
+
+Shipped: added a typed refiner that purges redundant top directory chains, computes the common path denominator, rewrites records and entrypoint to snapshot-relative path strings, and carries symlink maps through the same transform. Added parity tests for walked records, symlink denomination, and top-directory purging.
+
+Next: add walker symlink discovery/tracking and then begin a typed packer stripe layer over refined records.
+
+Decisions made: `refine` takes an explicit `PathStyle` so denominator/substitution behavior stays target-platform aware instead of depending on the host OS.
+
+Blockers worked around: the first tests passed relative paths into `refine`, while the JS refiner receives normalized absolute paths from the walker. The Rust API now canonicalizes entrypoint and symlink paths when possible, and tests use existing fixture files for symlink denomination.
