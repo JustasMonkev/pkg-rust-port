@@ -116,3 +116,29 @@ fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
     ));
     Ok(())
 }
+
+#[test]
+fn activates_package_files_directories_and_absolute_style_entries() -> Result<(), PkgError> {
+    for fixture in [
+        "../test/test-50-package-json-8",
+        "../test/test-50-package-json-8b",
+    ] {
+        let fixture_dir = PathBuf::from(fixture);
+        let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
+        let output = walk(
+            marker,
+            fixture_dir.join("sub/test-x-index.js"),
+            None,
+            WalkerParams::new().with_root(&fixture_dir),
+        )?;
+
+        assert!(output.contains_store(
+            fixture_dir.join("sub/sub/test-y-require.js"),
+            StoreKind::Blob
+        ));
+        assert!(output.contains_store(fixture_dir.join("sub/test-z-require.js"), StoreKind::Blob));
+        assert!(output.contains_store(fixture_dir.join("test-z-data.css"), StoreKind::Content));
+    }
+
+    Ok(())
+}

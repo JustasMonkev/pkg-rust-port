@@ -597,20 +597,22 @@ fn expand_config_strings(patterns: &[String], base_dir: &Path) -> Result<Vec<Pat
 }
 
 fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
-    if pattern.starts_with('!') {
+    let Some(pattern) = normalized_config_pattern(pattern) else {
         // DECISION: current Rust parity fixtures only use positive package config
         // globs. Negated globby patterns need an ordered include/exclude matcher,
         // which belongs with the broader config-glob parity slice.
         return Ok(Vec::new());
-    }
+    };
 
     let pattern_path = base_dir.join(pattern);
     if !pattern.contains('*') {
-        return Ok(if pattern_path.is_file() {
-            vec![canonicalize_or_self(&pattern_path)]
+        return if pattern_path.is_file() {
+            Ok(vec![canonicalize_or_self(&pattern_path)])
+        } else if pattern_path.is_dir() {
+            collect_files_recursive(&pattern_path)
         } else {
-            Vec::new()
-        });
+            Ok(Vec::new())
+        };
     }
 
     let Some(directory) = pattern_path.parent() else {
@@ -639,6 +641,45 @@ fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgErr
     }
 
     Ok(files)
+}
+
+fn normalized_config_pattern(pattern: &str) -> Option<&str> {
+    if pattern.starts_with('!') {
+        return None;
+    }
+
+    let normalized = pattern.trim_start_matches(['/', '\\']);
+    Some(normalized)
+}
+
+fn collect_files_recursive(directory: &Path) -> Result<Vec<PathBuf>, PkgError> {
+    let mut files = Vec::new();
+    collect_files_recursive_into(directory, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_files_recursive_into(
+    directory: &Path,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), PkgError> {
+    match fs::read_dir(directory) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(|source| io_error(directory, source))?;
+                let path = entry.path();
+                if path.is_file() {
+                    files.push(canonicalize_or_self(&path));
+                } else if path.is_dir() {
+                    collect_files_recursive_into(&path, files)?;
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(io_error(directory, error)),
+    }
+
+    Ok(())
 }
 
 fn star_pattern_matches(pattern: &str, candidate: &str) -> bool {
