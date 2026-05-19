@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod resolve;
 mod target;
 
 pub use crate::cli::exec;
@@ -43,6 +44,7 @@ pub use crate::dictionary::{
     lookup_dictionary,
 };
 pub use crate::error::PkgError;
+pub use crate::resolve::{ResolveOptions, resolve_module};
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
     parse_targets,

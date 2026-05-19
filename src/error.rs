@@ -11,6 +11,10 @@ pub enum PkgError {
     #[error("javascript parse failed: {0}")]
     JavaScriptParse(String),
 
+    /// Module resolution failed.
+    #[error("module resolution failed: {0}")]
+    Resolve(String),
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),
