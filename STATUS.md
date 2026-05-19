@@ -269,3 +269,13 @@ Next: add network download plus expected-hash verification, then use `PkgFetchCa
 Decisions made: make the first real provider cache-only so path compatibility and local reuse are tested before layering in remote GitHub release downloads.
 
 Blockers worked around: npm tarball inspection initially failed under sandbox DNS; reran `npm pack pkg-fetch@3.5.2` with approved network access to inspect the exact local/remote naming contract. The first doctest also failed because `TargetParseError` did not convert into `PkgError`; the example now maps that error explicitly.
+
+## 2026-05-19 - pkg-fetch hash verification shipped
+
+Shipped: embedded pkg-fetch 3.5 expected SHA-256 data, added streaming SHA-256 verification for fetched cache binaries, and matched JS fallback behavior by deleting a mismatched fetched binary before trying the built cache entry. Added parity tests for mismatch removal with and without a built fallback.
+
+Next: add GitHub release download into the fetched cache path, verify the downloaded hash, then wire `exec` through `PkgFetchCache::default_cache`.
+
+Decisions made: use RustCrypto `sha2` 0.11.0 for SHA-256 because it is pure Rust, maintained under the RustCrypto hashes repository, MIT/Apache licensed, and supports this crate's MSRV.
+
+Blockers worked around: sandbox DNS blocked the first dependency resolution; reran the focused fetch test with approved Cargo registry access to lock and download `sha2`.

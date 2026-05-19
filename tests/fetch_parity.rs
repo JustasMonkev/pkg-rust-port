@@ -26,7 +26,7 @@ fn cache_path_matches_pkg_fetch_local_place() -> Result<(), Box<dyn std::error::
 }
 
 #[test]
-fn cache_provider_reads_fetched_before_built() -> Result<(), Box<dyn std::error::Error>> {
+fn cache_provider_removes_bad_fetched_and_reads_built() -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::temp_dir().join(format!("pkg-rust-fetch-cache-{}", std::process::id()));
     let cache = PkgFetchCache::new(&root);
     let defaults = TargetDefaults::host("node18");
@@ -41,9 +41,37 @@ fn cache_provider_reads_fetched_before_built() -> Result<(), Box<dyn std::error:
     fs::write(&built, b"built")?;
     fs::write(&fetched, b"fetched")?;
 
-    assert_eq!(cache.binary_for(&target)?, b"fetched");
-    fs::remove_file(fetched)?;
+    assert_eq!(cache.binary_for(&target)?, b"built");
+    assert!(!fetched.exists());
     fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn cache_provider_removes_bad_fetched_when_built_is_absent()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-bad-fetched-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root);
+    let defaults = TargetDefaults::host("node18");
+    let target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
+    let fetched = cache.binary_path(&target, BinaryKind::Fetched)?;
+    fs::create_dir_all(
+        fetched
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&fetched, b"not the expected binary")?;
+
+    let error = cache.binary_for(&target).err();
+
+    assert!(
+        matches!(error, Some(PkgError::Fetch(message)) if message.contains("no cached binary"))
+    );
+    assert!(!fetched.exists());
     fs::remove_dir_all(root)?;
     Ok(())
 }

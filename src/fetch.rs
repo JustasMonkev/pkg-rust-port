@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+use sha2::{Digest, Sha256};
 
 use crate::error::PkgError;
 use crate::package::TargetBinaryProvider;
@@ -94,21 +98,39 @@ impl PkgFetchCache {
 
 impl TargetBinaryProvider for PkgFetchCache {
     fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
-        for kind in [BinaryKind::Fetched, BinaryKind::Built] {
-            let path = self.binary_path(target, kind)?;
-            if path.is_file() {
-                return read_binary(&path);
-            }
+        let fetched = self.binary_path(target, BinaryKind::Fetched)?;
+        if fetched.is_file() && self.verify_fetched(target, &fetched)? {
+            return read_binary(&fetched);
         }
 
-        // DECISION: this provider is cache-only for the first Rust slice; it
-        // preserves pkg-fetch cache naming before adding network download and
-        // expected-hash verification.
+        let built = self.binary_path(target, BinaryKind::Built)?;
+        if built.is_file() {
+            return read_binary(&built);
+        }
+
+        // DECISION: this provider is cache-only until the next slice adds
+        // GitHub release download; verified cache reuse is still useful and
+        // keeps package builds deterministic in tests.
         Err(PkgError::Fetch(format!(
             "no cached binary for target {target}; expected {} or {}",
-            self.binary_path(target, BinaryKind::Fetched)?.display(),
-            self.binary_path(target, BinaryKind::Built)?.display()
+            fetched.display(),
+            built.display()
         )))
+    }
+}
+
+impl PkgFetchCache {
+    fn verify_fetched(&self, target: &NodeTarget, path: &Path) -> Result<bool, PkgError> {
+        let expected = expected_hash(target)?;
+        let actual = sha256_hex(path)?;
+        if actual == expected {
+            return Ok(true);
+        }
+        fs::remove_file(path).map_err(|source| PkgError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        Ok(false)
     }
 }
 
@@ -116,6 +138,47 @@ fn read_binary(path: &Path) -> Result<Vec<u8>, PkgError> {
     fs::read(path).map_err(|source| PkgError::Io {
         path: path.display().to_string(),
         source,
+    })
+}
+
+fn sha256_hex(path: &Path) -> Result<String, PkgError> {
+    let mut file = fs::File::open(path).map_err(|source| PkgError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|source| PkgError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let digest = hasher.finalize();
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        output.push_str(&format!("{byte:02x}"));
+    }
+    Ok(output)
+}
+
+fn expected_hash(target: &NodeTarget) -> Result<String, PkgError> {
+    let node_version = satisfying_node_version(&target.node_range)?;
+    let key = format!("node-v{}-{}-{}", node_version, target.platform, target.arch);
+    let hashes: BTreeMap<String, String> =
+        serde_json::from_str(include_str!("fetch_expected_shas.json")).map_err(|source| {
+            PkgError::Fetch(format!(
+                "invalid embedded pkg-fetch expected hashes: {source}"
+            ))
+        })?;
+    hashes.get(&key).cloned().ok_or_else(|| {
+        PkgError::Fetch(format!(
+            "no expected hash is configured for target artifact {key}"
+        ))
     })
 }
 
