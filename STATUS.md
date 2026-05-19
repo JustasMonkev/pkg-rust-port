@@ -379,3 +379,13 @@ Next: continue closing parity gaps in native addon handling, Mach-O signing, and
 Decisions made: use Cargo's built-in `strip = "symbols"` release profile setting instead of a post-build shell step, so local builds and CI release artifacts use the same stripping behavior.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Output path preparation parity shipped
+
+Shipped: matched the JS output-preparation behavior before package fabrication. Rust builds now remove an existing file output, refuse to overwrite a non-file output, and create missing parent directories. Added parity tests for nested output directory creation and non-file output refusal.
+
+Next: broaden runtime fixture parity beyond the API happy path, with require/resolve and asset fixtures as the next leaf candidates.
+
+Decisions made: keep output preparation inside `build_package_with_provider` so all callers, including tests with custom binary providers, pass through the same preflight checks before the producer writes the executable image.
+
+Blockers worked around: none.

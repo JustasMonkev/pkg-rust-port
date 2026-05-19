@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cli::PackagePlan;
@@ -154,6 +155,7 @@ pub fn build_package_with_provider(
         )?;
         let refined = refine_walked(walked, &plan.entrypoint, planned.path_style);
         let packed = pack(refined, plan.bytecode)?;
+        prepare_output_path(&planned.output)?;
         let image = write_executable_image_with_fabricator(
             &planned.output,
             binary_bytes,
@@ -209,4 +211,33 @@ fn looks_like_executable(binary: &[u8]) -> bool {
         || binary.starts_with(&[0xfe, 0xed, 0xfa, 0xcf])
         || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbe])
         || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbf])
+}
+
+fn prepare_output_path(output: &Path) -> Result<(), PkgError> {
+    match fs::metadata(output) {
+        Ok(metadata) if metadata.is_file() => {
+            fs::remove_file(output).map_err(|source| PkgError::Io {
+                path: output.display().to_string(),
+                source,
+            })
+        }
+        Ok(_) => Err(PkgError::Cli(
+            "Refusing to overwrite non-file output".to_owned(),
+        )),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = output.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent).map_err(|source| PkgError::Io {
+                    path: parent.display().to_string(),
+                    source,
+                })?;
+            }
+            Ok(())
+        }
+        Err(source) => Err(PkgError::Io {
+            path: output.display().to_string(),
+            source,
+        }),
+    }
 }

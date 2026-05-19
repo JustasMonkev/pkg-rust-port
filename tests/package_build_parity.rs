@@ -52,6 +52,71 @@ fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std:
     Ok(())
 }
 
+#[test]
+fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir()
+        .join(format!("pkg-rust-package-parent-{}", std::process::id()))
+        .join("nested")
+        .join("demo");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "../test/test-50-api/test-x-index.js",
+    ])?;
+
+    build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    assert!(output.is_file());
+    let root = output
+        .parent()
+        .and_then(std::path::Path::parent)
+        .ok_or_else(|| PkgError::Cli("temporary output root is missing".to_owned()))?;
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-package-output-dir-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&output);
+    std::fs::create_dir_all(&output)?;
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "../test/test-50-api/test-x-index.js",
+    ])?;
+
+    let error = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )
+    .err();
+
+    assert!(
+        matches!(error, Some(PkgError::Cli(message)) if message.contains("Refusing to overwrite non-file output"))
+    );
+    std::fs::remove_dir_all(output)?;
+    Ok(())
+}
+
 fn binary_with_placeholders() -> Vec<u8> {
     let mut binary = Vec::from([b'\0']);
     for _index in 0..20 {
