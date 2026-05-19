@@ -359,3 +359,13 @@ Next: make the real runtime smoke portable in CI by either seeding a cache artif
 Decisions made: keep the real runtime smoke opt-in through `PKG_RUST_REAL_CACHE` so normal CI does not download a large pkg-fetch binary or require Rosetta. The test still lives in the suite and runs the complete package-and-execute path when the cache is provided.
 
 Blockers worked around: `node18-macos-arm64` is absent from the embedded pkg-fetch expected-hash table, so the real smoke used the supported `node18-macos-x64` binary. The first x64 attempt also exposed a Tokio/`reqwest::blocking` panic, now fixed by running the blocking package build off the async runtime.
+
+## 2026-05-19 - Rust port docs artifacts shipped
+
+Shipped: added `README.md`, `CHANGELOG.md`, and `POST_PORT_TODO.md` under `rust-port`. The README mirrors the original CLI shape while clearly stating current Rust-port limits and validation commands. The changelog records the rewrite and behavior changes found so far. Post-port ideas and non-parity improvements are parked outside the implementation path.
+
+Next: keep expanding Rust parity tests against the remaining JS fixtures, and make the real runtime smoke portable enough for CI.
+
+Decisions made: document current behavior conservatively instead of presenting the Rust port as a completed replacement. This keeps the docs useful during migration without hiding incomplete native-addon, Mach-O, and JS-oracle retirement work.
+
+Blockers worked around: none.
