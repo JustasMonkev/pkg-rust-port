@@ -22,8 +22,16 @@ mod cli;
 mod common;
 mod compress;
 mod error;
+mod target;
 
 pub use crate::cli::exec;
-pub use crate::common::{AliasKind, StoreKind};
+pub use crate::common::{
+    AliasKind, PathStyle, StoreKind, inside_snapshot, normalize_path_text, remove_uplevels,
+    retrieve_denominator, snapshotify, strip_snapshot, substitute_denominator,
+};
 pub use crate::compress::{Compression, CompressionParseError};
 pub use crate::error::PkgError;
+pub use crate::target::{
+    Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
+    parse_targets,
+};
