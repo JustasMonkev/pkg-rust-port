@@ -57,3 +57,27 @@ fn detect_returns_typed_static_derivatives() -> Result<(), PkgError> {
     assert_eq!(derivatives[2].alias_kind, AliasKind::Relative);
     Ok(())
 }
+
+#[test]
+fn detect_accepts_commonjs_top_level_return() -> Result<(), PkgError> {
+    let source = include_str!("../../test/test-50-spawn/test-cluster.js");
+    let uses = detect(source)?;
+
+    assert!(uses.iter().any(|detected| matches!(
+        &detected.kind,
+        DetectionKind::Successful(derivative) if derivative.alias == "./test-cluster-child.js"
+    )));
+    Ok(())
+}
+
+#[test]
+fn detect_finds_spawn_child_require_resolve() -> Result<(), PkgError> {
+    let source = include_str!("../../test/test-50-spawn/test-cpfork-a-1.js");
+    let uses = detect(source)?;
+
+    assert!(uses.iter().any(|detected| matches!(
+        &detected.kind,
+        DetectionKind::Successful(derivative) if derivative.alias == "./test-cpfork-a-child.js"
+    )));
+    Ok(())
+}

@@ -439,3 +439,13 @@ Next: move into spawn and native-addon runtime paths, then broader invalid/confi
 Decisions made: dictionary additions remain inert Rust data instead of executing JS dictionary modules. Dependency aliases from `package.json` remain warning-equivalent when their runtime entrypoint is missing, matching JS behavior for `@types/*`. Direct file inputs under `node_modules` keep `node_modules` in `/snapshot` so bare self-subpath requires resolve through the prelude.
 
 Blockers worked around: `test-50-package-json-4` first missed dictionary script globs, `test-50-package-json-5` failed on metadata-only `@types/omega`, and `test-50-package-json-6b` included `beta.js` but lacked the `/snapshot/node_modules` directory link needed for runtime module resolution.
+
+## 2026-05-19 - Spawn runtime parity shipped
+
+Shipped: added gated real-runtime smoke coverage for the full `test-50-spawn` non-child fixture matrix: cluster, child_process fork, exec, execFile, execSync, spawn, spawnSync, and direct node execution cases. The detector now accepts CommonJS top-level `return` and traverses assignment right-hand sides so child process `require.resolve(...)` targets are bundled.
+
+Next: move into native-addon runtime fixtures and invalid/error-path fixtures.
+
+Decisions made: keep spawn parity in the runtime smoke suite because the behavior lives mostly in the JS prelude and must be verified by executing the produced binary. Treat top-level `return` as valid detector input because Node wraps CommonJS modules before execution.
+
+Blockers worked around: `test-cluster.js` initially failed SWC parsing with `ReturnNotAllowed`, and `test-cpfork-a-1.js` initially omitted `test-cpfork-a-child.js` because assignment RHS expressions were not traversed.

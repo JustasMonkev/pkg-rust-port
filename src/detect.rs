@@ -313,10 +313,10 @@ impl Detector {
                     self.expr(expr, trying);
                 }
             }
+            Expr::Assign(assign) => self.expr(&assign.right, trying),
             Expr::This(_)
             | Expr::Unary(_)
             | Expr::Update(_)
-            | Expr::Assign(_)
             | Expr::SuperProp(_)
             | Expr::Lit(_)
             | Expr::Ident(_)
@@ -410,6 +410,7 @@ fn parse_program(source: &str) -> Result<Program, PkgError> {
     let lexer = Lexer::new(
         Syntax::Es(EsSyntax {
             jsx: true,
+            allow_return_outside_function: true,
             ..Default::default()
         }),
         Default::default(),

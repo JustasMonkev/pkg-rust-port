@@ -40,6 +40,41 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-spawn");
+    for input in [
+        "test-cluster.js",
+        "test-cpfork-a-1.js",
+        "test-cpfork-a-2.js",
+        "test-cpfork-b-1.js",
+        "test-cpfork-b-2.js",
+        "test-exec-1.js",
+        "test-exec-2.js",
+        "test-exec-3.js",
+        "test-execFile.js",
+        "test-execFileSync.js",
+        "test-execSync-1.js",
+        "test-execSync-2.js",
+        "test-execSync-3.js",
+        "test-node.js",
+        "test-spawn-a-1.js",
+        "test-spawn-a-2.js",
+        "test-spawn-a-3.js",
+        "test-spawn-a-4.js",
+        "test-spawn-a-5.js",
+        "test-spawn-b.js",
+        "test-spawn-c.js",
+        "test-spawn-d.js",
+        "test-spawnSync.js",
+    ] {
+        let name = format!("spawn-{}", input.trim_end_matches(".js"));
+        package_and_compare_fixture(&name, &fixture_dir, input, input)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn package_json_files_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
