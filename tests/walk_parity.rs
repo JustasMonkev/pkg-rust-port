@@ -142,3 +142,40 @@ fn activates_package_files_directories_and_absolute_style_entries() -> Result<()
 
     Ok(())
 }
+
+#[test]
+fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Result<(), PkgError> {
+    for fixture in [
+        "../test/test-50-package-json-9",
+        "../test/test-50-package-json-9p",
+    ] {
+        let fixture_dir = PathBuf::from(fixture);
+        let package = PackageJson::parse("{}")
+            .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+        let output = walk(
+            Marker::new(package),
+            fixture_dir.join("test-x-index.js"),
+            None,
+            WalkerParams::new().with_root(&fixture_dir),
+        )?;
+
+        assert!(output.contains_store(
+            fixture_dir.join("node_modules/test-y-require/package.json"),
+            StoreKind::Content
+        ));
+        assert!(output.contains_store(
+            fixture_dir.join("node_modules/test-y-require/sub/sub/test-y-require.js"),
+            StoreKind::Blob
+        ));
+        assert!(output.contains_store(
+            fixture_dir.join("node_modules/test-y-require/sub/test-z-require.js"),
+            StoreKind::Blob
+        ));
+        assert!(output.contains_store(
+            fixture_dir.join("node_modules/test-y-require/test-z-data.css"),
+            StoreKind::Content
+        ));
+    }
+
+    Ok(())
+}

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -274,6 +274,7 @@ struct WalkerState {
     output: WalkOutput,
     tasks: VecDeque<Task>,
     root: PathBuf,
+    activated_packages: BTreeSet<PathBuf>,
 }
 
 impl WalkerState {
@@ -282,6 +283,7 @@ impl WalkerState {
             output: WalkOutput::default(),
             tasks: VecDeque::new(),
             root,
+            activated_packages: BTreeSet::new(),
         }
     }
 
@@ -309,7 +311,7 @@ impl WalkerState {
         self.ensure_record(task.file.clone());
         self.append(task.file.clone(), StoreKind::Stat, task.marker.clone());
 
-        if !task.marker.activated {
+        if self.should_activate_marker(&mut task.marker) {
             self.activate_marker(&mut task.marker)?;
         }
 
@@ -322,6 +324,23 @@ impl WalkerState {
 
         self.record_mut(&task.file).set_store(task.store);
         Ok(())
+    }
+
+    fn should_activate_marker(&mut self, marker: &mut Marker) -> bool {
+        if marker.activated {
+            return false;
+        }
+
+        let Some(package_path) = marker.package_path.as_deref() else {
+            return true;
+        };
+        let package_path = canonicalize_or_self(package_path);
+        if !self.activated_packages.insert(package_path) {
+            marker.activated = true;
+            return false;
+        }
+
+        true
     }
 
     fn activate_marker(&mut self, marker: &mut Marker) -> Result<(), PkgError> {
@@ -492,7 +511,18 @@ impl WalkerState {
         let options = ResolveOptions::new(basedir);
         match resolve_module(alias, &options) {
             Ok(file) => {
-                self.append(file, StoreKind::Blob, marker);
+                if let Some(package_marker) = package_marker_for_file(&file, &marker)? {
+                    if let Some(package_path) = package_marker.package_path.as_deref() {
+                        self.append(
+                            package_path.to_path_buf(),
+                            StoreKind::Content,
+                            package_marker.clone(),
+                        );
+                    }
+                    self.append(file, StoreKind::Blob, package_marker);
+                } else {
+                    self.append(file, StoreKind::Blob, marker);
+                }
                 Ok(())
             }
             Err(error) if optional => {
@@ -756,6 +786,41 @@ fn canonicalize_or_join(parent: &Path, alias: &str) -> PathBuf {
 
 fn read_to_string(path: &Path) -> Result<String, PkgError> {
     fs::read_to_string(path).map_err(|source| io_error(path, source))
+}
+
+fn package_marker_for_file(
+    file: &Path,
+    current_marker: &Marker,
+) -> Result<Option<Marker>, PkgError> {
+    let current_package_path = current_marker
+        .package_path
+        .as_deref()
+        .map(canonicalize_or_self);
+    let mut directory = file.parent();
+
+    while let Some(candidate_dir) = directory {
+        let package_path = candidate_dir.join("package.json");
+        if package_path.is_file() {
+            let package_path = canonicalize_or_self(&package_path);
+            if !path_has_node_modules(&package_path) {
+                return Ok(None);
+            }
+            if current_package_path.as_ref() == Some(&package_path) {
+                return Ok(None);
+            }
+            let body = read_to_string(&package_path)?;
+            let package = PackageJson::parse(&body).map_err(package_error)?;
+            return Ok(Some(Marker::with_package_path(package, package_path)));
+        }
+        directory = candidate_dir.parent();
+    }
+
+    Ok(None)
+}
+
+fn path_has_node_modules(path: &Path) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == "node_modules")
 }
 
 fn io_error(path: &Path, source: std::io::Error) -> PkgError {

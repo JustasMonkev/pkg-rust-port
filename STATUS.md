@@ -109,3 +109,13 @@ Next: create package markers for resolved dependency `package.json` files so dep
 Decisions made: slash-prefixed package `files` entries are treated like Node `path.join(base, entry)` rather than host absolute paths, matching the JS fixture behavior.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Dependency marker slice shipped
+
+Shipped: added dependency package marker creation for resolved `node_modules` packages, package-local activation de-duplication, and parity coverage for dependency `files` and `pkg.scripts`/`pkg.assets` fixtures in `test-50-package-json-9` and `test-50-package-json-9p`.
+
+Next: add patch registration/application and symlink tracking before moving toward record refinement.
+
+Decisions made: new package markers are only created for package.json files under `node_modules`; otherwise local fixture files could incorrectly activate this repo root's `package.json` instead of behaving like plain relative project files.
+
+Blockers worked around: focused walker parity exposed the repo-root package leakage, and the marker boundary now follows the Node dependency package path.
