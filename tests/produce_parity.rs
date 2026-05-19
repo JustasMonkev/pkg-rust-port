@@ -4,8 +4,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use pkg_rust::{
-    Compression, Marker, PackageJson, PathStyle, PkgError, StoreKind, WalkerParams, pack,
-    produce_manifest, refine_walked, render_prelude, walk,
+    Compression, Marker, PackageJson, PathStyle, PkgError, PlaceholderKind, PlaceholderValues,
+    StoreKind, WalkerParams, discover_placeholders, inject_placeholders, pack, produce_manifest,
+    refine_walked, render_prelude, walk,
 };
 
 fn empty_marker() -> Result<Marker, PkgError> {
@@ -174,4 +175,80 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
     assert!(rendered.contains(r#""snapshot":"1""#));
     assert!(rendered.ends_with('1'));
     Ok(())
+}
+
+#[test]
+fn discovers_and_injects_binary_placeholders() -> Result<(), PkgError> {
+    let mut binary = Vec::new();
+    binary.extend_from_slice(b"prefix");
+    binary.extend_from_slice(&bakery_placeholder());
+    binary.extend_from_slice(b"// PAYLOAD_POSITION //");
+    binary.extend_from_slice(b"// PAYLOAD_SIZE //");
+    binary.extend_from_slice(b"// PRELUDE_POSITION //");
+    binary.extend_from_slice(b"// PRELUDE_SIZE //");
+
+    let placeholders = discover_placeholders(&binary);
+    assert!(placeholders.bakery.is_some());
+    assert!(placeholders.payload_position.is_some());
+    assert!(placeholders.payload_size.is_some());
+    assert!(placeholders.prelude_position.is_some());
+    assert!(placeholders.prelude_size.is_some());
+
+    let values = PlaceholderValues {
+        bakery: b"--trace".to_vec(),
+        payload_position: 123,
+        payload_size: 456,
+        prelude_position: 789,
+        prelude_size: 10,
+    };
+    inject_placeholders(
+        &mut binary,
+        &placeholders,
+        &values,
+        &[
+            PlaceholderKind::Bakery,
+            PlaceholderKind::PayloadPosition,
+            PlaceholderKind::PayloadSize,
+            PlaceholderKind::PreludePosition,
+            PlaceholderKind::PreludeSize,
+        ],
+    )?;
+
+    let text = String::from_utf8_lossy(&binary);
+    assert!(text.contains("--trace"));
+    assert!(text.contains("123"));
+    assert!(text.contains("456"));
+    assert!(text.contains("789"));
+    assert!(text.contains("10"));
+    Ok(())
+}
+
+#[test]
+fn injection_errors_when_placeholder_is_missing() {
+    let mut binary = b"no placeholders".to_vec();
+    let placeholders = discover_placeholders(&binary);
+    let values = PlaceholderValues {
+        bakery: Vec::new(),
+        payload_position: 1,
+        payload_size: 2,
+        prelude_position: 3,
+        prelude_size: 4,
+    };
+    let error = inject_placeholders(
+        &mut binary,
+        &placeholders,
+        &values,
+        &[PlaceholderKind::PayloadSize],
+    )
+    .err();
+
+    assert!(matches!(error, Some(PkgError::Pack(message)) if message.contains("was not found")));
+}
+
+fn bakery_placeholder() -> Vec<u8> {
+    let mut value = Vec::from([b'\0']);
+    for _index in 0..20 {
+        value.extend_from_slice(b"// BAKERY ");
+    }
+    value
 }

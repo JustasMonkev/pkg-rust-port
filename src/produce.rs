@@ -7,6 +7,11 @@ use crate::compress::Compression as PayloadCompression;
 use crate::error::PkgError;
 use crate::pack::{PackedOutput, Stripe};
 
+const PAYLOAD_POSITION_PLACEHOLDER: &str = "// PAYLOAD_POSITION //";
+const PAYLOAD_SIZE_PLACEHOLDER: &str = "// PAYLOAD_SIZE //";
+const PRELUDE_POSITION_PLACEHOLDER: &str = "// PRELUDE_POSITION //";
+const PRELUDE_SIZE_PLACEHOLDER: &str = "// PRELUDE_SIZE //";
+
 /// Byte range for one store inside the payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PayloadPointer {
@@ -31,6 +36,46 @@ pub struct ProducerManifest {
     pub payload_size: u64,
     /// Compression mode for payload entries.
     pub compression: PayloadCompression,
+}
+
+/// One placeholder discovered in a target binary.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Placeholder {
+    /// Byte position of the placeholder.
+    pub position: usize,
+    /// Placeholder byte length.
+    pub size: usize,
+    padder: u8,
+}
+
+/// Placeholder locations required for executable metadata injection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlaceholderSet {
+    /// Bakery argument placeholder.
+    pub bakery: Option<Placeholder>,
+    /// Payload position placeholder.
+    pub payload_position: Option<Placeholder>,
+    /// Payload size placeholder.
+    pub payload_size: Option<Placeholder>,
+    /// Prelude position placeholder.
+    pub prelude_position: Option<Placeholder>,
+    /// Prelude size placeholder.
+    pub prelude_size: Option<Placeholder>,
+}
+
+/// Values written into executable placeholders after payload/prelude layout.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlaceholderValues {
+    /// Encoded bakery arguments.
+    pub bakery: Vec<u8>,
+    /// Payload start offset in the executable.
+    pub payload_position: u64,
+    /// Payload byte length.
+    pub payload_size: u64,
+    /// Prelude start offset in the executable.
+    pub prelude_position: u64,
+    /// Prelude byte length.
+    pub prelude_size: u64,
 }
 
 /// Build the producer manifest for uncompressed payload stripes.
@@ -142,6 +187,157 @@ pub fn render_prelude(template: &str, manifest: &ProducerManifest) -> Result<Str
         rendered = rendered.replace(placeholder, &value);
     }
     Ok(rendered)
+}
+
+/// Discover producer placeholders in a binary buffer.
+///
+/// # Example
+///
+/// ```
+/// let mut binary = Vec::new();
+/// binary.extend_from_slice(b"prefix");
+/// binary.extend_from_slice(b"// PAYLOAD_SIZE //");
+/// let placeholders = pkg_rust::discover_placeholders(&binary);
+/// assert!(placeholders.payload_size.is_some());
+/// ```
+#[must_use]
+pub fn discover_placeholders(binary: &[u8]) -> PlaceholderSet {
+    let bakery = bakery_placeholder();
+    PlaceholderSet {
+        bakery: discover_placeholder(binary, &bakery, b'\0'),
+        payload_position: discover_placeholder(
+            binary,
+            PAYLOAD_POSITION_PLACEHOLDER.as_bytes(),
+            b' ',
+        ),
+        payload_size: discover_placeholder(binary, PAYLOAD_SIZE_PLACEHOLDER.as_bytes(), b' '),
+        prelude_position: discover_placeholder(
+            binary,
+            PRELUDE_POSITION_PLACEHOLDER.as_bytes(),
+            b' ',
+        ),
+        prelude_size: discover_placeholder(binary, PRELUDE_SIZE_PLACEHOLDER.as_bytes(), b' '),
+    }
+}
+
+fn bakery_placeholder() -> Vec<u8> {
+    let mut value = Vec::from([b'\0']);
+    for _index in 0..20 {
+        value.extend_from_slice(b"// BAKERY ");
+    }
+    value
+}
+
+/// Inject producer placeholder values into a mutable binary buffer.
+///
+/// # Example
+///
+/// ```
+/// let mut binary = b"// PAYLOAD_SIZE //".to_vec();
+/// let placeholders = pkg_rust::discover_placeholders(&binary);
+/// let values = pkg_rust::PlaceholderValues {
+///     bakery: Vec::new(),
+///     payload_position: 0,
+///     payload_size: 42,
+///     prelude_position: 0,
+///     prelude_size: 0,
+/// };
+/// pkg_rust::inject_placeholders(&mut binary, &placeholders, &values, &[pkg_rust::PlaceholderKind::PayloadSize])?;
+/// assert!(String::from_utf8_lossy(&binary).starts_with("42"));
+/// # Ok::<(), pkg_rust::PkgError>(())
+/// ```
+pub fn inject_placeholders(
+    binary: &mut [u8],
+    placeholders: &PlaceholderSet,
+    values: &PlaceholderValues,
+    kinds: &[PlaceholderKind],
+) -> Result<(), PkgError> {
+    for kind in kinds {
+        let (placeholder, value) = match kind {
+            PlaceholderKind::Bakery => (&placeholders.bakery, values.bakery.clone()),
+            PlaceholderKind::PayloadPosition => (
+                &placeholders.payload_position,
+                values.payload_position.to_string().into_bytes(),
+            ),
+            PlaceholderKind::PayloadSize => (
+                &placeholders.payload_size,
+                values.payload_size.to_string().into_bytes(),
+            ),
+            PlaceholderKind::PreludePosition => (
+                &placeholders.prelude_position,
+                values.prelude_position.to_string().into_bytes(),
+            ),
+            PlaceholderKind::PreludeSize => (
+                &placeholders.prelude_size,
+                values.prelude_size.to_string().into_bytes(),
+            ),
+        };
+        inject_placeholder(binary, *kind, placeholder, &value)?;
+    }
+    Ok(())
+}
+
+/// Placeholder field to inject.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlaceholderKind {
+    /// Bakery argument placeholder.
+    Bakery,
+    /// Payload position placeholder.
+    PayloadPosition,
+    /// Payload size placeholder.
+    PayloadSize,
+    /// Prelude position placeholder.
+    PreludePosition,
+    /// Prelude size placeholder.
+    PreludeSize,
+}
+
+fn discover_placeholder(binary: &[u8], needle: &[u8], padder: u8) -> Option<Placeholder> {
+    find_subslice(binary, needle).map(|position| Placeholder {
+        position,
+        size: needle.len(),
+        padder,
+    })
+}
+
+fn inject_placeholder(
+    binary: &mut [u8],
+    kind: PlaceholderKind,
+    placeholder: &Option<Placeholder>,
+    value: &[u8],
+) -> Result<(), PkgError> {
+    let Some(placeholder) = placeholder else {
+        return Err(PkgError::Pack(format!(
+            "placeholder {kind:?} was not found"
+        )));
+    };
+    if value.len() > placeholder.size {
+        return Err(PkgError::Pack(format!(
+            "placeholder {kind:?} value is too large"
+        )));
+    }
+
+    let Some(target) =
+        binary.get_mut(placeholder.position..placeholder.position + placeholder.size)
+    else {
+        return Err(PkgError::Pack(format!(
+            "placeholder {kind:?} range is outside binary"
+        )));
+    };
+    let (value_target, padding_target) = target.split_at_mut(value.len());
+    value_target.copy_from_slice(value);
+    padding_target.fill(placeholder.padder);
+    Ok(())
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn manifest_vfs_json(manifest: &ProducerManifest) -> BTreeMap<String, BTreeMap<String, [u64; 2]>> {

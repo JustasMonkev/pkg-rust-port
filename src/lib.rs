@@ -49,7 +49,10 @@ pub use crate::dictionary::{
 };
 pub use crate::error::PkgError;
 pub use crate::pack::{PackedOutput, Stripe, pack};
-pub use crate::produce::{PayloadPointer, ProducerManifest, produce_manifest, render_prelude};
+pub use crate::produce::{
+    PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
+    ProducerManifest, discover_placeholders, inject_placeholders, produce_manifest, render_prelude,
+};
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
 pub use crate::resolve::{ResolveOptions, resolve_module};
 pub use crate::target::{

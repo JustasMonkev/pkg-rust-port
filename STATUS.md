@@ -199,3 +199,13 @@ Next: implement executable binary streaming and placeholder injection around the
 Decisions made: use `flate2` for gzip and `brotli` for Brotli so compression is native Rust and the producer can compute actual compressed payload offsets instead of guessing.
 
 Blockers worked around: the sandbox could not unpack the new Cargo dependencies into `~/.cargo`, so the focused producer test was rerun with approved Cargo registry access.
+
+## 2026-05-19 - Producer placeholder slice shipped
+
+Shipped: added binary placeholder discovery and in-buffer injection for bakery, payload position/size, and prelude position/size placeholders. Added producer parity tests for discovery, injection, padding, and missing-placeholder errors.
+
+Next: connect packed payload/prelude bytes to an executable writer that streams the binary, payload, and rendered prelude, then injects these placeholder values.
+
+Decisions made: placeholder injection works on a mutable byte buffer first; file-backed writing can reuse the same validation and byte replacement logic when the producer starts writing target binaries.
+
+Blockers worked around: none.
