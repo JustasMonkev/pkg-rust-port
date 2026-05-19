@@ -270,11 +270,20 @@ struct Task {
     marker: Marker,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PatchOp {
+    Replace { from: String, to: String },
+    Erase(String),
+    Prepend(String),
+    Append(String),
+}
+
 struct WalkerState {
     output: WalkOutput,
     tasks: VecDeque<Task>,
     root: PathBuf,
     activated_packages: BTreeSet<PathBuf>,
+    patches: BTreeMap<PathBuf, Vec<PatchOp>>,
 }
 
 impl WalkerState {
@@ -284,6 +293,7 @@ impl WalkerState {
             tasks: VecDeque::new(),
             root,
             activated_packages: BTreeSet::new(),
+            patches: BTreeMap::new(),
         }
     }
 
@@ -357,6 +367,8 @@ impl WalkerState {
             return Ok(());
         };
 
+        self.register_patches(marker, base_dir);
+
         for dependency in dependencies {
             self.append_resolvable(base_dir, &dependency, marker.clone(), false)?;
             let package_json = format!("{dependency}/package.json");
@@ -365,6 +377,20 @@ impl WalkerState {
 
         self.append_files_from_config(marker, base_dir)?;
         Ok(())
+    }
+
+    fn register_patches(&mut self, marker: &Marker, base_dir: &Path) {
+        let Some(pkg_config) = marker.package.pkg.as_ref() else {
+            return;
+        };
+
+        for (relative_path, patch_value) in &pkg_config.patches {
+            let Some(ops) = parse_patch_ops(patch_value) else {
+                continue;
+            };
+            let path = canonicalize_or_self(&base_dir.join(relative_path));
+            self.patches.insert(path, ops);
+        }
     }
 
     fn append_files_from_config(
@@ -411,8 +437,10 @@ impl WalkerState {
             return Ok(());
         }
 
-        let body = read_to_string(file)?;
+        let mut body = read_to_string(file)?;
+        self.apply_patch(file, &mut body);
         let body = strip_bom_and_shebang(&body);
+        self.record_mut(file).body = Some(body.as_bytes().to_vec());
         for detected in detect(&body)? {
             let DetectionKind::Successful(derivative) = detected.kind else {
                 continue;
@@ -452,9 +480,20 @@ impl WalkerState {
     }
 
     fn step_content(&mut self, file: &Path) -> Result<(), PkgError> {
-        let body = fs::read(file).map_err(|source| io_error(file, source))?;
+        let mut body = fs::read(file).map_err(|source| io_error(file, source))?;
+        if let Some(patch) = self.patches.get(file) {
+            let mut text = String::from_utf8_lossy(&body).into_owned();
+            apply_patch_ops(&mut text, patch);
+            body = text.into_bytes();
+        }
         self.record_mut(file).body = Some(body);
         Ok(())
+    }
+
+    fn apply_patch(&self, file: &Path, body: &mut String) {
+        if let Some(patch) = self.patches.get(file) {
+            apply_patch_ops(body, patch);
+        }
     }
 
     fn step_links(&mut self, directory: &Path, marker: &Marker) -> Result<(), PkgError> {
@@ -769,6 +808,64 @@ fn strip_bom_and_shebang(source: &str) -> String {
             .map(ToOwned::to_owned)
             .unwrap_or_default(),
         None => String::new(),
+    }
+}
+
+fn parse_patch_ops(value: &Value) -> Option<Vec<PatchOp>> {
+    let Value::Array(items) = value else {
+        return None;
+    };
+
+    let mut ops = Vec::new();
+    for pair in items.chunks(2) {
+        let [kind, payload] = pair else {
+            continue;
+        };
+        let Some(payload) = payload.as_str() else {
+            continue;
+        };
+
+        if let Some(from) = kind.as_str() {
+            ops.push(PatchOp::Replace {
+                from: from.to_owned(),
+                to: payload.to_owned(),
+            });
+            continue;
+        }
+
+        if let Some(action) = kind
+            .as_object()
+            .and_then(|object| object.get("do"))
+            .and_then(Value::as_str)
+        {
+            match action {
+                "erase" => ops.push(PatchOp::Erase(payload.to_owned())),
+                "prepend" => ops.push(PatchOp::Prepend(payload.to_owned())),
+                "append" => ops.push(PatchOp::Append(payload.to_owned())),
+                _ => {}
+            }
+        }
+    }
+
+    Some(ops)
+}
+
+fn apply_patch_ops(body: &mut String, patch: &[PatchOp]) {
+    for op in patch {
+        match op {
+            PatchOp::Replace { from, to } => {
+                *body = body.replace(from, to);
+            }
+            PatchOp::Erase(replacement) => {
+                *body = replacement.clone();
+            }
+            PatchOp::Prepend(prefix) => {
+                body.insert_str(0, prefix);
+            }
+            PatchOp::Append(suffix) => {
+                body.push_str(suffix);
+            }
+        }
     }
 }
 

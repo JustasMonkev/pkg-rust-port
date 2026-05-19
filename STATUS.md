@@ -119,3 +119,13 @@ Next: add patch registration/application and symlink tracking before moving towa
 Decisions made: new package markers are only created for package.json files under `node_modules`; otherwise local fixture files could incorrectly activate this repo root's `package.json` instead of behaving like plain relative project files.
 
 Blockers worked around: focused walker parity exposed the repo-root package leakage, and the marker boundary now follows the Node dependency package path.
+
+## 2026-05-19 - Patch application slice shipped
+
+Shipped: registered `pkg.patches` during marker activation and applied string/object patch operations before blob detection or content storage. Added parity coverage for `test-50-package-json-3`.
+
+Next: add symlink tracking and start a typed refiner/VFS output layer over walker records.
+
+Decisions made: patch operations are represented as a private enum instead of raw JSON arrays so the walker applies explicit replace/erase/prepend/append behavior without stringly typed control flow at use sites.
+
+Blockers worked around: none.

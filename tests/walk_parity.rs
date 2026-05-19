@@ -179,3 +179,26 @@ fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Resu
 
     Ok(())
 }
+
+#[test]
+fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-3");
+    let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let output = walk(
+        marker,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.record(&entrypoint).is_some_and(|record| {
+        record.body.as_ref().is_some_and(|body| {
+            let body = String::from_utf8_lossy(body);
+            body.contains("process.cwd() + '/' + dataPath")
+                && !body.contains("__dirname + '/' + dataPath")
+        })
+    }));
+
+    Ok(())
+}
