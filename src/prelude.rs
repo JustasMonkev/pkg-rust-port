@@ -83,27 +83,128 @@ exports.normalizePath = function normalizePath(f) {
 };
 
 exports.insideSnapshot = function insideSnapshot(f) {
-  return /^\/snapshot(\/|$)/.test(f) || /^.:\\snapshot(\\|$)/.test(f);
+  f = pathToString(f, win32);
+
+  if (typeof f !== 'string') {
+    return false;
+  }
+
+  if (win32) {
+    const slice112 = f.slice(1, 12);
+
+    return (
+      slice112 === ':\\snapshot\\' ||
+      slice112 === ':/snapshot\\' ||
+      slice112 === ':\\snapshot/' ||
+      slice112 === ':/snapshot/' ||
+      slice112 === ':\\snapshot' ||
+      slice112 === ':/snapshot'
+    );
+  }
+
+  const slice010 = f.slice(0, 10);
+
+  return slice010 === '/snapshot/' || slice010 === '/snapshot';
 };
 
 exports.stripSnapshot = function stripSnapshot(f) {
-  if (exports.insideSnapshot(f)) {
-    return f.slice(10) || '/';
+  const file = exports.normalizePath(f);
+
+  if (/^.:\\snapshot$/.test(file)) {
+    return `${file[0]}:\\**\\`;
   }
+
+  if (/^.:\\snapshot\\/.test(file)) {
+    return `${file[0]}:\\**${file.slice(11)}`;
+  }
+
+  if (/^\/snapshot$/.test(file)) {
+    return '/**/';
+  }
+
+  if (/^\/snapshot\//.test(file)) {
+    return `/**${file.slice(9)}`;
+  }
+
   return f;
 };
 
 exports.removeUplevels = function removeUplevels(f) {
-  const result = [];
-  for (const part of f.split(/[\\/]+/)) {
-    if (!part || part === '.') continue;
-    if (part === '..') {
-      result.pop();
+  if (win32) {
+    while (true) {
+      if (f.slice(0, 3) === '..\\') {
+        f = f.slice(3);
+      } else if (f === '..') {
+        f = '.';
+      } else {
+        break;
+      }
+    }
+
+    return f;
+  }
+
+  while (true) {
+    if (f.slice(0, 3) === '../') {
+      f = f.slice(3);
+    } else if (f === '..') {
+      f = '.';
     } else {
-      result.push(part);
+      break;
     }
   }
-  return result.join('/');
+
+  return f;
 };
 "#
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+
+    use super::common_runtime_source;
+
+    #[test]
+    fn generated_common_helper_matches_posix_snapshot_behavior()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let script = format!(
+            r#"
+const common = {{}};
+(function (exports) {{
+{}
+}})(common);
+
+const checks = [
+  ['inside snapshot root', common.insideSnapshot('/snapshot'), true],
+  ['inside snapshot child', common.insideSnapshot('/snapshot/app.js'), true],
+  ['outside snapshot prefix', common.insideSnapshot('/snapshoter/app.js'), false],
+  ['strip snapshot root', common.stripSnapshot('/snapshot'), '/**/'],
+  ['strip snapshot child', common.stripSnapshot('/snapshot/app.js'), '/**/app.js'],
+  ['strip snapshot normalized child', common.stripSnapshot('/snapshot//foo//bar/\\//'), '/**/foo/bar'],
+  ['remove leading uplevel', common.removeUplevels('../../foo'), 'foo'],
+  ['preserve internal uplevel', common.removeUplevels('../foo/../bar'), 'foo/../bar'],
+  ['dot slash is unchanged', common.removeUplevels('./foo'), './foo'],
+  ['only uplevels collapse to dot', common.removeUplevels('../..'), '.'],
+];
+
+for (const [name, actual, expected] of checks) {{
+  if (actual !== expected) {{
+    console.error(`${{name}}: expected ${{JSON.stringify(expected)}}, got ${{JSON.stringify(actual)}}`);
+    process.exit(1);
+  }}
+}}
+"#,
+            common_runtime_source()
+        );
+
+        let output = Command::new("node").arg("-e").arg(script).output()?;
+        assert!(
+            output.status.success(),
+            "generated common helper failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(())
+    }
 }

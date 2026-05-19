@@ -309,3 +309,13 @@ Next: validate the generated common-helper behavior against runtime expectations
 Decisions made: during migration, reference the original bootstrap and diagnostic files from the parent JS repo at compile time instead of copying them into `rust-port`; this preserves runtime parity while avoiding vendoring those JS files into the Rust target tree. The common helper body is generated in Rust because the source `lib/common.ts` is TypeScript, while the runtime prelude needs plain JavaScript.
 
 Blockers worked around: none.
+
+## 2026-05-19 - Runtime common helper parity shipped
+
+Shipped: corrected the generated runtime common helper used by `prelude_template` so `insideSnapshot`, `stripSnapshot`, and `removeUplevels` match the JavaScript `lib/common.ts` behavior instead of the temporary simplified versions. Added a unit test that executes the generated helper with `node` and checks snapshot display paths plus leading-uplevel removal.
+
+Next: add a cached/download-backed CLI smoke path using a placeholder-bearing target binary, then continue closing runtime parity gaps around bytecode/fabrication and platform signing.
+
+Decisions made: keep the generated helper as plain JavaScript inside `src/prelude.rs`, but test it by executing the generated source rather than only checking template text; this catches runtime drift while still avoiding vendored TypeScript source under `rust-port`.
+
+Blockers worked around: none.
