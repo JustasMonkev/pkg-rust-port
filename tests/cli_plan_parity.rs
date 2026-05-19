@@ -86,6 +86,29 @@ fn file_input_inside_package_keeps_package_directory_in_snapshot()
     Ok(())
 }
 
+#[test]
+fn file_input_inside_node_modules_package_keeps_node_modules_in_snapshot()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-node-modules-file");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("../test/test-50-package-json-6b/node_modules/alpha/alpha.js"),
+    ])?;
+
+    assert!(
+        plan.root
+            .ends_with("test-50-package-json-6b/node_modules/alpha")
+    );
+    assert!(plan.snapshot_base.ends_with("test-50-package-json-6b"));
+    Ok(())
+}
+
 #[tokio::test]
 async fn exec_treats_version_as_successful_display() -> Result<(), Box<dyn std::error::Error>> {
     pkg_rust::exec(["--version"]).await?;

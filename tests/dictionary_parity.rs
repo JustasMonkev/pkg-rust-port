@@ -19,6 +19,22 @@ fn sequelize_dictionary_replaces_pkg_scripts() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
+fn dynamic_require_dictionaries_carry_script_globs() -> Result<(), Box<dyn std::error::Error>> {
+    let busboy = lookup_dictionary("busboy").ok_or("missing busboy dictionary")?;
+    let log4js = lookup_dictionary("log4js").ok_or("missing log4js dictionary")?;
+
+    assert_eq!(
+        busboy.pkg.as_ref().map(|pkg| &pkg.scripts),
+        Some(&json!(["lib/types/*.js"]))
+    );
+    assert_eq!(
+        log4js.pkg.as_ref().map(|pkg| &pkg.scripts),
+        Some(&json!(["lib/appenders/*.js"]))
+    );
+    Ok(())
+}
+
+#[test]
 fn publicsuffixlist_disables_dictionary_dependencies() -> Result<(), Box<dyn std::error::Error>> {
     let mut package = PackageJson::parse(
         r#"{

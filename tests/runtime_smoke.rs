@@ -45,10 +45,58 @@ fn package_json_files_fixtures_run_when_real_cache_is_configured()
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
     for (name, fixture, node_input, package_input) in [
         (
+            "package-json",
+            "test-50-package-json",
+            "test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-2",
+            "test-50-package-json-2",
+            "sub/test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-3",
+            "test-50-package-json-3",
+            "test-x-index.js",
+            ".",
+        ),
+        (
+            "package-json-4",
+            "test-50-package-json-4",
+            "test-x-index.js",
+            "test-x-index.js",
+        ),
+        (
+            "package-json-5",
+            "test-50-package-json-5",
+            "node_modules/input/test-x-index.js",
+            "node_modules/input/test-x-index.js",
+        ),
+        (
+            "package-json-6",
+            "test-50-package-json-6",
+            "test-x-index.js",
+            "test-x-index.js",
+        ),
+        (
+            "package-json-6b",
+            "test-50-package-json-6b",
+            "node_modules/alpha/alpha.js",
+            "node_modules/alpha/alpha.js",
+        ),
+        (
             "package-json-6c",
             "test-50-package-json-6c",
             "beta/alpha.js",
             "beta/alpha.js",
+        ),
+        (
+            "package-json-6d",
+            "test-50-package-json-6d",
+            "test-x-index.js",
+            "test-x-index.js",
         ),
         (
             "package-json-7",
@@ -91,6 +139,12 @@ fn package_json_files_fixtures_run_when_real_cache_is_configured()
             "test-50-package-json-9p",
             "test-x-index.js",
             "test-x-index.js",
+        ),
+        (
+            "package-json-A",
+            "test-50-package-json-A",
+            "test-x-index.js",
+            ".",
         ),
     ] {
         package_and_compare_fixture(name, &root.join(fixture), node_input, package_input)?;

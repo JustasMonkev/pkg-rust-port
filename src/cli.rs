@@ -266,17 +266,15 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .unwrap_or_else(|| PathBuf::from("."));
     // DECISION: Treat only the immediate parent package as the snapshot package
     // for file inputs; ancestor packages would accidentally make repo roots part
-    // of unrelated fixture packages.
+    // of unrelated fixture packages. Package files below node_modules keep the
+    // first node_modules segment so bare self-requires still resolve at runtime.
     let package_dir = if input_package.is_some() {
         input.parent().map(Path::to_path_buf)
     } else {
         immediate_package_dir(&entrypoint)
     };
     let snapshot_base = if let Some(package_dir) = package_dir {
-        package_dir
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| root.clone())
+        package_snapshot_base(&package_dir, &root)
     } else {
         root.clone()
     };
@@ -366,6 +364,25 @@ fn immediate_package_dir(file: &Path) -> Option<PathBuf> {
     file.parent()
         .filter(|directory| directory.join("package.json").is_file())
         .map(Path::to_path_buf)
+}
+
+fn package_snapshot_base(package_dir: &Path, root: &Path) -> PathBuf {
+    let mut base = PathBuf::new();
+    for component in package_dir.components() {
+        if component.as_os_str() == "node_modules" {
+            return if base.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                base
+            };
+        }
+        base.push(component.as_os_str());
+    }
+
+    package_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.to_path_buf())
 }
 
 fn output_base(

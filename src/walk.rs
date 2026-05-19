@@ -419,9 +419,12 @@ impl WalkerState {
         self.register_patches(marker, base_dir);
 
         for dependency in dependencies {
-            self.append_resolvable(base_dir, &dependency, marker.clone(), false)?;
+            // DECISION: JS treats dependency-derived aliases as warnings, not
+            // hard failures. Metadata-only packages such as `@types/*` may have
+            // no runtime entrypoint but still need their package.json traversed.
+            self.append_resolvable(base_dir, &dependency, marker.clone(), true)?;
             let package_json = format!("{dependency}/package.json");
-            self.append_resolvable(base_dir, &package_json, marker.clone(), false)?;
+            self.append_resolvable(base_dir, &package_json, marker.clone(), true)?;
         }
 
         self.append_files_from_config(marker, base_dir)?;

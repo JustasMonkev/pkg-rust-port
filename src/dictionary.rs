@@ -123,7 +123,9 @@ impl DictionaryEntry {
 #[must_use]
 pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
+        "busboy" => Some(busboy()),
         "express" => Some(express()),
+        "log4js" => Some(log4js()),
         "open" | "opn" => Some(open()),
         "publicsuffixlist" => Some(publicsuffixlist()),
         "sequelize" => Some(sequelize()),
@@ -197,6 +199,10 @@ fn dependency_value_is_active(value: &Value) -> bool {
     }
 }
 
+fn busboy() -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/types/*.js"]))
+}
+
 fn express() -> DictionaryEntry {
     let mut patches = Map::new();
     patches.insert(
@@ -213,6 +219,10 @@ fn express() -> DictionaryEntry {
         patches,
         ..PkgConfig::default()
     })
+}
+
+fn log4js() -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/appenders/*.js"]))
 }
 
 fn open() -> DictionaryEntry {

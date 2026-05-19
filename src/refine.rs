@@ -76,7 +76,7 @@ pub fn refine(
     }
 }
 
-fn ensure_snapshot_base_record(
+fn ensure_snapshot_base_records(
     records: &mut BTreeMap<String, FileRecord>,
     entrypoint: &Path,
     snapshot_base: &Path,
@@ -91,23 +91,50 @@ fn ensure_snapshot_base_record(
             return;
         }
     };
-    if records.contains_key(root) {
+
+    let Ok(relative) = entrypoint.strip_prefix(snapshot_base) else {
+        return;
+    };
+    let components: Vec<String> = relative
+        .components()
+        .filter_map(|component| component.as_os_str().to_str().map(ToOwned::to_owned))
+        .collect();
+
+    if components.len() < 2 {
         return;
     }
 
-    let Some(child) = entrypoint
-        .strip_prefix(snapshot_base)
-        .ok()
-        .and_then(|relative| relative.components().next())
-        .and_then(|component| component.as_os_str().to_str())
-    else {
-        return;
-    };
+    let mut host_dir = snapshot_base.to_path_buf();
+    let mut snapshot_dir = root.to_owned();
+    for child in components.iter().take(components.len() - 1) {
+        ensure_directory_record(records, &snapshot_dir, host_dir.clone(), child.clone());
+        host_dir.push(child);
+        if snapshot_dir == root {
+            snapshot_dir.push_str(child);
+        } else {
+            snapshot_dir.push('/');
+            snapshot_dir.push_str(child);
+        }
+    }
+}
 
-    records.insert(
-        root.to_owned(),
-        synthetic_directory_record(snapshot_base.to_path_buf(), child.to_owned()),
-    );
+fn ensure_directory_record(
+    records: &mut BTreeMap<String, FileRecord>,
+    key: &str,
+    file: PathBuf,
+    child: String,
+) {
+    if let Some(record) = records.get_mut(key) {
+        if !record.children.iter().any(|existing| existing == &child) {
+            record.children.push(child);
+            record.children.sort();
+        }
+        record.links = true;
+        record.stat = true;
+        return;
+    }
+
+    records.insert(key.to_owned(), synthetic_directory_record(file, child));
 }
 
 fn synthetic_directory_record(file: PathBuf, child: String) -> FileRecord {
@@ -200,7 +227,7 @@ fn refine_with_snapshot_base(
             )
         })
         .collect();
-    ensure_snapshot_base_record(&mut records, &entrypoint, &snapshot_base, style);
+    ensure_snapshot_base_records(&mut records, &entrypoint, &snapshot_base, style);
     let symlinks = symlinks
         .into_iter()
         .map(|(link, real)| {

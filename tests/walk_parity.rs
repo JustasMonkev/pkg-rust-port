@@ -210,6 +210,48 @@ fn local_package_directory_requires_include_package_json_for_runtime_resolution(
 }
 
 #[test]
+fn dependency_without_main_still_activates_package_json_dependencies() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-5");
+    let package = PackageJson::parse("{}")
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::new(package),
+        fixture_dir.join("node_modules/input/test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(
+        fixture_dir.join("node_modules/input/node_modules/@types/omega/package.json"),
+        StoreKind::Content
+    ));
+    assert!(output.contains_store(
+        fixture_dir.join("node_modules/input/node_modules/@types/delta/index.js"),
+        StoreKind::Blob
+    ));
+    Ok(())
+}
+
+#[test]
+fn dependency_package_self_subpath_require_includes_target() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-6b");
+    let package = PackageJson::parse("{}")
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::new(package),
+        fixture_dir.join("node_modules/alpha/alpha.js"),
+        None,
+        WalkerParams::new().with_root(fixture_dir.join("node_modules/alpha")),
+    )?;
+
+    assert!(output.contains_store(
+        fixture_dir.join("node_modules/alpha/beta.js"),
+        StoreKind::Blob
+    ));
+    Ok(())
+}
+
+#[test]
 fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-package-json-3");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;

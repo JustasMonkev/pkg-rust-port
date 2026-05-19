@@ -429,3 +429,13 @@ Next: continue package-json runtime coverage for the remaining edge fixtures, th
 Decisions made: only the immediate parent `package.json` influences file-input snapshot base selection, and local package marker discovery is bounded to the active walker root. That covers local package-main resolution without accidentally treating repository ancestor packages as fixture package metadata.
 
 Blockers worked around: `test-50-package-json-6c` first packaged as `/snapshot/alpha.js`, then as `/snapshot/beta/alpha.js` without package metadata; both failed `require('../beta')`. The final shape preserves `/snapshot/beta/alpha.js` and includes `/snapshot/beta/package.json`.
+
+## 2026-05-19 - Remaining package-json runtime parity shipped
+
+Shipped: expanded gated real-runtime package-json coverage to `test-50-package-json`, `2`, `3`, `4`, `5`, `6`, `6b`, `6d`, and `A`. Added typed `busboy` and `log4js` dictionary entries, non-fatal dependency-derived resolution for metadata-only packages, and node_modules-aware snapshot-base refinement with synthesized intermediate directory records.
+
+Next: move into spawn and native-addon runtime paths, then broader invalid/config/error fixtures.
+
+Decisions made: dictionary additions remain inert Rust data instead of executing JS dictionary modules. Dependency aliases from `package.json` remain warning-equivalent when their runtime entrypoint is missing, matching JS behavior for `@types/*`. Direct file inputs under `node_modules` keep `node_modules` in `/snapshot` so bare self-subpath requires resolve through the prelude.
+
+Blockers worked around: `test-50-package-json-4` first missed dictionary script globs, `test-50-package-json-5` failed on metadata-only `@types/omega`, and `test-50-package-json-6b` included `beta.js` but lacked the `/snapshot/node_modules` directory link needed for runtime module resolution.

@@ -85,6 +85,38 @@ fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
+fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-package-node-modules-{}",
+        std::process::id()
+    ));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "../test/test-50-package-json-6b/node_modules/alpha/alpha.js",
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = String::from_utf8_lossy(&build.outputs[0].image.bytes);
+    assert!(image.contains("\"/snapshot/node_modules\""));
+    assert!(image.contains("\"/snapshot/node_modules/alpha/beta.js\""));
+
+    std::fs::remove_file(output)?;
+    Ok(())
+}
+
+#[test]
 fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join(format!(
         "pkg-rust-package-output-dir-{}",
