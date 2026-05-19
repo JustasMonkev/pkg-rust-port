@@ -339,3 +339,13 @@ Next: replace the host-`node` interim fabricator with target-binary fabrication 
 Decisions made: use host `node` as the interim bytecode fabricator and leave a `// DECISION:` comment in `src/produce.rs`; this is closer to JS behavior than mislabeled source blobs, but target-specific bytecode generation still remains to be ported.
 
 Blockers worked around: the first full test run exposed JSON and CSS files being compiled as JavaScript bytecode. Root cause was in the walker, not the fabricator: Rust retagged them as content but still marked the original blob task complete. Fixed the store-completion path and added fixture assertions so this does not regress.
+
+## 2026-05-19 - Target-aware binary artifact slice shipped
+
+Shipped: added `TargetBinary` so providers can return target binary bytes plus the cache path they came from. `PkgFetchCache` now preserves fetched/built paths, and package builds pass runnable target binary paths into the producer bytecode fabricator. Added coverage that proves an explicit fabricator path is used for blob payloads and that cache artifacts expose their built path.
+
+Next: seed or download a real pkg-fetch binary and add a runtime smoke test that executes the produced package, then continue replacing host-only bytecode fallbacks and platform signing gaps.
+
+Decisions made: keep byte-only provider implementations source-compatible through a default `binary_artifact_for` method. When a cached file is not recognizably executable, the producer falls back to host `node`; this keeps placeholder-binary tests deterministic while real ELF/Mach-O/PE/shebang target binaries use target-specific fabrication.
+
+Blockers worked around: no `~/.pkg-cache` exists on this machine, so real-binary runtime smoke remains blocked until a binary is downloaded or seeded. The cached CLI smoke uses a placeholder file and therefore intentionally exercises the non-runnable fallback path.

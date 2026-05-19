@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::PkgError;
 use crate::fsx::plus_x;
-use crate::package::TargetBinaryProvider;
+use crate::package::{TargetBinary, TargetBinaryProvider};
 use crate::target::NodeTarget;
 
 const PKG_FETCH_VERSION: &str = "3.5.2";
@@ -220,17 +220,27 @@ impl PkgFetchCache {
 
 impl TargetBinaryProvider for PkgFetchCache {
     fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        self.binary_artifact_for(target)
+            .map(|binary| binary.bytes().to_vec())
+    }
+
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
         let fetched = self.binary_path(target, BinaryKind::Fetched)?;
         if fetched.is_file() && self.verify_fetched(target, &fetched)? {
-            return read_binary(&fetched);
+            return read_binary(&fetched)
+                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
         }
 
         let built = self.binary_path(target, BinaryKind::Built)?;
         if built.is_file() {
-            return read_binary(&built);
+            return read_binary(&built)
+                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
         }
         if self.download_on_miss {
-            return self.download_fetched(target);
+            let fetched = self.binary_path(target, BinaryKind::Fetched)?;
+            return self
+                .download_fetched(target)
+                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
         }
 
         // DECISION: explicit `new` caches stay offline so tests and callers can

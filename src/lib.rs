@@ -56,7 +56,7 @@ pub use crate::fetch::{BinaryKind, PkgFetchCache};
 pub use crate::fsx::plus_x;
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
-    PackageBuild, ProducedOutput, TargetBinaryProvider, build_package_with_provider,
+    PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,
 };
 pub use crate::prelude::prelude_template;
 pub use crate::produce::{

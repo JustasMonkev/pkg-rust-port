@@ -41,7 +41,9 @@ fn cache_provider_removes_bad_fetched_and_reads_built() -> Result<(), Box<dyn st
     fs::write(&built, b"built")?;
     fs::write(&fetched, b"fetched")?;
 
-    assert_eq!(cache.binary_for(&target)?, b"built");
+    let artifact = cache.binary_artifact_for(&target)?;
+    assert_eq!(artifact.bytes(), b"built");
+    assert_eq!(artifact.path(), Some(built.as_path()));
     assert!(!fetched.exists());
     fs::remove_file(built)?;
     fs::remove_dir_all(root)?;

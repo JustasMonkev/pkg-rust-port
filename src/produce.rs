@@ -140,7 +140,7 @@ pub fn produce_manifest(
     compression: PayloadCompression,
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
-    let (manifest, _payload) = build_manifest_and_payload(packed, compression, style)?;
+    let (manifest, _payload) = build_manifest_and_payload(packed, compression, style, None)?;
     Ok(manifest)
 }
 
@@ -191,7 +191,7 @@ pub fn produce_executable_image(
     style: PathStyle,
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
-    let (manifest, payload) = build_manifest_and_payload(packed, compression, style)?;
+    let (manifest, payload) = build_manifest_and_payload(packed, compression, style, None)?;
     let prelude = render_prelude(prelude_template, &manifest)?.into_bytes();
     let payload_position = binary.len() as u64;
     let payload_size = payload.len() as u64;
@@ -281,9 +281,79 @@ pub fn write_executable_image(
     style: PathStyle,
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
+    write_executable_image_with_fabricator(
+        output,
+        binary,
+        packed,
+        prelude_template,
+        ProducerBuildOptions {
+            compression,
+            style,
+            bakery,
+            fabricator_path: None,
+        },
+    )
+}
+
+pub(crate) struct ProducerBuildOptions<'a> {
+    pub(crate) compression: PayloadCompression,
+    pub(crate) style: PathStyle,
+    pub(crate) bakery: Vec<u8>,
+    pub(crate) fabricator_path: Option<&'a Path>,
+}
+
+pub(crate) fn write_executable_image_with_fabricator(
+    output: impl AsRef<Path>,
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    options: ProducerBuildOptions<'_>,
+) -> Result<ProducedExecutable, PkgError> {
     let output = output.as_ref();
-    let produced =
-        produce_executable_image(binary, packed, prelude_template, compression, style, bakery)?;
+    let (manifest, payload) = build_manifest_and_payload(
+        packed,
+        options.compression,
+        options.style,
+        options.fabricator_path,
+    )?;
+    let prelude = render_prelude(prelude_template, &manifest)?.into_bytes();
+    let payload_position = binary.len() as u64;
+    let payload_size = payload.len() as u64;
+    let prelude_position = payload_position + payload_size;
+    let prelude_size = prelude.len() as u64;
+
+    let mut bytes = binary;
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&prelude);
+
+    let placeholders = discover_placeholders(&bytes);
+    let values = PlaceholderValues {
+        bakery: options.bakery,
+        payload_position,
+        payload_size,
+        prelude_position,
+        prelude_size,
+    };
+    inject_placeholders(
+        &mut bytes,
+        &placeholders,
+        &values,
+        &[
+            PlaceholderKind::Bakery,
+            PlaceholderKind::PayloadPosition,
+            PlaceholderKind::PayloadSize,
+            PlaceholderKind::PreludePosition,
+            PlaceholderKind::PreludeSize,
+        ],
+    )?;
+
+    let produced = ProducedExecutable {
+        bytes,
+        manifest,
+        payload_position,
+        prelude_position,
+        prelude_size,
+    };
     fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
         path: output.display().to_string(),
         source,
@@ -295,6 +365,7 @@ fn build_manifest_and_payload(
     packed: PackedOutput,
     compression: PayloadCompression,
     style: PathStyle,
+    fabricator_path: Option<&Path>,
 ) -> Result<(ProducerManifest, Vec<u8>), PkgError> {
     let mut offset = 0_u64;
     let mut payload = Vec::new();
@@ -309,7 +380,7 @@ fn build_manifest_and_payload(
             // Until the provider layer carries target binary paths, use host
             // `node` here so blob stripes contain V8 cached data instead of
             // mislabeled JavaScript source.
-            fabricate_bytecode_with_host_node(&snap, &stripe_bytes)?
+            fabricate_bytecode(&snap, &stripe_bytes, fabricator_path)?
         } else {
             stripe_bytes
         };
@@ -632,17 +703,29 @@ fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
     })
 }
 
-fn fabricate_bytecode_with_host_node(snap: &str, source: &[u8]) -> Result<Vec<u8>, PkgError> {
-    let mut child = Command::new("node")
+fn fabricate_bytecode(
+    snap: &str,
+    source: &[u8],
+    fabricator_path: Option<&Path>,
+) -> Result<Vec<u8>, PkgError> {
+    let mut command = match fabricator_path {
+        Some(path) => Command::new(path),
+        None => Command::new("node"),
+    };
+    let command_label = fabricator_path
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "node".to_owned());
+    let mut child = command
         .arg("-e")
         .arg(BYTECODE_FABRICATOR_SCRIPT)
         .arg(snap)
+        .env("PKG_EXECPATH", "PKG_INVOKE_NODEJS")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|source| PkgError::Io {
-            path: "node".to_owned(),
+            path: command_label.clone(),
             source,
         })?;
 
@@ -657,7 +740,7 @@ fn fabricate_bytecode_with_host_node(snap: &str, source: &[u8]) -> Result<Vec<u8
     drop(stdin);
 
     let output = child.wait_with_output().map_err(|source| PkgError::Io {
-        path: "node".to_owned(),
+        path: command_label,
         source,
     })?;
     if !output.status.success() {
@@ -703,4 +786,83 @@ fn brotli_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
         .read_to_end(&mut output)
         .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+    use crate::common::StoreKind;
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_fabricator_path_is_used_for_blob_payload() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let temp_dir =
+            std::env::temp_dir().join(format!("pkg-rust-fabricator-path-{}", std::process::id()));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let fabricator = temp_dir.join("fake-node");
+        fs::write(
+            &fabricator,
+            "#!/bin/sh\ncat >/dev/null\nprintf TARGET_BYTECODE\n",
+        )?;
+        let mut permissions = fs::metadata(&fabricator)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fabricator, permissions)?;
+
+        let produced = write_executable_image_with_fabricator(
+            temp_dir.join("out"),
+            binary_with_placeholders(),
+            PackedOutput {
+                entrypoint: "/app.js".to_owned(),
+                symlinks: BTreeMap::new(),
+                stripes: vec![Stripe {
+                    snap: "/app.js".to_owned(),
+                    store: StoreKind::Blob,
+                    file: None,
+                    buffer: Some(b"module.exports = 42;".to_vec()),
+                }],
+            },
+            "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+            ProducerBuildOptions {
+                compression: PayloadCompression::None,
+                style: PathStyle::Posix,
+                bakery: Vec::new(),
+                fabricator_path: Some(&fabricator),
+            },
+        )?;
+        let pointer = produced
+            .manifest
+            .vfs
+            .get("/snapshot/app.js")
+            .and_then(|stores| stores.get(&StoreKind::Blob.as_index()))
+            .ok_or_else(|| PkgError::Pack("blob payload pointer was missing".to_owned()))?;
+        let start = produced.payload_position as usize + pointer.offset as usize;
+        let end = start + pointer.size as usize;
+
+        assert_eq!(
+            produced
+                .bytes
+                .get(start..end)
+                .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
+            b"TARGET_BYTECODE"
+        );
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    fn binary_with_placeholders() -> Vec<u8> {
+        let mut binary = Vec::from([b'\0']);
+        for _index in 0..20 {
+            binary.extend_from_slice(b"// BAKERY ");
+        }
+        binary.extend_from_slice(b"// PAYLOAD_POSITION //");
+        binary.extend_from_slice(b"// PAYLOAD_SIZE //");
+        binary.extend_from_slice(b"// PRELUDE_POSITION //");
+        binary.extend_from_slice(b"// PRELUDE_SIZE //");
+        binary
+    }
 }

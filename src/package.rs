@@ -1,13 +1,65 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::cli::PackagePlan;
 use crate::error::PkgError;
 use crate::fsx::plus_x;
 use crate::pack::pack;
-use crate::produce::{ProducedExecutable, write_executable_image};
+use crate::produce::{
+    ProducedExecutable, ProducerBuildOptions, write_executable_image_with_fabricator,
+};
 use crate::refine::refine_walked;
 use crate::target::{NodeTarget, Platform};
 use crate::walk::{WalkerParams, walk};
+
+/// Target binary data plus optional cache path metadata.
+///
+/// Providers that read binaries from disk should preserve the path so later
+/// stages can use the same executable for target-specific bytecode generation.
+/// In-memory test providers can return bytes without a path.
+///
+/// # Example
+///
+/// ```
+/// let artifact = pkg_rust::TargetBinary::from_bytes(vec![1, 2, 3]);
+/// assert_eq!(artifact.bytes(), &[1, 2, 3]);
+/// assert!(artifact.path().is_none());
+/// ```
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TargetBinary {
+    bytes: Vec<u8>,
+    path: Option<PathBuf>,
+}
+
+impl TargetBinary {
+    /// Build an in-memory target binary artifact.
+    #[must_use]
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { bytes, path: None }
+    }
+
+    /// Attach a filesystem path to this target binary artifact.
+    #[must_use]
+    pub fn with_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.path = Some(path.into());
+        self
+    }
+
+    /// Return the executable bytes.
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Return the cache path when the provider read this binary from disk.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    fn into_parts(self) -> (Vec<u8>, Option<PathBuf>) {
+        (self.bytes, self.path)
+    }
+}
 
 /// Supplies target binary bytes for packaging.
 ///
@@ -16,6 +68,13 @@ use crate::walk::{WalkerParams, walk};
 pub trait TargetBinaryProvider {
     /// Return target binary bytes for the requested target.
     fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError>;
+
+    /// Return target binary bytes with optional filesystem path metadata.
+    ///
+    /// Implementers that only have bytes can rely on this default method.
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        self.binary_for(target).map(TargetBinary::from_bytes)
+    }
 }
 
 /// One executable artifact produced from a package plan.
@@ -84,7 +143,9 @@ pub fn build_package_with_provider(
     let mut outputs = Vec::new();
 
     for planned in &plan.outputs {
-        let binary = provider.binary_for(&planned.target)?;
+        let binary = provider.binary_artifact_for(&planned.target)?;
+        let (binary_bytes, binary_path) = binary.into_parts();
+        let fabricator_path = runnable_fabricator_path(&binary_bytes, binary_path.as_deref());
         let walked = walk(
             plan.marker.clone(),
             &plan.entrypoint,
@@ -93,14 +154,17 @@ pub fn build_package_with_provider(
         )?;
         let refined = refine_walked(walked, &plan.entrypoint, planned.path_style);
         let packed = pack(refined, plan.bytecode)?;
-        let image = write_executable_image(
+        let image = write_executable_image_with_fabricator(
             &planned.output,
-            binary,
+            binary_bytes,
             packed,
             prelude_template,
-            plan.compression,
-            planned.path_style,
-            bakery_from_bakes(&plan.bakes),
+            ProducerBuildOptions {
+                compression: plan.compression,
+                style: planned.path_style,
+                bakery: bakery_from_bakes(&plan.bakes),
+                fabricator_path,
+            },
         )?;
         if planned.target.platform != Platform::Win {
             plus_x(&planned.output)?;
@@ -127,4 +191,22 @@ fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {
     }
     bakery.push(0);
     bakery
+}
+
+fn runnable_fabricator_path<'a>(binary: &[u8], path: Option<&'a Path>) -> Option<&'a Path> {
+    if looks_like_executable(binary) {
+        path
+    } else {
+        None
+    }
+}
+
+fn looks_like_executable(binary: &[u8]) -> bool {
+    binary.starts_with(b"#!")
+        || binary.starts_with(b"\x7fELF")
+        || binary.starts_with(b"MZ")
+        || binary.starts_with(&[0xcf, 0xfa, 0xed, 0xfe])
+        || binary.starts_with(&[0xfe, 0xed, 0xfa, 0xcf])
+        || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbe])
+        || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbf])
 }
