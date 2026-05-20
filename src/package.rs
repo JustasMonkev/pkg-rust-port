@@ -157,7 +157,8 @@ pub fn build_package_with_provider(
             WalkerParams::new()
                 .with_root(&plan.root)
                 .with_public_toplevel(plan.public_toplevel)
-                .with_public_packages(plan.public_packages.clone()),
+                .with_public_packages(plan.public_packages.clone())
+                .with_no_dictionary(plan.no_dictionary.clone()),
         )?;
         warnings.extend(walked.warnings.clone());
         let refined = refine_walked_with_snapshot_base(

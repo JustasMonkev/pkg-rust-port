@@ -590,6 +590,16 @@ Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50
 
 Blockers worked around: none.
 
+## 2026-05-20 - Dictionary selection parity shipped
+
+Shipped: wired CLI `--no-dict` into package planning and walker execution, including JS-style wildcard collapse and built-in dictionary filename matching. The walker now also honors root `pkg.dictionary` overrides as typed dictionary entries.
+
+Next: continue expanding npm/public package fixture parity, especially cases that depend on deploy files or a configured real base-binary cache.
+
+Decisions made: preserve the JS distinction between built-in dictionary filenames such as `busboy.js` and package names such as `busboy`; custom `pkg.dictionary` entries remain root package configuration and are still loaded unless dictionaries are globally disabled with `*`.
+
+Blockers worked around: no real executable cache is configured in this shell, so this slice is locked with CLI-plan and walker parity tests.
+
 ## 2026-05-20 - Dictionary disclosure walker slice shipped
 
 Shipped: ported the JS walker's `hasDictionary` disclosure rule. Packages that activate a typed dictionary entry now store JavaScript blobs as content too, matching upstream's `marker.public || marker.hasDictionary` behavior.

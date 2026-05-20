@@ -9,7 +9,7 @@ use crate::common::{AliasKind, StoreKind};
 use crate::config::{PackageJson, PackageJsonError};
 use crate::detect::{DetectionKind, detect};
 use crate::dictionary::{
-    DictionaryLog, active_dependencies, apply_dictionary_entry, lookup_dictionary,
+    DictionaryEntry, DictionaryLog, active_dependencies, apply_dictionary_entry, lookup_dictionary,
 };
 use crate::error::PkgError;
 use crate::resolve::{ResolveOptions, resolve_module};
@@ -150,6 +150,8 @@ pub struct WalkerParams {
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
     pub public_packages: Vec<String>,
+    /// Dictionary module filenames disabled for this walk.
+    pub no_dictionary: Vec<String>,
 }
 
 impl WalkerParams {
@@ -211,6 +213,27 @@ impl WalkerParams {
         S: Into<String>,
     {
         self.public_packages = packages.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Disable built-in dictionary modules for this walk.
+    ///
+    /// The wildcard name `*` disables all dictionary entries, matching the JS
+    /// `--no-dict '*'` behavior.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let params = pkg_rust::WalkerParams::new().with_no_dictionary(["busboy.js"]);
+    /// assert_eq!(params.no_dictionary, vec!["busboy.js"]);
+    /// ```
+    #[must_use]
+    pub fn with_no_dictionary<I, S>(mut self, modules: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.no_dictionary = modules.into_iter().map(Into::into).collect();
         self
     }
 }
@@ -482,18 +505,28 @@ struct WalkerState {
     root: PathBuf,
     public_toplevel: bool,
     public_packages: Vec<String>,
+    no_dictionary: Vec<String>,
+    custom_dictionaries: BTreeMap<String, DictionaryEntry>,
     activated_packages: BTreeSet<PathBuf>,
     patches: BTreeMap<PathBuf, Vec<PatchOp>>,
 }
 
 impl WalkerState {
-    fn new(root: PathBuf, public_toplevel: bool, public_packages: Vec<String>) -> Self {
+    fn new(
+        root: PathBuf,
+        public_toplevel: bool,
+        public_packages: Vec<String>,
+        no_dictionary: Vec<String>,
+        custom_dictionaries: BTreeMap<String, DictionaryEntry>,
+    ) -> Self {
         Self {
             output: WalkOutput::default(),
             tasks: VecDeque::new(),
             root,
             public_toplevel,
             public_packages,
+            no_dictionary,
+            custom_dictionaries,
             activated_packages: BTreeSet::new(),
             patches: BTreeMap::new(),
         }
@@ -568,7 +601,7 @@ impl WalkerState {
 
     fn activate_marker(&mut self, marker: &mut Marker) -> Result<(), PkgError> {
         if let Some(name) = marker.package.name.as_deref()
-            && let Some(entry) = lookup_dictionary(name)
+            && let Some(entry) = self.lookup_dictionary(name)
         {
             self.append_dictionary_logs(marker.package_path.as_deref(), &entry.logs);
             apply_dictionary_entry(&mut marker.package, &entry);
@@ -817,6 +850,7 @@ impl WalkerState {
             Ok(file) => {
                 if let Some(package_marker) = package_marker_for_file(&file, &marker, &self.root)? {
                     let mut package_marker = package_marker;
+                    package_marker.has_dictionary = self.has_dictionary_entry(&package_marker);
                     package_marker.public = self.is_public_marker(&package_marker);
                     if let Some(package_path) = package_marker.package_path.as_deref() {
                         self.append(
@@ -857,6 +891,8 @@ impl WalkerState {
         marker: Marker,
     ) -> Result<(), PkgError> {
         if let Some(package_marker) = package_marker_for_file(package_json, &marker, &self.root)? {
+            let mut package_marker = package_marker;
+            package_marker.has_dictionary = self.has_dictionary_entry(&package_marker);
             self.append(
                 package_json.to_path_buf(),
                 StoreKind::Content,
@@ -928,6 +964,36 @@ impl WalkerState {
             .as_ref()
             .is_some_and(|name| self.public_packages.iter().any(|public| public == name))
     }
+
+    fn has_dictionary_entry(&self, marker: &Marker) -> bool {
+        marker
+            .package
+            .name
+            .as_deref()
+            .is_some_and(|name| self.lookup_dictionary(name).is_some())
+    }
+
+    fn lookup_dictionary(&self, package_name: &str) -> Option<DictionaryEntry> {
+        if self.no_dictionary.first().is_some_and(|name| name == "*") {
+            return None;
+        }
+        self.custom_dictionaries
+            .get(package_name)
+            .cloned()
+            .or_else(|| self.lookup_builtin_dictionary(package_name))
+    }
+
+    fn lookup_builtin_dictionary(&self, package_name: &str) -> Option<DictionaryEntry> {
+        let module_name = format!("{package_name}.js");
+        if self
+            .no_dictionary
+            .iter()
+            .any(|disabled| disabled == &module_name)
+        {
+            return None;
+        }
+        lookup_dictionary(package_name)
+    }
 }
 
 fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<PackageWarning> {
@@ -981,12 +1047,39 @@ pub fn walk(
         .or_else(|| entrypoint.parent().map(canonicalize_or_self))
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let mut state = WalkerState::new(root, params.public_toplevel, params.public_packages);
+    let custom_dictionaries = if params.no_dictionary.first().is_some_and(|name| name == "*") {
+        BTreeMap::new()
+    } else {
+        custom_dictionaries_from_marker(&marker)
+    };
+    let mut state = WalkerState::new(
+        root,
+        params.public_toplevel,
+        params.public_packages,
+        params.no_dictionary,
+        custom_dictionaries,
+    );
     state.append(entrypoint, StoreKind::Blob, marker.clone());
     if let Some(addition) = addition {
         state.append(canonicalize_or_self(&addition), StoreKind::Content, marker);
     }
     state.walk()
+}
+
+fn custom_dictionaries_from_marker(marker: &Marker) -> BTreeMap<String, DictionaryEntry> {
+    let mut dictionaries = BTreeMap::new();
+    let Some(pkg_config) = marker.package.pkg.as_ref() else {
+        return dictionaries;
+    };
+
+    for (name, value) in &pkg_config.dictionary {
+        let Ok(pkg) = serde_json::from_value::<crate::config::PkgConfig>(value.clone()) else {
+            continue;
+        };
+        dictionaries.insert(name.clone(), DictionaryEntry::with_pkg(pkg));
+    }
+
+    dictionaries
 }
 
 fn should_retag_blob_as_content(path: &Path) -> bool {
@@ -1371,14 +1464,7 @@ fn package_marker_for_file(
             }
             let body = read_to_string(&package_path)?;
             let package = PackageJson::parse(&body).map_err(package_error)?;
-            let mut marker = Marker::dependency(package, package_path);
-            marker.has_dictionary = marker
-                .package
-                .name
-                .as_deref()
-                .and_then(lookup_dictionary)
-                .is_some();
-            return Ok(Some(marker));
+            return Ok(Some(Marker::dependency(package, package_path)));
         }
         directory = candidate_dir.parent();
     }

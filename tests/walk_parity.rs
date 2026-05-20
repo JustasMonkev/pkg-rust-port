@@ -210,6 +210,54 @@ fn dictionary_packages_disclose_blob_source_like_js() -> Result<(), PkgError> {
 }
 
 #[test]
+fn no_dictionary_disables_builtin_dictionary_modules_by_filename() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-4");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let busboy_entrypoint = fixture_dir.join("node_modules/busboy/index.js");
+    let busboy_script = fixture_dir.join("node_modules/busboy/lib/types/test-y-require.js");
+    let log4js_entrypoint = fixture_dir.join("node_modules/log4js/index.js");
+    let log4js_script = fixture_dir.join("node_modules/log4js/lib/appenders/test-z-require.js");
+
+    let output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_no_dictionary(["busboy.js"]),
+    )?;
+
+    assert!(output.contains_store(&busboy_entrypoint, StoreKind::Blob));
+    assert!(!output.contains_store(&busboy_entrypoint, StoreKind::Content));
+    assert!(!output.contains_store(&busboy_script, StoreKind::Blob));
+    assert!(output.contains_store(&log4js_entrypoint, StoreKind::Blob));
+    assert!(output.contains_store(&log4js_entrypoint, StoreKind::Content));
+    assert!(output.contains_store(&log4js_script, StoreKind::Blob));
+    Ok(())
+}
+
+#[test]
+fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let dependency = fixture_dir.join("node_modules/crusader/index.js");
+    let package =
+        PackageJson::parse(r#"{"pkg":{"dictionary":{"crusader":{"scripts":["index.js"]}}}}"#)
+            .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+
+    let output = walk(
+        Marker::new(package),
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(&dependency, StoreKind::Blob));
+    assert!(output.contains_store(&dependency, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
 fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-require-with-config");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;

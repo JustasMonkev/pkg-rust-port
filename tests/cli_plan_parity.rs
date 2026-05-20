@@ -301,6 +301,46 @@ fn plans_public_package_wildcard_like_js() -> Result<(), Box<dyn std::error::Err
 }
 
 #[test]
+fn plans_disabled_dictionary_modules() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-no-dict");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("--no-dict"),
+        OsString::from("busboy.js,log4js.js"),
+        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+    ])?;
+
+    assert_eq!(plan.no_dictionary, vec!["busboy.js", "log4js.js"]);
+    Ok(())
+}
+
+#[test]
+fn plans_disabled_dictionary_wildcard_like_js() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-no-dict-wildcard");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("--no-dict"),
+        OsString::from("busboy.js,*,log4js.js"),
+        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+    ])?;
+
+    assert_eq!(plan.no_dictionary, vec!["*"]);
+    Ok(())
+}
+
+#[test]
 fn file_input_inside_package_keeps_package_directory_in_snapshot()
 -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan-package-file");

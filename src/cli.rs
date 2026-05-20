@@ -102,6 +102,8 @@ pub struct PackagePlan {
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
     pub public_packages: Vec<String>,
+    /// Built-in dictionary module filenames disabled for this package build.
+    pub no_dictionary: Vec<String>,
     /// Command-line options baked into the executable.
     pub bakes: Vec<String>,
     /// Output artifacts in target order.
@@ -310,6 +312,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .map(|option| format!("--{option}"))
         .collect();
     let public_packages = parse_public_packages(cli.public_packages.as_deref());
+    let no_dictionary = parse_dictionary_modules(cli.no_dict.as_deref());
 
     Ok(PackagePlan {
         input,
@@ -322,6 +325,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         bytecode: !cli.no_bytecode,
         public_toplevel: cli.public,
         public_packages,
+        no_dictionary,
         bakes,
         outputs,
     })
@@ -338,6 +342,23 @@ fn parse_public_packages(packages: Option<&str>) -> Vec<String> {
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
     if parsed.iter().any(|package| package == "*") {
+        vec!["*".to_owned()]
+    } else {
+        parsed
+    }
+}
+
+fn parse_dictionary_modules(modules: Option<&str>) -> Vec<String> {
+    let Some(modules) = modules else {
+        return Vec::new();
+    };
+    let parsed = modules
+        .split(',')
+        .map(str::trim)
+        .filter(|module| !module.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if parsed.iter().any(|module| module == "*") {
         vec!["*".to_owned()]
     } else {
         parsed
