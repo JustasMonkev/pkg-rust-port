@@ -34,6 +34,9 @@
 - Added typed Rust dictionary metadata for a batch of simple `pkg.scripts` and
   `pkg.assets` dictionary modules such as `body-parser`, `browserify`, `eslint`,
   `mongodb`, `svgo`, `uglify-js`, and `winston`.
+- Added typed Rust dictionary patch metadata for patch-only modules such as
+  `bunyan`, `cross-env`, `express-load`, `graceful-fs`, `mongodb-core`,
+  `socket.io`, `v8flags`, and `xlsx`.
 
 ### Behavior Changes
 

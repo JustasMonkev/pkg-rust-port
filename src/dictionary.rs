@@ -153,8 +153,16 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "browserify" => Some(assets(["bin/*.txt"])),
         "busboy" => Some(busboy()),
         "buffermaker" => Some(scripts(["lib/*.js"])),
+        "bunyan" => Some(patches(
+            "lib/bunyan.js",
+            serde_json::json!(["mv = require('mv' + '');", "mv = require('mv');"]),
+        )),
         "coffee-script" => Some(scripts(["lib/coffee-script/*.js"])),
         "compressjs" => Some(scripts(["lib/*.js"])),
+        "cross-env" => Some(patches(
+            "src/index.js",
+            serde_json::json!([{ "do": "erase" }, ""]),
+        )),
         "data-preflight" => Some(assets(["src/view/**/*", "src/js/view/**/*"])),
         "drivelist" => Some(drivelist()),
         "electron" => Some(electron()),
@@ -163,16 +171,56 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "exiftool.exe" => Some(exiftool_exe()),
         "exiftool.pl" => Some(exiftool_pl()),
         "express" => Some(express()),
+        "express-load" => Some(patches(
+            "lib/express-load.js",
+            serde_json::json!([
+                "entity = path.resolve(",
+                "entity = process.pkg.path.resolve("
+            ]),
+        )),
+        "graceful-fs" => Some(patches(
+            "graceful-fs.js",
+            serde_json::json!([
+                { "do": "prepend" },
+                "if ((function() {\n  var version = require('./package.json').version;\n  var major = parseInt(version.split('.')[0]);\n  if (major < 4) {\n    module.exports = require('fs');\n    return true;\n  }\n})()) return;\n"
+            ]),
+        )),
         "googleapis" => Some(scripts(["apis/**/*.js"])),
         "google-closure-compiler" => Some(google_closure_compiler()),
         "google-closure-compiler-java" => Some(google_closure_compiler_java()),
+        "j" => Some(patches(
+            "j.js",
+            serde_json::json!([
+                "require('xl'+'sx')",
+                "require('xlsx')",
+                "require('xl'+'sjs')",
+                "require('xlsjs')",
+                "require('ha'+'rb')",
+                "require('harb')"
+            ]),
+        )),
         "knex" => Some(scripts(["lib/**/*.js"])),
         "later" => Some(scripts(["later.js"])),
         "leveldown" => Some(leveldown()),
+        "liftoff" => Some(patches(
+            "index.js",
+            serde_json::json!([
+                "resolve.sync(this.moduleName, {basedir: configBase || cwd, paths: paths})",
+                "resolve.sync(this.moduleName, {basedir: configBase || require.main.filename, paths: paths})"
+            ]),
+        )),
         "logform" => Some(scripts(["*.js"])),
         "log4js" => Some(log4js()),
         "machinepack-urls" => Some(scripts(["machines/*.js"])),
+        "microjob" => Some(patches(
+            "dist/worker-pool.js",
+            serde_json::json!([
+                "error.stack = message.error.stack;",
+                "error.stack = message.error.stack;\nif (error.stack.indexOf(\"SyntaxError\") >= 0) {error.stack = \"Pkg: Try to specify your javascript file in 'assets' in config.\\n\" + error.stack;};"
+            ]),
+        )),
         "moment" => Some(scripts(["locale/*.js"])),
+        "mongodb-core" => Some(mongodb_core()),
         "mongodb" => Some(scripts(["lib/mongodb/**/*.js"])),
         "negotiator" => Some(scripts(["lib/*.js"])),
         "nightmare" => Some(nightmare()),
@@ -188,10 +236,24 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "pm2" => Some(scripts(["lib/ProcessContainerFork.js"])),
         "publicsuffixlist" => Some(publicsuffixlist()),
         "puppeteer" => Some(puppeteer()),
+        "rc" => Some(patches(
+            "lib/utils.js",
+            serde_json::json!([
+                "process.cwd()",
+                "require('path').dirname(require.main.filename)"
+            ]),
+        )),
         "reload" => Some(scripts(["lib/reload-server.js"])),
         "sequelize" => Some(sequelize()),
         "sharp" => Some(sharp()),
         "shelljs" => Some(scripts(["src/*.js"])),
+        "socket.io" => Some(patches(
+            "lib/index.js",
+            serde_json::json!([
+                "require.resolve('socket.io-client/dist/socket.io.js.map')",
+                "require.resolve('socket.io-client/dist/socket.io.js.map', 'must-exclude')"
+            ]),
+        )),
         "stylus" => Some(stylus()),
         "svgo" => Some(scripts_assets(
             ["lib/**/*.js", "plugins/*.js"],
@@ -200,7 +262,25 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "tiny-worker" => Some(assets(["lib/noop.js"])),
         "uglify-js" => Some(assets(["lib/**/*.js", "tools/*.js"])),
         "usage" => Some(scripts(["lib/providers/*.js"])),
+        "v8flags" => Some(patches(
+            "index.js",
+            serde_json::json!([
+                "execFile(process.execPath, ['--v8-options'],",
+                "execFile(process.execPath, ['--v8-options'], { env: { PKG_EXECPATH: 'PKG_INVOKE_NODEJS' } },"
+            ]),
+        )),
         "winston" => Some(scripts(["lib/winston/transports/*.js"])),
+        "xlsx" => Some(patches(
+            "xlsx.js",
+            serde_json::json!([
+                "require('js'+'zip')",
+                "require('jszip')",
+                "require('./js'+'zip')",
+                "require('./jszip')",
+                "require('./od' + 's')",
+                "require('./ods')"
+            ]),
+        )),
         "zeromq" => Some(zeromq()),
         _ => None,
     }
@@ -287,6 +367,15 @@ fn scripts_assets<const S: usize, const A: usize>(
     DictionaryEntry::with_pkg(PkgConfig {
         scripts: value_array(scripts),
         assets: value_array(assets),
+        ..PkgConfig::default()
+    })
+}
+
+fn patches(path: &str, operations: Value) -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(path.to_owned(), operations);
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
         ..PkgConfig::default()
     })
 }
@@ -445,6 +534,24 @@ fn google_closure_compiler_java() -> DictionaryEntry {
 
 fn log4js() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/appenders/*.js"]))
+}
+
+fn mongodb_core() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/error.js".to_owned(),
+        serde_json::json!([
+            "return err;",
+            "if (err.message.indexOf(\"SyntaxError\") >= 0) {err.message = \"Pkg: Try to specify your javascript file in 'assets' in config. \" + err.message;};\nreturn err;",
+            "if (Error.captureStackTrace) {",
+            "if (this.message.indexOf(\"SyntaxError\") >= 0) {this.message = \"Pkg: Try to specify your javascript file in 'assets' in config. \" + this.message;};\nif (Error.captureStackTrace) {"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        ..PkgConfig::default()
+    })
 }
 
 fn nightmare() -> DictionaryEntry {

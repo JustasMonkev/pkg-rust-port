@@ -108,6 +108,124 @@ fn svgo_dictionary_carries_script_and_asset_globs() -> Result<(), Box<dyn std::e
 }
 
 #[test]
+fn patch_only_dictionaries_carry_patch_operations() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            "bunyan",
+            "lib/bunyan.js",
+            json!(["mv = require('mv' + '');", "mv = require('mv');"]),
+        ),
+        ("cross-env", "src/index.js", json!([{ "do": "erase" }, ""])),
+        (
+            "express-load",
+            "lib/express-load.js",
+            json!([
+                "entity = path.resolve(",
+                "entity = process.pkg.path.resolve("
+            ]),
+        ),
+        (
+            "graceful-fs",
+            "graceful-fs.js",
+            json!([
+                { "do": "prepend" },
+                "if ((function() {\n  var version = require('./package.json').version;\n  var major = parseInt(version.split('.')[0]);\n  if (major < 4) {\n    module.exports = require('fs');\n    return true;\n  }\n})()) return;\n"
+            ]),
+        ),
+        (
+            "j",
+            "j.js",
+            json!([
+                "require('xl'+'sx')",
+                "require('xlsx')",
+                "require('xl'+'sjs')",
+                "require('xlsjs')",
+                "require('ha'+'rb')",
+                "require('harb')"
+            ]),
+        ),
+        (
+            "liftoff",
+            "index.js",
+            json!([
+                "resolve.sync(this.moduleName, {basedir: configBase || cwd, paths: paths})",
+                "resolve.sync(this.moduleName, {basedir: configBase || require.main.filename, paths: paths})"
+            ]),
+        ),
+        (
+            "microjob",
+            "dist/worker-pool.js",
+            json!([
+                "error.stack = message.error.stack;",
+                "error.stack = message.error.stack;\nif (error.stack.indexOf(\"SyntaxError\") >= 0) {error.stack = \"Pkg: Try to specify your javascript file in 'assets' in config.\\n\" + error.stack;};"
+            ]),
+        ),
+        (
+            "rc",
+            "lib/utils.js",
+            json!([
+                "process.cwd()",
+                "require('path').dirname(require.main.filename)"
+            ]),
+        ),
+        (
+            "socket.io",
+            "lib/index.js",
+            json!([
+                "require.resolve('socket.io-client/dist/socket.io.js.map')",
+                "require.resolve('socket.io-client/dist/socket.io.js.map', 'must-exclude')"
+            ]),
+        ),
+        (
+            "v8flags",
+            "index.js",
+            json!([
+                "execFile(process.execPath, ['--v8-options'],",
+                "execFile(process.execPath, ['--v8-options'], { env: { PKG_EXECPATH: 'PKG_INVOKE_NODEJS' } },"
+            ]),
+        ),
+        (
+            "xlsx",
+            "xlsx.js",
+            json!([
+                "require('js'+'zip')",
+                "require('jszip')",
+                "require('./js'+'zip')",
+                "require('./jszip')",
+                "require('./od' + 's')",
+                "require('./ods')"
+            ]),
+        ),
+    ];
+
+    for (name, patch_path, operations) in cases {
+        let entry = lookup_dictionary(name).ok_or("missing patch dictionary")?;
+        let config = entry.pkg.ok_or("missing patch pkg config")?;
+
+        assert_eq!(config.patches.get(patch_path), Some(&operations));
+    }
+    Ok(())
+}
+
+#[test]
+fn mongodb_core_dictionary_carries_error_patch_operations() -> Result<(), Box<dyn std::error::Error>>
+{
+    let entry = lookup_dictionary("mongodb-core").ok_or("missing mongodb-core dictionary")?;
+    let config = entry.pkg.ok_or("missing mongodb-core pkg config")?;
+    let patch = config
+        .patches
+        .get("lib/error.js")
+        .ok_or("missing mongodb-core patch")?;
+
+    assert_eq!(patch.as_array().map(Vec::len), Some(4));
+    assert_eq!(patch[0], "return err;");
+    assert!(patch[1].as_str().is_some_and(|item| {
+        item.contains("Pkg: Try to specify your javascript file in 'assets' in config.")
+    }));
+    Ok(())
+}
+
+#[test]
 fn stylus_dictionary_carries_asset_glob_and_log() -> Result<(), Box<dyn std::error::Error>> {
     let stylus = lookup_dictionary("stylus").ok_or("missing stylus dictionary")?;
 

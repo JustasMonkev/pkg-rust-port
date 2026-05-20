@@ -867,3 +867,11 @@ Shipped: ported a batch of behavior-bearing JS dictionary modules that only carr
 Next: continue dictionary parity for modules with patches and dependency mutations, then decide whether empty dictionary modules should become explicit no-op Rust entries or remain absent until a full dictionary coverage audit.
 
 Decisions made: use small private helpers for simple script/asset dictionary entries rather than adding one function per package. This keeps the data inert and typed while avoiding a large amount of repetitive boilerplate.
+
+## 2026-05-20 - Patch dictionary metadata batch shipped
+
+Shipped: ported a second dictionary batch for JS modules whose behavior is patch metadata rather than deploy files or native runtime setup. The Rust dictionary now exposes typed patch entries for `bunyan`, `cross-env`, `express-load`, `graceful-fs`, `j`, `liftoff`, `microjob`, `mongodb-core`, `rc`, `socket.io`, `v8flags`, and `xlsx`, with focused parity tests for the patch paths and operation arrays.
+
+Next: continue the remaining mixed dictionary modules that combine scripts/assets with patches (`exceljs`, `sails`, `steam-resources`, `umd`, and similar), then audit whether no-op dictionaries should be represented explicitly.
+
+Decisions made: keep patch operations as JSON values inside typed `PkgConfig` for now because the existing walker patch applier already consumes the same operation shape and supports string replacement plus object commands such as `erase` and `prepend`.
