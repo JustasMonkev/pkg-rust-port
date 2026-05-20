@@ -891,3 +891,11 @@ Shipped: audited every `dictionary/*.js` module, ported the remaining behavior-b
 Next: move dictionary status from broad coverage to consumer-path validation: exercise representative packages whose Rust dictionary metadata affects walker/runtime output, then continue with the remaining native/platform-specific smoke gaps.
 
 Decisions made: `grpc` carries only its asset globs in Rust because the JS walker ignores `pkg.files` inside dictionary `pkg` config; the exported `files: []` field has no observed walker behavior to port.
+
+## 2026-05-20 - Dictionary walker consumer path shipped
+
+Shipped: added a walker parity fixture for a synthetic `connect` dependency proving dictionary-provided script globs become blob records, asset globs become content records, dictionary packages disclose their entrypoint source, and `--no-dict connect.js` removes those dictionary effects.
+
+Next: continue consumer-path validation for patch/deploy-file dictionary entries where existing tests do not already exercise the activated walker behavior, then revisit native/platform-specific runtime smoke gaps.
+
+Decisions made: use a generated temporary fixture instead of changing JS fixtures so the Rust test can isolate the dictionary activation path without relying on npm-installed package contents.

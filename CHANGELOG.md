@@ -42,6 +42,8 @@
 - Completed typed Rust metadata coverage for the remaining behavior-bearing
   simple dictionary modules, including `aws-sdk`, `connect`, `grpc`, `pg`,
   `socket.io-client`, `tesseract.js`, and `webdriverio`.
+- Added walker-level parity coverage proving dictionary-provided script and
+  asset globs affect packaged records and still obey `--no-dict`.
 
 ### Behavior Changes
 

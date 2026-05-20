@@ -237,6 +237,61 @@ fn no_dictionary_disables_builtin_dictionary_modules_by_filename() -> Result<(),
 }
 
 #[test]
+fn dictionary_script_and_asset_globs_affect_walker_records()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = std::env::temp_dir().join(format!(
+        "pkg-rust-connect-dictionary-{}",
+        std::process::id()
+    ));
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    let package_dir = fixture_dir.join("node_modules/connect");
+    fs::create_dir_all(package_dir.join("lib/middleware"))?;
+    fs::create_dir_all(package_dir.join("lib/public"))?;
+    fs::write(fixture_dir.join("app.js"), "require('connect');\n")?;
+    fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"connect","main":"index.js"}"#,
+    )?;
+    fs::write(package_dir.join("index.js"), "module.exports = {};\n")?;
+    fs::write(
+        package_dir.join("lib/middleware/session.js"),
+        "module.exports = {};\n",
+    )?;
+    fs::write(package_dir.join("lib/public/logo.txt"), "asset\n")?;
+
+    let output = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    assert!(output.contains_store(
+        package_dir.join("lib/middleware/session.js"),
+        StoreKind::Blob
+    ));
+    assert!(output.contains_store(package_dir.join("lib/public/logo.txt"), StoreKind::Content));
+    assert!(output.contains_store(package_dir.join("index.js"), StoreKind::Content));
+
+    let disabled = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_no_dictionary(["connect.js"]),
+    )?;
+    assert!(!disabled.contains_store(
+        package_dir.join("lib/middleware/session.js"),
+        StoreKind::Blob
+    ));
+    assert!(!disabled.contains_store(package_dir.join("lib/public/logo.txt"), StoreKind::Content));
+    assert!(!disabled.contains_store(package_dir.join("index.js"), StoreKind::Content));
+
+    fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-public-packages");
     let entrypoint = fixture_dir.join("test-x-index.js");
