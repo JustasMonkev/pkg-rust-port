@@ -668,6 +668,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "pg-types@1.0.0.js",
             package_input: "pg-types@1.0.0.js",
         },
+        PublicNpmFixture {
+            name: "npm-node-zookeeper-client",
+            fixture_subdir: "node-zookeeper-client",
+            package_spec: "node-zookeeper-client",
+            node_input: "node-zookeeper-client.js",
+            package_input: "node-zookeeper-client.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

@@ -1237,3 +1237,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: keep the pinned `pg-types@1.0.0` coverage separate from the current-version fixture so any package-version drift is isolated to one verified slice.
+
+## 2026-05-20 - Node-zookeeper-client public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/node-zookeeper-client` fixture. The fixture checks client creation without connecting and depends on the dictionary-provided `lib/jute/specification.json` asset entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose `node-zookeeper-client` because it exercises a package-specific asset dictionary entry without native dependencies, custom CLI output, or pinned-version drift.

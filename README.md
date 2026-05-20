@@ -126,8 +126,9 @@ success depends on dictionary metadata, such as `connect`, `rc`, and
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, `compressjs`, `later`,
 `nconf`, `node-forge`, `oauth2orize`, `pgpass`, and `pg-types` /
-`pg-types@1.0.0`, dictionary asset/dependency-pruning packages such as
-`publicsuffixlist`, dictionary patch packages such as `graceful-fs` /
+`pg-types@1.0.0`, dictionary asset packages such as `node-zookeeper-client`,
+dictionary asset/dependency-pruning packages such as `publicsuffixlist`,
+dictionary patch packages such as `graceful-fs` /
 `graceful-fs@3.0.8`, and loader-heavy packages such as `logform` and
 `body-parser`:
 
