@@ -188,6 +188,28 @@ fn promisify_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn 
 }
 
 #[test]
+fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-inspect");
+    let Some(_run_result) = package_and_run_real_fixture_with_options(
+        "inspect",
+        &fixture_dir,
+        "test-x-index.js",
+        RealFixtureOptions {
+            run_args: &["--inspect"],
+            run_env: &[("PKG_EXECPATH", "PKG_INVOKE_NODEJS")],
+            run_expectation: RunExpectation::Code(9),
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+    Ok(())
+}
+
+#[test]
 fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
@@ -665,6 +687,7 @@ fn package_and_run_real_fixture_with_options(
     let run_result = Command::new(&output)
         .current_dir(fixture_dir)
         .args(options.run_args)
+        .envs(options.run_env.iter().copied())
         .output()?;
     fs::remove_file(output)?;
     match options.run_expectation {
@@ -680,6 +703,13 @@ fn package_and_run_real_fixture_with_options(
             String::from_utf8_lossy(&run_result.stdout),
             String::from_utf8_lossy(&run_result.stderr)
         ),
+        RunExpectation::Code(code) => assert_eq!(
+            run_result.status.code(),
+            Some(code),
+            "produced executable exited with unexpected status: {}{}",
+            String::from_utf8_lossy(&run_result.stdout),
+            String::from_utf8_lossy(&run_result.stderr)
+        ),
     }
     Ok(Some(run_result))
 }
@@ -688,6 +718,7 @@ struct RealFixtureOptions<'a> {
     package_args: &'a [&'a str],
     package_env: &'a [(&'a str, &'a str)],
     run_args: &'a [&'a str],
+    run_env: &'a [(&'a str, &'a str)],
     run_expectation: RunExpectation,
 }
 
@@ -697,6 +728,7 @@ impl RealFixtureOptions<'_> {
             package_args: &[],
             package_env: &[],
             run_args: &[],
+            run_env: &[],
             run_expectation: RunExpectation::Success,
         }
     }
@@ -705,6 +737,7 @@ impl RealFixtureOptions<'_> {
 enum RunExpectation {
     Success,
     Failure,
+    Code(i32),
 }
 
 fn real_output_path(name: &str) -> PathBuf {

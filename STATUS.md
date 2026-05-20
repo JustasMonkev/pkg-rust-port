@@ -659,3 +659,13 @@ Next: continue package/runtime fixtures with environment-specific behavior, then
 Decisions made: keep the oracle comparison at stdout level because the fixture already normalizes behavior through printed JSON and boolean results.
 
 Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
+
+## 2026-05-20 - Inspect runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-inspect`. The runtime smoke harness now supports run-time environment variables and exact exit-code assertions, and the inspect fixture checks the `--inspect`/`PKG_EXECPATH=PKG_INVOKE_NODEJS` exit-code contract.
+
+Next: continue environment-specific runtime fixtures, including signal and debug flows, then return to compression and larger package groups.
+
+Decisions made: represent exact process status as `RunExpectation::Code` instead of folding it into generic failure so fixtures can lock the JS suite's expected exit status.
+
+Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
