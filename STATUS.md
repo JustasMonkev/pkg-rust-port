@@ -569,3 +569,13 @@ Next: continue adding small real-runtime smoke fixtures that exercise already-po
 Decisions made: package-and-run smoke helpers now accept runtime arguments while keeping the existing no-argument helper as the default wrapper.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Modern JS runtime smoke fixtures locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-class-to-string`, `test-50-object-spread`, `test-50-for-await-of`, and `test-50-non-ascii`. Each fixture now packages through the Rust CLI and compares executable stdout against the Node oracle.
+
+Next: continue filling small `test-50` runtime smoke gaps, then move back to broader feature groups such as compression, mountpoints, and npm package fixtures.
+
+Decisions made: group syntax/runtime-only fixtures together because they all exercise the same already-ported packaging path and do not need fixture-specific assertions.
+
+Blockers worked around: none.
