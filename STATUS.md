@@ -875,3 +875,11 @@ Shipped: ported a second dictionary batch for JS modules whose behavior is patch
 Next: continue the remaining mixed dictionary modules that combine scripts/assets with patches (`exceljs`, `sails`, `steam-resources`, `umd`, and similar), then audit whether no-op dictionaries should be represented explicitly.
 
 Decisions made: keep patch operations as JSON values inside typed `PkgConfig` for now because the existing walker patch applier already consumes the same operation shape and supports string replacement plus object commands such as `erase` and `prepend`.
+
+## 2026-05-20 - Mixed dictionary metadata batch shipped
+
+Shipped: ported the remaining small mixed dictionary modules that combine config globs with patch metadata: `exceljs`, `sails`, `steam-resources`, and `umd`. The focused parity tests assert the script or asset globs plus primary and secondary patch entries, including the multi-patch Sails and Steam resources cases.
+
+Next: run a dictionary coverage audit against every `dictionary/*.js` module to separate explicit no-op entries from remaining behavior-bearing dictionaries with dependencies, assets, scripts, deploy files, or patches.
+
+Decisions made: keep these four as hand-written typed data because each has a distinct patch shape. A generator would hide reviewable behavior at this stage of the port.

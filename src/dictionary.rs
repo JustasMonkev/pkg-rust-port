@@ -166,6 +166,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "data-preflight" => Some(assets(["src/view/**/*", "src/js/view/**/*"])),
         "drivelist" => Some(drivelist()),
         "electron" => Some(electron()),
+        "exceljs" => Some(exceljs()),
         "errors" => Some(assets(["lib/static/*"])),
         "eslint" => Some(scripts(["lib/rules/*.js", "lib/formatters/*.js"])),
         "exiftool.exe" => Some(exiftool_exe()),
@@ -244,6 +245,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
             ]),
         )),
         "reload" => Some(scripts(["lib/reload-server.js"])),
+        "sails" => Some(sails()),
         "sequelize" => Some(sequelize()),
         "sharp" => Some(sharp()),
         "shelljs" => Some(scripts(["src/*.js"])),
@@ -254,12 +256,14 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "require.resolve('socket.io-client/dist/socket.io.js.map', 'must-exclude')"
             ]),
         )),
+        "steam-resources" => Some(steam_resources()),
         "stylus" => Some(stylus()),
         "svgo" => Some(scripts_assets(
             ["lib/**/*.js", "plugins/*.js"],
             [".svgo.yml"],
         )),
         "tiny-worker" => Some(assets(["lib/noop.js"])),
+        "umd" => Some(umd()),
         "uglify-js" => Some(assets(["lib/**/*.js", "tools/*.js"])),
         "usage" => Some(scripts(["lib/providers/*.js"])),
         "v8flags" => Some(patches(
@@ -442,6 +446,30 @@ fn electron() -> DictionaryEntry {
                 "node_modules/deep-defaults/index.js"
             ]
         ]),
+        ..PkgConfig::default()
+    })
+}
+
+fn exceljs() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/stream/xlsx/workbook-writer.js".to_owned(),
+        serde_json::json!([
+            "require.resolve('../../xlsx/xml/theme1.xml')",
+            "require('path').join(__dirname, '../../xlsx/xml/theme1.xml')"
+        ]),
+    );
+    patches.insert(
+        "lib/xlsx/xlsx.js".to_owned(),
+        serde_json::json!([
+            "require.resolve('./xml/theme1.xml')",
+            "require('path').join(__dirname, './xml/theme1.xml')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        assets: serde_json::json!(["lib/**/*.xml"]),
+        patches,
         ..PkgConfig::default()
     })
 }
@@ -723,6 +751,41 @@ fn puppeteer() -> DictionaryEntry {
     })
 }
 
+fn sails() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/hooks/moduleloader/index.js".to_owned(),
+        serde_json::json!(["require('coffee-script/register')", ""]),
+    );
+    patches.insert(
+        "lib/app/configuration/index.js".to_owned(),
+        serde_json::json!([
+            "hook = require(hookBundled);",
+            "hook = require(hookBundled);require('sails-hook-sockets');"
+        ]),
+    );
+    patches.insert(
+        "lib/hooks/grunt/index.js".to_owned(),
+        serde_json::json!([
+            "var child = ChildProcess.fork(",
+            "\nsails.log.warn('*******************************************************************');\nsails.log.warn('** Pkg: Grunt hook is temporarily disabled in pkg-ed app         **');\nsails.log.warn('** Instead it should be run before compilation to prepare files  **');\nsails.log.warn('*******************************************************************');\nsails.emit('hook:grunt:done');\nreturn cb_afterTaskStarted();("
+        ]),
+    );
+    patches.insert(
+        "lib/hooks/orm/backwards-compatibility/upgrade-datastore.js".to_owned(),
+        serde_json::json!([
+            "if (!fs.existsSync(modulePath)) {",
+            "try { require(modulePath); } catch (e) {"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        scripts: serde_json::json!(["lib/**/*.js"]),
+        patches,
+        ..PkgConfig::default()
+    })
+}
+
 fn sequelize() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/**/*.js"]))
 }
@@ -741,6 +804,49 @@ fn sharp() -> DictionaryEntry {
 fn stylus() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_assets(["lib/**/*.styl"]))
         .with_log(DictionaryLog::StylusResolveImports)
+}
+
+fn steam_resources() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "steam_language_parser/index.js".to_owned(),
+        serde_json::json!([
+            "process.chdir",
+            "// process.chdir",
+            "'steammsg.steamd'",
+            "require('path').join(__dirname, '../steam_language', 'steammsg.steamd')"
+        ]),
+    );
+    patches.insert(
+        "steam_language_parser/parser/token_analyzer.js".to_owned(),
+        serde_json::json!([
+            "text.value",
+            "require('path').join(__dirname, '../../steam_language', text.value)"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        assets: serde_json::json!(["steam_language/**/*"]),
+        patches,
+        ..PkgConfig::default()
+    })
+}
+
+fn umd() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "var rfile = require('rfile');",
+            "var rfile = function(f) { require('fs').readFileSync(require.resolve(f)); };"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        assets: serde_json::json!(["template.js"]),
+        patches,
+        ..PkgConfig::default()
+    })
 }
 
 fn zeromq() -> DictionaryEntry {

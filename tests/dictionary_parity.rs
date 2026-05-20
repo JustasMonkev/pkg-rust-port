@@ -226,6 +226,138 @@ fn mongodb_core_dictionary_carries_error_patch_operations() -> Result<(), Box<dy
 }
 
 #[test]
+fn mixed_dictionary_modules_carry_globs_and_patches() -> Result<(), Box<dyn std::error::Error>> {
+    struct Case {
+        name: &'static str,
+        scripts: Option<serde_json::Value>,
+        assets: Option<serde_json::Value>,
+        patch: (&'static str, serde_json::Value),
+    }
+
+    let cases = [
+        Case {
+            name: "exceljs",
+            scripts: None,
+            assets: Some(json!(["lib/**/*.xml"])),
+            patch: (
+                "lib/xlsx/xlsx.js",
+                json!([
+                    "require.resolve('./xml/theme1.xml')",
+                    "require('path').join(__dirname, './xml/theme1.xml')"
+                ]),
+            ),
+        },
+        Case {
+            name: "sails",
+            scripts: Some(json!(["lib/**/*.js"])),
+            assets: None,
+            patch: (
+                "lib/hooks/moduleloader/index.js",
+                json!(["require('coffee-script/register')", ""]),
+            ),
+        },
+        Case {
+            name: "steam-resources",
+            scripts: None,
+            assets: Some(json!(["steam_language/**/*"])),
+            patch: (
+                "steam_language_parser/parser/token_analyzer.js",
+                json!([
+                    "text.value",
+                    "require('path').join(__dirname, '../../steam_language', text.value)"
+                ]),
+            ),
+        },
+        Case {
+            name: "umd",
+            scripts: None,
+            assets: Some(json!(["template.js"])),
+            patch: (
+                "index.js",
+                json!([
+                    "var rfile = require('rfile');",
+                    "var rfile = function(f) { require('fs').readFileSync(require.resolve(f)); };"
+                ]),
+            ),
+        },
+    ];
+
+    for case in cases {
+        let entry = lookup_dictionary(case.name).ok_or("missing mixed dictionary")?;
+        let config = entry.pkg.ok_or("missing mixed pkg config")?;
+
+        if let Some(scripts) = case.scripts {
+            assert_eq!(config.scripts, scripts);
+        }
+        if let Some(assets) = case.assets {
+            assert_eq!(config.assets, assets);
+        }
+        assert_eq!(config.patches.get(case.patch.0), Some(&case.patch.1));
+    }
+    Ok(())
+}
+
+#[test]
+fn mixed_dictionary_modules_carry_secondary_patches() -> Result<(), Box<dyn std::error::Error>> {
+    let exceljs = lookup_dictionary("exceljs").ok_or("missing exceljs dictionary")?;
+    let exceljs_config = exceljs.pkg.ok_or("missing exceljs pkg config")?;
+    assert_eq!(
+        exceljs_config
+            .patches
+            .get("lib/stream/xlsx/workbook-writer.js"),
+        Some(&json!([
+            "require.resolve('../../xlsx/xml/theme1.xml')",
+            "require('path').join(__dirname, '../../xlsx/xml/theme1.xml')"
+        ]))
+    );
+
+    let sails = lookup_dictionary("sails").ok_or("missing sails dictionary")?;
+    let sails_config = sails.pkg.ok_or("missing sails pkg config")?;
+    assert_eq!(
+        sails_config.patches.get("lib/app/configuration/index.js"),
+        Some(&json!([
+            "hook = require(hookBundled);",
+            "hook = require(hookBundled);require('sails-hook-sockets');"
+        ]))
+    );
+    assert_eq!(
+        sails_config
+            .patches
+            .get("lib/hooks/orm/backwards-compatibility/upgrade-datastore.js"),
+        Some(&json!([
+            "if (!fs.existsSync(modulePath)) {",
+            "try { require(modulePath); } catch (e) {"
+        ]))
+    );
+    let grunt_patch = sails_config
+        .patches
+        .get("lib/hooks/grunt/index.js")
+        .ok_or("missing sails grunt patch")?;
+    assert_eq!(grunt_patch[0], "var child = ChildProcess.fork(");
+    assert!(
+        grunt_patch[1]
+            .as_str()
+            .is_some_and(|item| item.contains("Pkg: Grunt hook is temporarily disabled"))
+    );
+
+    let steam_resources =
+        lookup_dictionary("steam-resources").ok_or("missing steam-resources dictionary")?;
+    let steam_config = steam_resources
+        .pkg
+        .ok_or("missing steam-resources pkg config")?;
+    assert_eq!(
+        steam_config.patches.get("steam_language_parser/index.js"),
+        Some(&json!([
+            "process.chdir",
+            "// process.chdir",
+            "'steammsg.steamd'",
+            "require('path').join(__dirname, '../steam_language', 'steammsg.steamd')"
+        ]))
+    );
+    Ok(())
+}
+
+#[test]
 fn stylus_dictionary_carries_asset_glob_and_log() -> Result<(), Box<dyn std::error::Error>> {
     let stylus = lookup_dictionary("stylus").ok_or("missing stylus dictionary")?;
 

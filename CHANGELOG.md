@@ -37,6 +37,8 @@
 - Added typed Rust dictionary patch metadata for patch-only modules such as
   `bunyan`, `cross-env`, `express-load`, `graceful-fs`, `mongodb-core`,
   `socket.io`, `v8flags`, and `xlsx`.
+- Added typed Rust dictionary metadata for mixed script/asset plus patch modules
+  `exceljs`, `sails`, `steam-resources`, and `umd`.
 
 ### Behavior Changes
 
