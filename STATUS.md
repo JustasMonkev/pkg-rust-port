@@ -1267,3 +1267,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `pg` because it exercises another recursive script dictionary without native dependencies or custom CLI output. Do not add pinned `npm-registry-client@6.0.7` under the current Node runtime because the Node oracle itself fails before packaging with `primordials is not defined`.
+
+## 2026-05-20 - Mongodb public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/mongodb` fixture. The fixture checks the exported `MongoClient` API shape without connecting and depends on the dictionary-provided recursive `lib/mongodb/**/*.js` script glob.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `mongodb` because it exercises another recursive dictionary without native dependencies, custom CLI output, or external service calls. Do not add current `pg.js` or pinned `pg@6.4.1` under the current harness because their packaged stderr emitted transient `Buffer()` deprecation warnings that did not match the Node oracle. Do not add current `node-pre-gyp` because its Node oracle no longer emits the legacy success marker.

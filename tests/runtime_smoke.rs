@@ -689,6 +689,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "pg.js",
             package_input: "pg.js",
         },
+        PublicNpmFixture {
+            name: "npm-mongodb",
+            fixture_subdir: "mongodb",
+            package_spec: "mongodb",
+            node_input: "mongodb.js",
+            package_input: "mongodb.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
