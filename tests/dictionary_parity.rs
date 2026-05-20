@@ -37,6 +37,77 @@ fn dynamic_require_dictionaries_carry_script_globs() -> Result<(), Box<dyn std::
 }
 
 #[test]
+fn simple_script_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        ("blessed", json!(["lib/widgets/*.js"])),
+        ("body-parser", json!(["lib/types/*.js"])),
+        ("buffermaker", json!(["lib/*.js"])),
+        ("coffee-script", json!(["lib/coffee-script/*.js"])),
+        ("compressjs", json!(["lib/*.js"])),
+        ("eslint", json!(["lib/rules/*.js", "lib/formatters/*.js"])),
+        ("googleapis", json!(["apis/**/*.js"])),
+        ("knex", json!(["lib/**/*.js"])),
+        ("later", json!(["later.js"])),
+        ("logform", json!(["*.js"])),
+        ("machinepack-urls", json!(["machines/*.js"])),
+        ("moment", json!(["locale/*.js"])),
+        ("mongodb", json!(["lib/mongodb/**/*.js"])),
+        ("negotiator", json!(["lib/*.js"])),
+        ("npm", json!(["lib/*.js"])),
+        ("oauth2orize", json!(["lib/**/*.js"])),
+        ("pg.js", json!(["lib/**/*.js"])),
+        ("pgpass", json!(["lib/helper.js"])),
+        ("pm2", json!(["lib/ProcessContainerFork.js"])),
+        ("reload", json!(["lib/reload-server.js"])),
+        ("shelljs", json!(["src/*.js"])),
+        ("usage", json!(["lib/providers/*.js"])),
+        ("winston", json!(["lib/winston/transports/*.js"])),
+    ];
+
+    for (name, scripts) in cases {
+        let entry = lookup_dictionary(name).ok_or("missing script dictionary")?;
+
+        assert_eq!(entry.pkg.as_ref().map(|pkg| &pkg.scripts), Some(&scripts));
+    }
+    Ok(())
+}
+
+#[test]
+fn simple_asset_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        ("browserify", json!(["bin/*.txt"])),
+        (
+            "data-preflight",
+            json!(["src/view/**/*", "src/js/view/**/*"]),
+        ),
+        ("errors", json!(["lib/static/*"])),
+        (
+            "node-zookeeper-client",
+            json!(["lib/jute/specification.json"]),
+        ),
+        ("tiny-worker", json!(["lib/noop.js"])),
+        ("uglify-js", json!(["lib/**/*.js", "tools/*.js"])),
+    ];
+
+    for (name, assets) in cases {
+        let entry = lookup_dictionary(name).ok_or("missing asset dictionary")?;
+
+        assert_eq!(entry.pkg.as_ref().map(|pkg| &pkg.assets), Some(&assets));
+    }
+    Ok(())
+}
+
+#[test]
+fn svgo_dictionary_carries_script_and_asset_globs() -> Result<(), Box<dyn std::error::Error>> {
+    let entry = lookup_dictionary("svgo").ok_or("missing svgo dictionary")?;
+    let config = entry.pkg.ok_or("missing svgo pkg config")?;
+
+    assert_eq!(config.scripts, json!(["lib/**/*.js", "plugins/*.js"]));
+    assert_eq!(config.assets, json!([".svgo.yml"]));
+    Ok(())
+}
+
+#[test]
 fn stylus_dictionary_carries_asset_glob_and_log() -> Result<(), Box<dyn std::error::Error>> {
     let stylus = lookup_dictionary("stylus").ok_or("missing stylus dictionary")?;
 

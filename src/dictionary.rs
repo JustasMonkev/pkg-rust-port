@@ -148,26 +148,59 @@ pub enum DictionaryLog {
 #[must_use]
 pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
+        "blessed" => Some(scripts(["lib/widgets/*.js"])),
+        "body-parser" => Some(scripts(["lib/types/*.js"])),
+        "browserify" => Some(assets(["bin/*.txt"])),
         "busboy" => Some(busboy()),
+        "buffermaker" => Some(scripts(["lib/*.js"])),
+        "coffee-script" => Some(scripts(["lib/coffee-script/*.js"])),
+        "compressjs" => Some(scripts(["lib/*.js"])),
+        "data-preflight" => Some(assets(["src/view/**/*", "src/js/view/**/*"])),
         "drivelist" => Some(drivelist()),
         "electron" => Some(electron()),
+        "errors" => Some(assets(["lib/static/*"])),
+        "eslint" => Some(scripts(["lib/rules/*.js", "lib/formatters/*.js"])),
         "exiftool.exe" => Some(exiftool_exe()),
         "exiftool.pl" => Some(exiftool_pl()),
         "express" => Some(express()),
+        "googleapis" => Some(scripts(["apis/**/*.js"])),
         "google-closure-compiler" => Some(google_closure_compiler()),
         "google-closure-compiler-java" => Some(google_closure_compiler_java()),
+        "knex" => Some(scripts(["lib/**/*.js"])),
+        "later" => Some(scripts(["later.js"])),
         "leveldown" => Some(leveldown()),
+        "logform" => Some(scripts(["*.js"])),
         "log4js" => Some(log4js()),
+        "machinepack-urls" => Some(scripts(["machines/*.js"])),
+        "moment" => Some(scripts(["locale/*.js"])),
+        "mongodb" => Some(scripts(["lib/mongodb/**/*.js"])),
+        "negotiator" => Some(scripts(["lib/*.js"])),
         "nightmare" => Some(nightmare()),
+        "node-zookeeper-client" => Some(assets(["lib/jute/specification.json"])),
         "node-notifier" => Some(node_notifier()),
+        "npm" => Some(scripts(["lib/*.js"])),
+        "oauth2orize" => Some(scripts(["lib/**/*.js"])),
         "open" | "opn" => Some(open()),
         "phantom" => Some(phantom()),
         "phantomjs-prebuilt" => Some(phantomjs_prebuilt()),
+        "pg.js" => Some(scripts(["lib/**/*.js"])),
+        "pgpass" => Some(scripts(["lib/helper.js"])),
+        "pm2" => Some(scripts(["lib/ProcessContainerFork.js"])),
         "publicsuffixlist" => Some(publicsuffixlist()),
         "puppeteer" => Some(puppeteer()),
+        "reload" => Some(scripts(["lib/reload-server.js"])),
         "sequelize" => Some(sequelize()),
         "sharp" => Some(sharp()),
+        "shelljs" => Some(scripts(["src/*.js"])),
         "stylus" => Some(stylus()),
+        "svgo" => Some(scripts_assets(
+            ["lib/**/*.js", "plugins/*.js"],
+            [".svgo.yml"],
+        )),
+        "tiny-worker" => Some(assets(["lib/noop.js"])),
+        "uglify-js" => Some(assets(["lib/**/*.js", "tools/*.js"])),
+        "usage" => Some(scripts(["lib/providers/*.js"])),
+        "winston" => Some(scripts(["lib/winston/transports/*.js"])),
         "zeromq" => Some(zeromq()),
         _ => None,
     }
@@ -237,6 +270,34 @@ fn dependency_value_is_active(value: &Value) -> bool {
         Value::String(value) => !value.is_empty(),
         Value::Array(_) | Value::Object(_) | Value::Bool(true) => true,
     }
+}
+
+fn scripts<const N: usize>(scripts: [&str; N]) -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig::with_scripts(scripts))
+}
+
+fn assets<const N: usize>(assets: [&str; N]) -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig::with_assets(assets))
+}
+
+fn scripts_assets<const S: usize, const A: usize>(
+    scripts: [&str; S],
+    assets: [&str; A],
+) -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig {
+        scripts: value_array(scripts),
+        assets: value_array(assets),
+        ..PkgConfig::default()
+    })
+}
+
+fn value_array<const N: usize>(values: [&str; N]) -> Value {
+    Value::Array(
+        values
+            .into_iter()
+            .map(|value| Value::String(value.to_owned()))
+            .collect(),
+    )
 }
 
 fn busboy() -> DictionaryEntry {

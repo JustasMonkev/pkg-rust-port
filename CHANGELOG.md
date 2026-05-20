@@ -31,6 +31,9 @@
 - Added opt-in npm-install real-runtime smoke coverage for the Express/Pug
   issue `#1192` fixture across None/GZip/Brotli package modes.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
+- Added typed Rust dictionary metadata for a batch of simple `pkg.scripts` and
+  `pkg.assets` dictionary modules such as `body-parser`, `browserify`, `eslint`,
+  `mongodb`, `svgo`, `uglify-js`, and `winston`.
 
 ### Behavior Changes
 

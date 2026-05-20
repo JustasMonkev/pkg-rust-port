@@ -859,3 +859,11 @@ Shipped: probed the remaining `test-99-#1191` better-sqlite3 fixture in a copied
 Next: defer `#1191` runtime proof until the harness can install or run native dependencies against a compatible Node target, or until CI provides a known-good native prebuild/build environment. Continue with fixture-level planning/parity that does not depend on host-native addon compilation.
 
 Decisions made: do not add a gated `#1191` smoke until the native dependency setup itself is reproducible; a test that cannot establish the plain Node oracle would not be useful Rust-port evidence.
+
+## 2026-05-20 - Simple dictionary metadata batch shipped
+
+Shipped: ported a batch of behavior-bearing JS dictionary modules that only carry `pkg.scripts` and/or `pkg.assets` metadata. The Rust dictionary now exposes typed entries for `blessed`, `body-parser`, `browserify`, `buffermaker`, `coffee-script`, `compressjs`, `data-preflight`, `errors`, `eslint`, `googleapis`, `knex`, `later`, `logform`, `machinepack-urls`, `moment`, `mongodb`, `negotiator`, `node-zookeeper-client`, `npm`, `oauth2orize`, `pg.js`, `pgpass`, `pm2`, `reload`, `shelljs`, `svgo`, `tiny-worker`, `uglify-js`, `usage`, and `winston`, with focused parity tests against the JS dictionary file contents.
+
+Next: continue dictionary parity for modules with patches and dependency mutations, then decide whether empty dictionary modules should become explicit no-op Rust entries or remain absent until a full dictionary coverage audit.
+
+Decisions made: use small private helpers for simple script/asset dictionary entries rather than adding one function per package. This keeps the data inert and typed while avoiding a large amount of repetitive boilerplate.
