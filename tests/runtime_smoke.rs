@@ -514,6 +514,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "log4js@0.5.8.js",
             package_input: "log4js@0.5.8.js",
         },
+        PublicNpmFixture {
+            name: "npm-log4js-0-6-34",
+            fixture_subdir: "log4js",
+            package_spec: "log4js@0.6.34",
+            node_input: "log4js@0.6.34.js",
+            package_input: "log4js@0.6.34.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

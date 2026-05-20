@@ -1027,3 +1027,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the pinned original 
 Next: continue expanding deterministic non-native public npm fixtures, favoring cases that directly exercise dictionary scripts, assets, or patches before moving into deploy-file and native-package gates.
 
 Decisions made: add the pinned legacy `log4js` path before the current package path because `loadAppender('file')` directly proves the appender dictionary behavior while staying registry-only and non-native.
+
+## 2026-05-20 - Log4js 0.6 public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/log4js@0.6.34` fixture. The fixture reuses the legacy appender-loader check while installing the newer 0.6 package shape, keeping coverage on dictionary-provided `lib/appenders/*.js` scripts.
+
+Next: continue with the remaining deterministic non-native public npm fixtures, including the last legacy `log4js` wrapper, before moving into deploy-file and native-package gates.
+
+Decisions made: add only one additional `log4js` version in this slice so any package-shape regression remains easy to isolate.
