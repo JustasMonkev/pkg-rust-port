@@ -1277,3 +1277,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `mongodb` because it exercises another recursive dictionary without native dependencies, custom CLI output, or external service calls. Do not add current `pg.js` or pinned `pg@6.4.1` under the current harness because their packaged stderr emitted transient `Buffer()` deprecation warnings that did not match the Node oracle. Do not add current `node-pre-gyp` because its Node oracle no longer emits the legacy success marker.
+
+## 2026-05-20 - Mongodb-core public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/mongodb-core` fixture. The fixture checks the exported `Server` API shape and depends on the dictionary-provided `lib/error.js` patch metadata.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `mongodb-core` before the pinned `mongodb-core@1.0.5` fixture because it exercises patch-only dictionary behavior without adding pinned-version drift to this slice.

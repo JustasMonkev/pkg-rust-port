@@ -696,6 +696,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "mongodb.js",
             package_input: "mongodb.js",
         },
+        PublicNpmFixture {
+            name: "npm-mongodb-core",
+            fixture_subdir: "mongodb-core",
+            package_spec: "mongodb-core",
+            node_input: "mongodb-core.js",
+            package_input: "mongodb-core.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
