@@ -724,6 +724,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "steam-crypto.js",
             package_input: "steam-crypto.js",
         },
+        PublicNpmFixture {
+            name: "npm-tinify",
+            fixture_subdir: "tinify",
+            package_spec: "tinify",
+            node_input: "tinify.js",
+            package_input: "tinify.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
