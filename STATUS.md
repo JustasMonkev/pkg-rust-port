@@ -835,3 +835,11 @@ Shipped: added gated real-runtime smoke coverage for `test-99-#775`, including b
 Next: continue remaining `test-99-*` fixtures that need external installs (`#1135`, `#1191`, `#1192`) or platform-specific handling (`#1207`, `#1861`).
 
 Decisions made: keep this as runtime coverage because the existing detector/config paths already include the worker child script; the new executable proof guards the issue regression without broadening production logic.
+
+## 2026-05-20 - Portable real-runtime CI smoke shipped
+
+Shipped: added `PKG_RUST_REAL_TARGET` support to the runtime smoke harness while preserving the local default `node18-macos-x64`. The Rust CI workflow now has a dedicated Ubuntu real-runtime smoke job that uses `node18-linux-x64`, caches `.pkg-rust-real-cache`, and runs `cargo test --test runtime_smoke -- --nocapture`. Documentation now shows both the local cache command and the Linux target override, and the local cache directory is ignored.
+
+Next: continue the remaining external-install and Windows-specific issue fixtures, then decide how much native package setup belongs in CI versus local gated smoke.
+
+Decisions made: keep the main Rust matrix free of large binary downloads, and put executable-level proof in a separate job with an explicit cache and target. This preserves fast unit/parity gates while making the real runtime smoke portable beyond this machine.

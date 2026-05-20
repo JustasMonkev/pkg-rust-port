@@ -6,6 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const DEFAULT_REAL_TARGET: &str = "node18-macos-x64";
+
 #[test]
 fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -822,6 +824,8 @@ fn package_and_run_real_fixture_with_options(
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
         return Ok(None);
     };
+    let target =
+        std::env::var("PKG_RUST_REAL_TARGET").unwrap_or_else(|_| DEFAULT_REAL_TARGET.to_owned());
 
     let output = if options.run_from_output_dir || options.prepare_output_dir.is_some() {
         real_output_dir(name).join("test-output")
@@ -834,7 +838,7 @@ fn package_and_run_real_fixture_with_options(
         .envs(options.package_env.iter().copied())
         .args(options.package_args)
         .arg("--target")
-        .arg("node18-macos-x64")
+        .arg(&target)
         .arg("--output")
         .arg(&output)
         .arg(input)

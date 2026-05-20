@@ -4,8 +4,6 @@ Items parked until JS parity is complete.
 
 - Replace the interim host-node bytecode fallback with target-binary-only
   fabrication once all provider paths and signing requirements are covered.
-- Add portable CI coverage for the real runtime smoke by seeding a small
-  verified pkg-fetch cache artifact or running a dedicated network-enabled job.
 - Add real macOS signing smoke coverage with an actual cached Mach-O base
   binary and available signing tools.
 - Expand real native npm fixture coverage now that cached prebuild selection

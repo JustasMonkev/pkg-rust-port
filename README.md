@@ -91,9 +91,19 @@ cargo build --release --locked
 The release profile strips symbols. On this machine, a warm-cache release
 rebuild completed in `0.13s` with `target/release/pkg` already stripped.
 
-To run the real JS API happy-path smoke after seeding a cache:
+To run the real runtime smoke after seeding a cache:
 
 ```sh
 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
-  cargo test js_api_happy_path_demo_runs_when_real_cache_is_configured -- --nocapture
+  cargo test --test runtime_smoke -- --nocapture
+```
+
+The smoke target defaults to `node18-macos-x64` for this local Apple-silicon
+workspace. Set `PKG_RUST_REAL_TARGET=node18-linux-x64` on Linux runners; the CI
+workflow uses that target and caches `.pkg-rust-real-cache`.
+
+```sh
+PKG_RUST_REAL_CACHE=.pkg-rust-real-cache \
+PKG_RUST_REAL_TARGET=node18-linux-x64 \
+  cargo test --test runtime_smoke -- --nocapture
 ```

@@ -36,3 +36,26 @@ jobs:
       - run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+
+  real-runtime-smoke:
+    name: Real runtime smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust-port
+    env:
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/rust-port/.pkg-rust-real-cache
+      PKG_RUST_REAL_TARGET: node18-linux-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-port
+      - uses: actions/cache@v4
+        with:
+          path: rust-port/.pkg-rust-real-cache
+          key: pkg-fetch-v3.5-node18-linux-x64
+      - run: cargo test --test runtime_smoke -- --nocapture
