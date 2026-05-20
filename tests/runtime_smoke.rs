@@ -535,6 +535,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "negotiator.js",
             package_input: "negotiator.js",
         },
+        PublicNpmFixture {
+            name: "npm-negotiator-0-4-9",
+            fixture_subdir: "negotiator",
+            package_spec: "negotiator@0.4.9",
+            node_input: "negotiator@0.4.9.js",
+            package_input: "negotiator@0.4.9.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

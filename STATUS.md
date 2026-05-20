@@ -1051,3 +1051,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the original `test-7
 Next: continue adding deterministic non-native public npm fixtures that exercise typed dictionary metadata, with pinned wrappers kept as separate slices.
 
 Decisions made: start with the current `negotiator` package because the original fixture has a small stable API assertion and no native install or deploy-file requirements.
+
+## 2026-05-20 - Negotiator legacy public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/negotiator@0.4.9` fixture. The wrapper reuses the media type negotiation check while installing the older package shape, keeping coverage on dictionary-provided `lib/*.js` parser modules.
+
+Next: continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches, and keep native/deploy-file cases behind their separate gates.
+
+Decisions made: keep the pinned negotiator wrapper separate from the current package slice so package-version regressions stay isolated.

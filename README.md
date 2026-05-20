@@ -121,8 +121,9 @@ The same gate also covers selected public `test-79-npm` package fixtures whose
 success depends on dictionary metadata, such as `connect`, `rc`, and
 `moment`, plus pinned legacy package shapes such as `uglify-js@2.7.5` and
 `body-parser@1.10.2`, appender-loader packages such as `log4js@0.5.8` /
-`log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator`, and
-loader-heavy packages such as `logform` and `body-parser`:
+`log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator` /
+`negotiator@0.4.9`, and loader-heavy packages such as `logform` and
+`body-parser`:
 
 ```sh
 PKG_RUST_INSTALL_NPM_FIXTURES=1 \
