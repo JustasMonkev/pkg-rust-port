@@ -62,7 +62,7 @@
   `log4js@0.6.34` / `log4js@1.1.1`, `negotiator`, and pinned
   `negotiator@0.4.9`, plus `machinepack-urls`, pinned
   `machinepack-urls@5.0.0`, `shelljs`, and pinned `shelljs@0.7.6` /
-  `shelljs@0.6.0`.
+  `shelljs@0.6.0` / `shelljs@0.1.4`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,

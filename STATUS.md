@@ -1068,11 +1068,13 @@ Next: continue adding deterministic non-native public npm fixtures that exercise
 
 Decisions made: start with the current package fixture because it has a small stable CommonJS surface and no native install or deploy-file requirements.
 
-## 2026-05-20 - Machinepack URLs legacy public npm smoke pending focused verification
+## 2026-05-20 - Machinepack URLs legacy public npm smoke
 
-Added: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/machinepack-urls@5.0.0` fixture. The fixture installs the older package shape, checks the validator function surface, and keeps coverage on dictionary-provided `machines/*.js` modules.
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/machinepack-urls@5.0.0` fixture. The fixture installs the older package shape, checks the validator function surface, and keeps coverage on dictionary-provided `machines/*.js` modules.
 
-Next: run the focused public npm smoke with fixture installation enabled, then commit this slice if it passes. After that, continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches before moving into native/deploy-file gates.
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches before moving into native/deploy-file gates.
 
 Decisions made: keep the pinned machinepack variant separate from the current package slice so package-version drift remains easy to isolate.
 
@@ -1105,3 +1107,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: evaluate the remaining older ShellJS pin independently.
 
 Decisions made: keep `shelljs@0.6.0` separate from adjacent ShellJS pins so regressions in older layouts remain traceable to one version.
+
+## 2026-05-20 - ShellJS 0.1.4 public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned `test-79-npm/shelljs@0.1.4` fixture. The fixture reuses the ShellJS `shell.exec()` oracle while installing the oldest ShellJS package layout covered by the original npm test.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: move on to another deterministic non-native dictionary fixture family.
+
+Decisions made: add the oldest ShellJS pin last so the current, 0.7, and 0.6 package layouts are already proven before testing the most divergent legacy version.
