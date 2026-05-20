@@ -96,3 +96,23 @@ fn express_dictionary_carries_patch_pairs() -> Result<(), Box<dyn std::error::Er
 fn opn_alias_uses_open_dictionary_entry() {
     assert_eq!(lookup_dictionary("opn"), lookup_dictionary("open"));
 }
+
+#[test]
+fn open_dictionary_carries_xdg_open_patch_and_deploy_file() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut package = PackageJson::parse(r#"{"name":"open"}"#)?;
+    let entry = lookup_dictionary("open").ok_or("missing open dictionary")?;
+
+    apply_dictionary_entry(&mut package, &entry);
+
+    let config = package.pkg.ok_or("missing open pkg config")?;
+    assert_eq!(config.deploy_files, json!([["xdg-open", "xdg-open"]]));
+    assert_eq!(
+        config.patches.get("index.js"),
+        Some(&json!([
+            "path.join(__dirname, 'xdg-open')",
+            "path.join(path.dirname(process.execPath), 'xdg-open')"
+        ]))
+    );
+    Ok(())
+}

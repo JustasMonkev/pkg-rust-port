@@ -719,3 +719,13 @@ Next: continue environment-specific runtime fixtures, including signal and debug
 Decisions made: represent exact process status as `RunExpectation::Code` instead of folding it into generic failure so fixtures can lock the JS suite's expected exit status.
 
 Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
+
+## 2026-05-20 - Open dictionary deploy metadata shipped
+
+Shipped: ported the `open`/`opn` dictionary entry from an empty alias into typed Rust data carrying the JS `xdg-open` patch and `deployFiles` metadata. Added dictionary parity coverage and walker coverage proving dictionary-sourced deploy files emit the same external-distribution warning path as package config deploy files.
+
+Next: continue npm fixture parity for the remaining deploy-file dictionaries, especially directory-style entries such as `leveldown`, `puppeteer`, and `zeromq`, then wire any needed fixture-harness copying behavior.
+
+Decisions made: keep dictionary deploy metadata inside `PkgConfig` so the existing activation path registers patches and warnings uniformly for package config, built-in dictionaries, and root `pkg.dictionary` overrides.
+
+Blockers worked around: this slice still does not copy deploy files beside produced executables; it locks the metadata and warning boundary first.

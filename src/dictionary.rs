@@ -252,7 +252,20 @@ fn log4js() -> DictionaryEntry {
 }
 
 fn open() -> DictionaryEntry {
-    DictionaryEntry::empty()
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, 'xdg-open')",
+            "path.join(path.dirname(process.execPath), 'xdg-open')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["xdg-open", "xdg-open"]]),
+        ..PkgConfig::default()
+    })
 }
 
 fn publicsuffixlist() -> DictionaryEntry {

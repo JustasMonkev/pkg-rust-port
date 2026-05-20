@@ -342,6 +342,31 @@ fn deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
 }
 
 #[test]
+fn dictionary_deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let package = PackageJson::parse(r#"{"name":"open"}"#)
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::with_package_path(package, fixture_dir.join("package.json")),
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let warnings = output
+        .warnings
+        .iter()
+        .map(rendered_warning)
+        .collect::<Vec<_>>();
+
+    assert!(warnings.iter().any(|warning| {
+        warning.contains("Cannot include file")
+            && warning.contains("xdg-open")
+            && warning.contains("path-to-executable/xdg-open")
+    }));
+    Ok(())
+}
+
+#[test]
 fn records_may_exclude_and_malformed_diagnostics_in_js_order() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-may-exclude-must-exclude");
     let output = walk(
