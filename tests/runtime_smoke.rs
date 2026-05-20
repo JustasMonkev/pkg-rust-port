@@ -675,6 +675,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "node-zookeeper-client.js",
             package_input: "node-zookeeper-client.js",
         },
+        PublicNpmFixture {
+            name: "npm-npm-registry-client",
+            fixture_subdir: "npm-registry-client",
+            package_spec: "npm-registry-client",
+            node_input: "npm-registry-client.js",
+            package_input: "npm-registry-client.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
