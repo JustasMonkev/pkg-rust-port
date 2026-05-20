@@ -127,10 +127,10 @@ dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, `compressjs`, `later`,
 `mongodb`, `mongodb-core`, `nconf`, `node-forge`, `npm-registry-client`,
 `oauth2orize`, `pg`, `pgpass`, and `pg-types` / `pg-types@1.0.0`, dictionary
-asset packages such as `errors` and `node-zookeeper-client`, dictionary
-asset/dependency-pruning packages such as `publicsuffixlist`, patch packages
-such as `graceful-fs` / `graceful-fs@3.0.8`, and loader-heavy packages such as
-`logform` and
+asset packages such as `errors`, `geoip-lite`, and `node-zookeeper-client`,
+dictionary asset/dependency-pruning packages such as `publicsuffixlist`, patch
+packages such as `graceful-fs` / `graceful-fs@3.0.8`, and loader-heavy
+packages such as `logform` and
 `body-parser`:
 
 ```sh

@@ -710,6 +710,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "errors.js",
             package_input: "errors.js",
         },
+        PublicNpmFixture {
+            name: "npm-geoip-lite",
+            fixture_subdir: "geoip-lite",
+            package_spec: "geoip-lite",
+            node_input: "geoip-lite.js",
+            package_input: "geoip-lite.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

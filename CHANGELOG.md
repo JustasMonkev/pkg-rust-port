@@ -63,10 +63,10 @@
   `negotiator@0.4.9`, plus `machinepack-urls`, pinned
   `machinepack-urls@5.0.0`, `shelljs`, pinned `shelljs@0.7.6` /
   `shelljs@0.6.0` / `shelljs@0.1.4`, `graceful-fs`, pinned
-  `graceful-fs@3.0.8`, `buffermaker`, `compressjs`, `errors`, `later`,
-  `nconf`, `node-forge`, `node-zookeeper-client`, `npm-registry-client`,
-  `mongodb`, `mongodb-core`, `oauth2orize`, `pg`, `pgpass`, `pg-types`,
-  pinned `pg-types@1.0.0`, and `publicsuffixlist`.
+  `graceful-fs@3.0.8`, `buffermaker`, `compressjs`, `errors`,
+  `geoip-lite`, `later`, `nconf`, `node-forge`, `node-zookeeper-client`,
+  `npm-registry-client`, `mongodb`, `mongodb-core`, `oauth2orize`, `pg`,
+  `pgpass`, `pg-types`, pinned `pg-types@1.0.0`, and `publicsuffixlist`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,
