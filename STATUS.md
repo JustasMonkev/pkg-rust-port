@@ -931,3 +931,11 @@ Shipped: added a dedicated `windows-latest` Rust-port CI job that runs only `win
 Next: inspect the first Windows CI result when available and fix any true platform gap it exposes; otherwise return to native npm fixture gaps such as `#1135` and `#1191`.
 
 Decisions made: keep this separate from the full Linux real-runtime smoke because the Windows fixtures need `subst`/`cmd.exe` and should not make the broader runtime matrix platform-dependent.
+
+## 2026-05-20 - Native npm issue smoke gate shipped
+
+Shipped: added a separate opt-in native npm fixture smoke for `test-99-#1135` (`canvas`) and `test-99-#1191` (`better-sqlite3`). The smoke copies each fixture, runs `npm install` with install scripts enabled, requires the plain Node oracle to pass, then packages and compares the produced executable output; `#1191` is checked with both uncompressed and Brotli outputs.
+
+Next: run this gate in an environment where the native dependencies can install for the selected Node target, then address any real Rust packaging/native-addon gap it exposes.
+
+Decisions made: use a new `PKG_RUST_NATIVE_NPM_FIXTURES` gate rather than folding these into the existing npm smoke, because these fixtures are invalid evidence unless native install and the plain Node oracle both work first.

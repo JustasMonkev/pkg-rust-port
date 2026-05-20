@@ -428,6 +428,110 @@ fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+#[test]
+fn native_npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>>
+{
+    if !native_npm_fixture_installs_enabled() {
+        eprintln!("skipping native npm fixture smoke: PKG_RUST_NATIVE_NPM_FIXTURES is not enabled");
+        return Ok(());
+    }
+    if std::env::var_os("PKG_RUST_REAL_CACHE").is_none() {
+        eprintln!("skipping native npm fixture smoke: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    }
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    run_native_npm_issue_1135(&root)?;
+    run_native_npm_issue_1191(&root)?;
+    Ok(())
+}
+
+fn run_native_npm_issue_1135(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let source = root.join("test-99-#1135");
+    let fixture_dir = copied_fixture("issue-1135-canvas-work", &source)?;
+    install_npm_dependencies(&fixture_dir)?;
+
+    let expected = run_node_oracle(&fixture_dir, "index.js")?;
+    let Some(package_run) =
+        package_and_run_real_fixture("issue-1135-canvas", &fixture_dir, "package.json")?
+    else {
+        fs::remove_dir_all(fixture_dir)?;
+        return Ok(());
+    };
+    assert_eq!(package_run.run.stdout, expected.stdout);
+    assert_eq!(package_run.run.stderr, expected.stderr);
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+fn run_native_npm_issue_1191(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let source = root.join("test-99-#1191");
+    let fixture_dir = copied_fixture("issue-1191-better-sqlite3-work", &source)?;
+    install_npm_dependencies(&fixture_dir)?;
+
+    let expected = run_node_oracle(&fixture_dir, "index.js")?;
+    for (name, package_args) in [
+        ("issue-1191-better-sqlite3", &[][..]),
+        (
+            "issue-1191-better-sqlite3-brotli",
+            &["--compress", "Brotli"][..],
+        ),
+    ] {
+        let Some(package_run) = package_and_run_real_fixture_with_options(
+            name,
+            &fixture_dir,
+            "index.js",
+            RealFixtureOptions {
+                package_args,
+                ..RealFixtureOptions::success()
+            },
+        )?
+        else {
+            fs::remove_dir_all(fixture_dir)?;
+            return Ok(());
+        };
+        assert_eq!(package_run.run.stdout, expected.stdout);
+        assert_eq!(package_run.run.stderr, expected.stderr);
+    }
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+fn install_npm_dependencies(fixture_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let install = Command::new("npm")
+        .current_dir(fixture_dir)
+        .args(["install", "--no-audit", "--no-fund"])
+        .output()?;
+    assert!(
+        install.status.success(),
+        "npm install failed in {}: {}{}",
+        fixture_dir.display(),
+        String::from_utf8_lossy(&install.stdout),
+        String::from_utf8_lossy(&install.stderr)
+    );
+    Ok(())
+}
+
+fn run_node_oracle(
+    fixture_dir: &Path,
+    input: &str,
+) -> Result<std::process::Output, Box<dyn std::error::Error>> {
+    let expected = Command::new("node")
+        .current_dir(fixture_dir)
+        .arg(input)
+        .output()?;
+    assert!(
+        expected.status.success(),
+        "node oracle failed in {}: {}{}",
+        fixture_dir.display(),
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+    Ok(expected)
+}
+
 fn run_windows_issue_1861(
     root: &Path,
     cache_root: &std::ffi::OsStr,
@@ -1209,6 +1313,13 @@ fn copy_directory(source: &Path, target: &Path) -> Result<(), Box<dyn std::error
 
 fn npm_fixture_installs_enabled() -> bool {
     std::env::var("PKG_RUST_INSTALL_NPM_FIXTURES").is_ok_and(|value| {
+        let value = value.to_ascii_lowercase();
+        matches!(value.as_str(), "1" | "true" | "yes")
+    })
+}
+
+fn native_npm_fixture_installs_enabled() -> bool {
+    std::env::var("PKG_RUST_NATIVE_NPM_FIXTURES").is_ok_and(|value| {
         let value = value.to_ascii_lowercase();
         matches!(value.as_str(), "1" | "true" | "yes")
     })

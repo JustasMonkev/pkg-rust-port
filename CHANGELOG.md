@@ -52,6 +52,9 @@
   `#1207` and `#1861`, including `subst` drive coverage.
 - Added a dedicated Windows CI smoke job that runs the Windows issue-regression
   runtime hook with a cached `node18-win-x64` pkg-fetch binary.
+- Added an opt-in native npm issue smoke gate for `#1135` (`canvas`) and
+  `#1191` (`better-sqlite3`) that requires native install and Node oracle
+  success before packaging.
 
 ### Behavior Changes
 

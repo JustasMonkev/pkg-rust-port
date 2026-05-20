@@ -116,3 +116,12 @@ PKG_RUST_INSTALL_NPM_FIXTURES=1 \
 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test --test runtime_smoke -- npm_issue_fixtures_run_when_install_is_enabled --nocapture
 ```
+
+Native npm issue fixtures are behind a separate gate because they run package
+install scripts and must first establish a working plain Node oracle:
+
+```sh
+PKG_RUST_NATIVE_NPM_FIXTURES=1 \
+PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
+  cargo test --test runtime_smoke -- native_npm_issue_fixtures_run_when_install_is_enabled --nocapture
+```
