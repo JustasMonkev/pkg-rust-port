@@ -153,6 +153,8 @@ pub struct NodeTarget {
     pub platform: Platform,
     /// Target architecture.
     pub arch: Arch,
+    /// Whether this target must come from a locally built binary.
+    pub force_build: bool,
 }
 
 impl fmt::Display for NodeTarget {
@@ -257,6 +259,7 @@ fn parse_target_item(
         node_range: defaults.node_range.clone(),
         platform: defaults.platform,
         arch: defaults.arch,
+        force_build: false,
     };
 
     if item != "host" {

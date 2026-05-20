@@ -225,6 +225,18 @@ impl TargetBinaryProvider for PkgFetchCache {
     }
 
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        if target.force_build {
+            let built = self.binary_path(target, BinaryKind::Built)?;
+            if built.is_file() {
+                return read_binary(&built)
+                    .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
+            }
+            return Err(PkgError::Fetch(format!(
+                "no built binary for force-build target {target}; expected {}",
+                built.display()
+            )));
+        }
+
         let fetched = self.binary_path(target, BinaryKind::Fetched)?;
         if fetched.is_file() && self.verify_fetched(target, &fetched)? {
             return read_binary(&fetched)

@@ -590,6 +590,16 @@ Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50
 
 Blockers worked around: none.
 
+## 2026-05-20 - Force-build target planning shipped
+
+Shipped: carried CLI `--build` into each planned target and taught the pkg-fetch cache provider to require a built cache artifact for force-build targets instead of using fetched/downloaded binaries.
+
+Next: complete real source-build orchestration for missing built artifacts, then continue deploy-file and npm fixture parity.
+
+Decisions made: this slice does not fake pkg-fetch source builds. Until that workflow is ported, force-build targets fail with a clear built-binary cache error when no built artifact is present.
+
+Blockers worked around: external Node source builds remain out of scope for this increment; cache policy and planning are now parity-tested.
+
 ## 2026-05-20 - Dictionary selection parity shipped
 
 Shipped: wired CLI `--no-dict` into package planning and walker execution, including JS-style wildcard collapse and built-in dictionary filename matching. The walker now also honors root `pkg.dictionary` overrides as typed dictionary entries.

@@ -95,3 +95,62 @@ fn cache_provider_errors_when_binary_is_absent() -> Result<(), Box<dyn std::erro
     );
     Ok(())
 }
+
+#[test]
+fn force_build_reads_only_built_cache_artifacts() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-force-build-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root);
+    let defaults = TargetDefaults::host("node18");
+    let mut target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
+    target.force_build = true;
+    let fetched = cache.binary_path(&target, BinaryKind::Fetched)?;
+    let built = cache.binary_path(&target, BinaryKind::Built)?;
+    fs::create_dir_all(
+        built
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&fetched, b"fetched")?;
+    fs::write(&built, b"built")?;
+
+    let artifact = cache.binary_artifact_for(&target)?;
+
+    assert_eq!(artifact.bytes(), b"built");
+    assert_eq!(artifact.path(), Some(built.as_path()));
+    assert!(fetched.exists());
+    fs::remove_file(fetched)?;
+    fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn force_build_errors_when_built_cache_artifact_is_absent() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-force-build-missing-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root);
+    let defaults = TargetDefaults::host("node18");
+    let mut target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
+    target.force_build = true;
+    let fetched = cache.binary_path(&target, BinaryKind::Fetched)?;
+    fs::create_dir_all(
+        fetched
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&fetched, b"fetched")?;
+
+    let error = cache.binary_for(&target).err();
+
+    assert!(matches!(error, Some(PkgError::Fetch(message)) if message.contains("no built binary")));
+    assert!(fetched.exists());
+    fs::remove_file(fetched)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}

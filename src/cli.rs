@@ -297,12 +297,15 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     let auto_output = cli.output.is_none();
     let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
     let target_defaults = TargetDefaults::host(host_node_range());
-    let targets = resolve_targets(
+    let mut targets = resolve_targets(
         &cli,
         input_package.as_ref(),
         config.as_ref(),
         &target_defaults,
     )?;
+    for target in &mut targets {
+        target.force_build = cli.build;
+    }
     let outputs = plan_outputs(&output_base, &targets, auto_output, &entrypoint)?;
     let bakes = cli
         .options

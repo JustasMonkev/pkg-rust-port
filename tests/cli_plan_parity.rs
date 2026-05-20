@@ -258,6 +258,26 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn plans_force_build_on_all_targets() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-build");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--build"),
+        OsString::from("--targets"),
+        OsString::from("linux,win"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("../test/test-50-require-resolve/test-x-index.js"),
+    ])?;
+
+    assert_eq!(plan.outputs.len(), 2);
+    assert!(plan.outputs.iter().all(|output| output.target.force_build));
+    Ok(())
+}
+
+#[test]
 fn plans_public_disclosure_flags() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan-public");
     let output_text = output

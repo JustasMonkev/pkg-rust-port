@@ -203,6 +203,7 @@ Initial Rust parity order:
 - Map CLI input and package-bin metadata misses to JS-style "does not exist" messages at the planning boundary. Lower-level filesystem operations keep structured `Io` errors, but user-facing invalid fixtures assert the original CLI wording.
 - Keep the `test-46` output-name matrix covered at the planning layer. The JS suite mostly proves these fixtures by checking produced filenames, so Rust locks the same basename, extension stripping, explicit-output host fallback, single-target and multi-target suffix behavior, `--out-path`, `pkg.outputPath`, `pkg.targets`, scoped package basenames, and overwrite refusal before target binary production.
 - Keep Node bytecode fabrication as an external process interaction. Rust cannot produce V8 cached data directly without a major V8 embedder dependency, so `fabricate` remains process-based.
+- Carry `--build` as target metadata and require built cache artifacts for those targets. Real source-build orchestration remains separate; using fetched binaries for force-build requests would hide an important JS behavior boundary.
 - Implement Node resolution directly. A subprocess bridge to Node's `resolve` package would be faster to write but would retain the JS resolver as part of the Rust product.
 
 ## Behavior Fixes
