@@ -1377,3 +1377,13 @@ Verified: current `reload` has a clean escalated direct Node oracle, but the Rus
 Next: continue with another deterministic non-native dictionary fixture, or handle ESM bytecode/content semantics as a separate implementation slice before retrying current `reload`.
 
 Decisions made: do not add `reload` under the current public smoke gate. Also do not add current `eslint` because the direct public npm oracle fails before packaging with `ERR_PACKAGE_PATH_NOT_EXPORTED` for `eslint/bin/eslint.js`.
+
+## 2026-05-21 - BSON pinned last-line public npm smokes
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned `test-79-npm/bson` fixtures for `bson@0.2.22` and `bson@0.4.0`. These fixtures exercise the dictionary's BSON package entries while preserving the JS harness's last-line comparison for native-extension fallback noise.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with both pinned BSON fixtures installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose the pinned BSON fixtures only after direct public npm Node oracles finished with final `ok` lines under Node v25.6.0. Do not add current `bson` in this slice because the original dictionary fixtures target the old `pure()` / `native()` API shape.

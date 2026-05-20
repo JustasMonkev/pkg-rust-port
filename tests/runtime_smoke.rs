@@ -620,6 +620,20 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "buffermaker.js",
         },
         PublicNpmFixture {
+            name: "npm-bson-0-2-22",
+            fixture_subdir: "bson",
+            package_spec: "bson@0.2.22",
+            node_input: "bson@0.2.22.js",
+            package_input: "bson@0.2.22.js",
+        },
+        PublicNpmFixture {
+            name: "npm-bson-0-4-0",
+            fixture_subdir: "bson",
+            package_spec: "bson@0.4.0",
+            node_input: "bson@0.4.0.js",
+            package_input: "bson@0.4.0.js",
+        },
+        PublicNpmFixture {
             name: "npm-compressjs",
             fixture_subdir: "compressjs",
             package_spec: "compressjs",
@@ -884,7 +898,9 @@ fn run_public_npm_fixture(
 
 fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
     match name {
-        "npm-browserify" => PublicNpmOutputMode::LastStdoutLine,
+        "npm-browserify" | "npm-bson-0-2-22" | "npm-bson-0-4-0" => {
+            PublicNpmOutputMode::LastStdoutLine
+        }
         _ => PublicNpmOutputMode::ExactStdout,
     }
 }
