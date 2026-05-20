@@ -1387,3 +1387,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose the pinned BSON fixtures only after direct public npm Node oracles finished with final `ok` lines under Node v25.6.0. Do not add current `bson` in this slice because the original dictionary fixtures target the old `pure()` / `native()` API shape.
+
+## 2026-05-21 - Connect-mongodb public npm smoke rejected
+
+Investigated: attempted to extend the opt-in public npm dictionary smoke to the current `test-79-npm/connect-mongodb` fixture. The direct public npm Node oracle finished with a final `ok` line under Node v25.6.0 despite expected old BSON native fallback output.
+
+Verified: the escalated Rust public npm smoke fails during packaging because the current dependency tree resolves `connect@1.9.2 -> mime@4.1.0`; `mime@4.1.0` is an ESM package, and Rust bytecode fabrication currently wraps `mime/dist/src/Mime.js` as CJS (`Unexpected token 'export'`).
+
+Next: handle ESM bytecode/content semantics as a separate implementation slice before retrying current `connect-mongodb`, or find another deterministic non-ESM dictionary fixture.
+
+Decisions made: do not add current `connect-mongodb` under the current public smoke gate. Treat it as the same class of ESM dependency drift exposed by current `reload`.
