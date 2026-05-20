@@ -1367,3 +1367,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `browserify` because the direct public npm install matches the original JS harness semantics: it prints CLI help followed by a final `ok` line. Keep last-line handling explicit in the Rust smoke harness instead of loosening every public fixture's raw-output comparison.
+
+## 2026-05-21 - Reload public npm smoke rejected
+
+Investigated: attempted to extend the opt-in public npm dictionary smoke to the current `test-79-npm/reload` fixture and then checked the pinned `reload@2.1.0` fixture.
+
+Verified: current `reload` has a clean escalated direct Node oracle, but the Rust public npm smoke fails while fabricating bytecode for the ESM dependency `bundle-name/index.js` (`Cannot use import statement outside a module`). Pinned `reload@2.1.0` fails its direct Node oracle under Node v25.6.0 with `ERR_INVALID_ARG_TYPE` in `reload-server.js`.
+
+Next: continue with another deterministic non-native dictionary fixture, or handle ESM bytecode/content semantics as a separate implementation slice before retrying current `reload`.
+
+Decisions made: do not add `reload` under the current public smoke gate. Also do not add current `eslint` because the direct public npm oracle fails before packaging with `ERR_PACKAGE_PATH_NOT_EXPORTED` for `eslint/bin/eslint.js`.
