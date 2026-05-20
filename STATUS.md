@@ -1337,3 +1337,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `tinify` because the direct public npm install has a clean `ok` Node oracle and exercises a certificate asset dictionary entry without native dependencies, external services, or pinned-version drift. Do not add current `errorhandler` under the current harness because the direct public npm install prints `Message` before the final `ok`, while the Rust public npm smoke intentionally requires raw Node oracle stdout to match exactly.
+
+## 2026-05-20 - Tiny-worker public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/tiny-worker` fixture. The fixture checks worker message round-tripping and depends on the dictionary-provided `lib/noop.js` asset entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `tiny-worker` because the direct public npm install has a clean `ok` Node oracle and exercises a worker helper asset dictionary entry without native dependencies, external services, or pinned-version drift.

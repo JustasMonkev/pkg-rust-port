@@ -731,6 +731,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "tinify.js",
             package_input: "tinify.js",
         },
+        PublicNpmFixture {
+            name: "npm-tiny-worker",
+            fixture_subdir: "tiny-worker",
+            package_spec: "tiny-worker",
+            node_input: "tiny-worker.js",
+            package_input: "tiny-worker.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
