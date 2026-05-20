@@ -626,6 +626,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "nconf.js",
             package_input: "nconf.js",
         },
+        PublicNpmFixture {
+            name: "npm-node-forge",
+            fixture_subdir: "node-forge",
+            package_spec: "node-forge",
+            node_input: "node-forge.js",
+            package_input: "node-forge.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
