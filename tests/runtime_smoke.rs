@@ -682,6 +682,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "npm-registry-client.js",
             package_input: "npm-registry-client.js",
         },
+        PublicNpmFixture {
+            name: "npm-pg",
+            fixture_subdir: "pg",
+            package_spec: "pg",
+            node_input: "pg.js",
+            package_input: "pg.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

@@ -1257,3 +1257,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `npm-registry-client` before the pinned `npm-registry-client@6.0.7` fixture because it exercises the same recursive script dictionary without adding pinned-version drift to this slice.
+
+## 2026-05-20 - Pg public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/pg` fixture. The fixture checks the exported connection API shape and depends on the dictionary-provided recursive `lib/**/*.js` script glob.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `pg` because it exercises another recursive script dictionary without native dependencies or custom CLI output. Do not add pinned `npm-registry-client@6.0.7` under the current Node runtime because the Node oracle itself fails before packaging with `primordials is not defined`.
