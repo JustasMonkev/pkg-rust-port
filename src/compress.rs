@@ -29,6 +29,22 @@ impl Compression {
             Self::Brotli => 2,
         }
     }
+
+    /// Return the original JavaScript enum label.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// assert_eq!(pkg_rust::Compression::Gzip.cli_label(), "GZip");
+    /// ```
+    #[must_use]
+    pub const fn cli_label(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Gzip => "GZip",
+            Self::Brotli => "Brotli",
+        }
+    }
 }
 
 impl FromStr for Compression {
@@ -48,7 +64,7 @@ impl FromStr for Compression {
 
 /// Error returned when a compression name is not supported.
 #[derive(Debug, Error, Eq, PartialEq)]
-#[error("invalid compression algorithm {value}; expected None, Brotli, or Gzip")]
+#[error("Invalid compression algorithm {value} ( should be None, Brotli or Gzip)")]
 pub struct CompressionParseError {
     value: String,
 }

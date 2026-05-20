@@ -168,6 +168,9 @@ where
     };
     let debug = cli.debug;
     let plan = plan_from_cli(cli)?;
+    if plan.compression != Compression::None {
+        println!("compression:  {}", plan.compression.cli_label());
+    }
     let cache = PkgFetchCache::default_cache()?;
     let prelude = prelude_template(debug);
     // DECISION: larger fixtures overflow Tokio's default blocking-worker stack

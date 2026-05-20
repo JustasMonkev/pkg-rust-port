@@ -16,6 +16,8 @@
   missing platform/version `.node` payloads.
 - Added macOS Mach-O payload patching, ad-hoc signing through `codesign`/`ldid`,
   and `--no-signature` planning.
+- Matched compression CLI output and invalid-algorithm wording, with gated
+  runtime smoke coverage for None/GZip/Brotli payloads.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes

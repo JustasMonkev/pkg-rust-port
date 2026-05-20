@@ -325,6 +325,34 @@ fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-80-compression");
+    let output = run_cli(
+        &fixture,
+        [
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            "no-output",
+            "--compress",
+            "Crap",
+            "test-x.js",
+        ],
+    )?;
+
+    assert_cli_error(
+        &output,
+        [
+            "Error!",
+            "Invalid compression algorithm Crap",
+            "should be None, Brotli or Gzip",
+        ],
+    );
+    Ok(())
+}
+
 fn binary_with_placeholders() -> Vec<u8> {
     let mut binary = Vec::from([b'\0']);
     for _index in 0..20 {

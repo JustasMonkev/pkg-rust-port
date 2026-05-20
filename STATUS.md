@@ -795,3 +795,11 @@ Shipped: added `src/macho.rs` with the JS `patchMachOExecutable` behavior for li
 Next: add real macOS signing smoke coverage when a real cached Mach-O base binary and signing tools are available, then continue broader fixture coverage and JS oracle retirement.
 
 Decisions made: keep fake-binary smoke tests unsigned because placeholder test binaries are not valid Mach-O files. The production path still patches before signing for real macOS outputs, preserving the JS behavior boundary.
+
+## 2026-05-20 - Compression CLI parity shipped
+
+Shipped: matched the JS compression CLI surface by rendering invalid algorithms as `Invalid compression algorithm <value> ( should be None, Brotli or Gzip)` and printing `compression:  GZip` / `compression:  Brotli` for compressed builds. Added CLI smoke coverage for the invalid-compression fixture path, preserved the original `GZip` enum label through `Compression::cli_label`, and added gated real-runtime smoke coverage for `test-80-compression` across None, GZip, and Brotli package modes.
+
+Next: continue runtime fixture expansion into mountpoints and issue-regression groups, then make the real-cache smoke portable enough for CI.
+
+Decisions made: return both packaging output and executable output from the real-runtime harness so tests can assert CLI diagnostics without weakening the existing Node-oracle stdout comparisons.

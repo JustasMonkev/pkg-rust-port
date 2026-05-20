@@ -14,7 +14,7 @@ fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
     else {
         return Ok(());
     };
-    assert_eq!(String::from_utf8_lossy(&run_result.stdout), "42\n");
+    assert_eq!(String::from_utf8_lossy(&run_result.run.stdout), "42\n");
     Ok(())
 }
 
@@ -51,7 +51,7 @@ fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
     };
 
     assert_eq!(
-        String::from_utf8_lossy(&run_result.stdout),
+        String::from_utf8_lossy(&run_result.run.stdout),
         "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nCannot write to packaged file\nundefined\n"
     );
     Ok(())
@@ -78,7 +78,7 @@ fn filesystem_runtime_layer_2_runs_when_real_cache_is_configured()
     else {
         return Ok(());
     };
-    assert_stdout_lines_match_with_range_normalization(&expected.stdout, &run_result.stdout)?;
+    assert_stdout_lines_match_with_range_normalization(&expected.stdout, &run_result.run.stdout)?;
     Ok(())
 }
 
@@ -97,7 +97,7 @@ fn arguments_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn 
         else {
             return Ok(());
         };
-        assert_eq!(String::from_utf8_lossy(&run_result.stdout), expected);
+        assert_eq!(String::from_utf8_lossy(&run_result.run.stdout), expected);
     }
     Ok(())
 }
@@ -188,6 +188,40 @@ fn promisify_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn 
 }
 
 #[test]
+fn compression_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-80-compression");
+    for (name, algorithm, cli_label) in [
+        ("compression-none", "None", None),
+        ("compression-gzip", "GZip", Some("compression:  GZip")),
+        ("compression-brotli", "Brotli", Some("compression:  Brotli")),
+    ] {
+        let Some(package_run) = package_and_run_real_fixture_with_options(
+            name,
+            &fixture_dir,
+            "test-x.js",
+            RealFixtureOptions {
+                package_args: &["--compress", algorithm],
+                ..RealFixtureOptions::success()
+            },
+        )?
+        else {
+            return Ok(());
+        };
+        assert_eq!(String::from_utf8_lossy(&package_run.run.stdout), "42\n");
+        if let Some(label) = cli_label {
+            assert!(
+                String::from_utf8_lossy(&package_run.package.stdout).contains(label),
+                "package stdout did not contain {label:?}: {}",
+                String::from_utf8_lossy(&package_run.package.stdout)
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
@@ -224,7 +258,7 @@ fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
     else {
         return Ok(());
     };
-    assert_eq!(String::from_utf8_lossy(&run_result.stdout), "ok\n");
+    assert_eq!(String::from_utf8_lossy(&run_result.run.stdout), "ok\n");
     Ok(())
 }
 
@@ -238,7 +272,7 @@ fn console_trace_fixture_reports_packaged_stack_paths() -> Result<(), Box<dyn st
         return Ok(());
     };
 
-    let stderr = String::from_utf8_lossy(&run_result.stderr);
+    let stderr = String::from_utf8_lossy(&run_result.run.stderr);
     let lines = stderr.split('\n').collect::<Vec<_>>();
     let first_line = lines
         .first()
@@ -279,7 +313,7 @@ fn error_source_position_fixture_reports_original_pointer() -> Result<(), Box<dy
         return Ok(());
     };
 
-    let stderr = String::from_utf8_lossy(&run_result.stderr);
+    let stderr = String::from_utf8_lossy(&run_result.run.stderr);
     assert!(
         stderr.contains("x.parse is not a function"),
         "missing source error message: {stderr}"
@@ -316,7 +350,7 @@ fn not_found_wording_fixtures_run_when_real_cache_is_configured()
     else {
         return Ok(());
     };
-    let stdout = String::from_utf8_lossy(&run_result.stdout);
+    let stdout = String::from_utf8_lossy(&run_result.run.stdout);
     let mut parts = stdout.split("*****");
     let fs_message = parts
         .next()
@@ -542,7 +576,7 @@ fn package_and_compare_fixture(
     let Some(run_result) = package_and_run_real_fixture(name, fixture_dir, package_input)? else {
         return Ok(());
     };
-    assert_eq!(run_result.stdout, expected.stdout);
+    assert_eq!(run_result.run.stdout, expected.stdout);
     Ok(())
 }
 
@@ -609,7 +643,7 @@ fn package_and_run_real_fixture(
     name: &str,
     fixture_dir: &Path,
     input: &str,
-) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+) -> Result<Option<PackageRun>, Box<dyn std::error::Error>> {
     package_and_run_real_fixture_with_options(
         name,
         fixture_dir,
@@ -623,7 +657,7 @@ fn package_and_run_real_fixture_with_args(
     fixture_dir: &Path,
     input: &str,
     run_args: &[&str],
-) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+) -> Result<Option<PackageRun>, Box<dyn std::error::Error>> {
     package_and_run_real_fixture_with_options(
         name,
         fixture_dir,
@@ -641,7 +675,7 @@ fn package_and_run_real_fixture_with_args_and_package_env(
     input: &str,
     run_args: &[&str],
     package_env: &[(&str, &str)],
-) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+) -> Result<Option<PackageRun>, Box<dyn std::error::Error>> {
     package_and_run_real_fixture_with_options(
         name,
         fixture_dir,
@@ -659,7 +693,7 @@ fn package_and_run_real_fixture_with_options(
     fixture_dir: &Path,
     input: &str,
     options: RealFixtureOptions<'_>,
-) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+) -> Result<Option<PackageRun>, Box<dyn std::error::Error>> {
     let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
         return Ok(None);
@@ -711,7 +745,15 @@ fn package_and_run_real_fixture_with_options(
             String::from_utf8_lossy(&run_result.stderr)
         ),
     }
-    Ok(Some(run_result))
+    Ok(Some(PackageRun {
+        package: package_result,
+        run: run_result,
+    }))
+}
+
+struct PackageRun {
+    package: std::process::Output,
+    run: std::process::Output,
 }
 
 struct RealFixtureOptions<'a> {
