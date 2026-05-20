@@ -633,6 +633,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "node-forge.js",
             package_input: "node-forge.js",
         },
+        PublicNpmFixture {
+            name: "npm-publicsuffixlist",
+            fixture_subdir: "publicsuffixlist",
+            package_spec: "publicsuffixlist",
+            node_input: "publicsuffixlist.js",
+            package_input: "publicsuffixlist.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

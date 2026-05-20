@@ -125,7 +125,8 @@ success depends on dictionary metadata, such as `connect`, `rc`, and
 `negotiator@0.4.9` and `machinepack-urls` / `machinepack-urls@5.0.0`,
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, `compressjs`, `later`,
-`nconf`, and `node-forge`, dictionary patch packages such as `graceful-fs` /
+`nconf`, and `node-forge`, dictionary asset/dependency-pruning packages such as
+`publicsuffixlist`, dictionary patch packages such as `graceful-fs` /
 `graceful-fs@3.0.8`, and loader-heavy packages such as `logform` and
 `body-parser`:
 
