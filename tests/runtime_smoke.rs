@@ -556,6 +556,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "machinepack-urls@5.0.0.js",
             package_input: "machinepack-urls@5.0.0.js",
         },
+        PublicNpmFixture {
+            name: "npm-shelljs",
+            fixture_subdir: "shelljs",
+            package_spec: "shelljs",
+            node_input: "shelljs.js",
+            package_input: "shelljs.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

@@ -1075,3 +1075,13 @@ Added: extended the opt-in public npm dictionary smoke to the pinned original `t
 Next: run the focused public npm smoke with fixture installation enabled, then commit this slice if it passes. After that, continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches before moving into native/deploy-file gates.
 
 Decisions made: keep the pinned machinepack variant separate from the current package slice so package-version drift remains easy to isolate.
+
+## 2026-05-20 - ShellJS public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/shelljs` fixture. The fixture runs a small `shell.exec()` command and depends on the dictionary-provided `src/*.js` script inclusion.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: consider pinned ShellJS variants as separate slices because they exercise older package layouts.
+
+Decisions made: start with the current ShellJS package before pinned legacy versions so failures can be attributed to the broad dictionary entry rather than package-version drift.
