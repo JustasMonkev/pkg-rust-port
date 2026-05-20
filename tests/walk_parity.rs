@@ -292,6 +292,47 @@ fn dictionary_script_and_asset_globs_affect_walker_records()
 }
 
 #[test]
+fn dependency_internal_missing_literal_is_debug_warning() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir = std::env::temp_dir().join(format!(
+        "pkg-rust-dependency-missing-literal-{}",
+        std::process::id()
+    ));
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    let package_dir = fixture_dir.join("node_modules/conditional-dep");
+    fs::create_dir_all(package_dir.join("lib"))?;
+    fs::write(fixture_dir.join("app.js"), "require('conditional-dep');\n")?;
+    fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"conditional-dep","main":"index.js"}"#,
+    )?;
+    fs::write(
+        package_dir.join("index.js"),
+        "module.exports = process.env.COVERAGE ? require('./lib-cov/index') : require('./lib/index');\n",
+    )?;
+    fs::write(package_dir.join("lib/index.js"), "module.exports = 42;\n")?;
+
+    let output = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(package_dir.join("lib/index.js"), StoreKind::Blob));
+    assert!(output.warnings.iter().any(|warning| {
+        matches!(
+            warning,
+            pkg_rust::PackageWarning::CannotFindModule { alias }
+                if alias == "./lib-cov/index" && warning.is_debug()
+        )
+    }));
+
+    fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-public-packages");
     let entrypoint = fixture_dir.join("test-x-index.js");

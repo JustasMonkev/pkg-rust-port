@@ -930,7 +930,7 @@ impl WalkerState {
                     self.output.warnings.push(warning);
                     return Ok(());
                 }
-                if optional {
+                if optional || !marker.top_level {
                     let _ = error;
                     self.output.warnings.push(PackageWarning::CannotFindModule {
                         alias: alias.to_owned(),

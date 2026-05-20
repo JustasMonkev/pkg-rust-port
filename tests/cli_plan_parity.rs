@@ -1,6 +1,7 @@
 //! Parity tests for CLI planning behavior.
 
 use std::ffi::OsString;
+use std::fs;
 
 use pkg_rust::{Compression, PathStyle, PkgError, Platform, plan_package};
 
@@ -62,6 +63,39 @@ fn package_json_input_uses_package_directory_as_walk_root_for_subpath_bin()
     assert!(plan.entrypoint.ends_with("test-99-#1192/src/index.js"));
     assert!(plan.root.ends_with("test-99-#1192"));
     assert!(plan.snapshot_base.ends_with("test"));
+    Ok(())
+}
+
+#[test]
+fn config_json_input_resolves_bin_like_package_json() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-config-json-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("fixture.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("fixture.config.json"),
+        r#"{"bin":"fixture.js","pkg":{"assets":["data.txt"]}}"#,
+    )?;
+    fs::write(temp_root.join("data.txt"), "asset\n")?;
+    let output = temp_root.join("out");
+
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output.as_os_str()),
+        OsString::from(temp_root.join("fixture.config.json").as_os_str()),
+    ])?;
+
+    assert_eq!(plan.entrypoint, temp_root.join("fixture.js"));
+    assert_eq!(
+        plan.addition.as_deref(),
+        Some(temp_root.join("fixture.config.json").as_path())
+    );
+    assert_eq!(plan.root, temp_root);
+
+    fs::remove_dir_all(&plan.root)?;
     Ok(())
 }
 

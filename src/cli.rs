@@ -250,7 +250,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .as_ref()
         .ok_or_else(|| PkgError::Cli("Entry file/directory is expected".to_owned()))?;
     let input = normalize_input_path(input_arg)?;
-    let input_package = if is_package_json(&input) {
+    let input_package = if is_configuration(&input) {
         Some(read_package_json(&input)?)
     } else {
         None
@@ -278,7 +278,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         config_path.as_deref(),
         config.as_ref(),
     )?;
-    let addition = if is_package_json(&input) {
+    let addition = if is_configuration(&input) {
         Some(input.clone())
     } else {
         None
@@ -598,8 +598,12 @@ fn read_package_json(path: &Path) -> Result<PackageJson, PkgError> {
     PackageJson::parse(&content).map_err(|error| PkgError::Cli(error.to_string()))
 }
 
-fn is_package_json(path: &Path) -> bool {
+fn is_configuration(path: &Path) -> bool {
     path.file_name().is_some_and(|name| name == "package.json")
+        || path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".config.json"))
 }
 
 fn absolute_path(path: &Path) -> Result<PathBuf, PkgError> {

@@ -947,3 +947,27 @@ Shipped: added an opt-in smoke for selected original `test-79-npm` public packag
 Next: run this gate with registry access and a seeded real-runtime cache, then expand the public npm fixture subset to other deterministic non-native dictionary consumers before tackling broader networked or native packages.
 
 Decisions made: reuse `PKG_RUST_INSTALL_NPM_FIXTURES` instead of adding another gate because these fixtures need registry access but do not need native install scripts as proof of validity.
+
+## 2026-05-20 - Dependency missing-literal warning parity shipped
+
+Shipped: fixed the Rust walker to match the JS walker when a literal `require` inside an already-discovered dependency package points at a missing file. The public `connect@2.3.9` fixture exposed this through its coverage branch `require('./lib-cov/connect')`; Rust now records a debug `Cannot find module` warning and continues instead of aborting packaging.
+
+Next: rerun the public npm dictionary fixture smoke with network access and the local real-runtime cache, then expand the deterministic public npm subset if it passes.
+
+Decisions made: keep top-level missing literal requires fatal; this change is limited to non-top-level dependency package records plus existing explicit optional paths, matching the JS warning/debug boundary.
+
+## 2026-05-20 - Config JSON input parity shipped
+
+Shipped: matched the JS CLI's `isConfiguration` input rule by treating `*.config.json` files like package-style config inputs. Rust now parses those inputs for `bin`, resolves the real entrypoint from the config file directory, includes the config file as package content, and keeps the package root at the config directory.
+
+Next: rerun the public npm dictionary fixture smoke; this should let the `rc.config.json` fixture execute `rc.js` instead of treating the config JSON as JavaScript.
+
+Decisions made: keep the existing `--config` option path unchanged; this slice only covers the positional input form used by the original `test-79-npm` harness.
+
+## 2026-05-20 - Public npm dictionary smoke verified
+
+Shipped: ran `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` with registry access. The selected `connect`, `connect@2.3.9`, and `rc` original public npm fixtures now install, pass the Node oracle, package with the Rust CLI, and match executable output.
+
+Next: expand this opt-in gate to another deterministic non-native `test-79-npm` dictionary consumer, then separately size native/deploy-file packages that require external payload copying or platform installers.
+
+Decisions made: keep the real public npm smoke opt-in because it reaches the npm registry and uses a machine-local real-runtime cache, even though this subset is now proven on the local macOS cache.

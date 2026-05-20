@@ -57,6 +57,10 @@
   success before packaging.
 - Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
   `connect`, `connect@2.3.9`, and `rc` fixtures.
+- Matched JS walker handling for missing literal requires inside dependency
+  packages: they now emit debug diagnostics instead of aborting packaging.
+- Treated `*.config.json` CLI inputs as package-style configuration inputs,
+  including `bin` entrypoint resolution and config-file inclusion.
 
 ### Behavior Changes
 
