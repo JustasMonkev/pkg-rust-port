@@ -759,3 +759,13 @@ Next: add the higher-level package output behavior that copies deploy files besi
 Decisions made: `sharp` keeps its dictionary `scripts` glob alongside deploy metadata; platform packages with nested node_modules deploy targets remain plain deploy tuples instead of becoming package dependency aliases.
 
 Blockers worked around: the Rust port still emits deploy-file warnings but does not copy external deploy files to output directories, so executable-level npm deploy fixtures remain incomplete.
+
+## 2026-05-20 - Deploy-file output copying shipped
+
+Shipped: package production now copies deploy files discovered during walking beside each produced executable. It skips missing deploy sources, copies individual files to their configured target path, recursively expands directory deploy entries, creates target parent directories, and preserves source file permissions. Added package-build parity coverage for file deploy entries, directory deploy entries, missing sources, and Unix mode preservation.
+
+Next: add npm fixture smoke coverage for deploy-file packages once a configured base-binary cache is available, and decide whether automatic native addon copying without explicit deploy metadata belongs in Rust package production or remains npm harness behavior.
+
+Decisions made: use deploy warnings as the package-production copy plan so package config and dictionary metadata share one path without a second deploy-file parser.
+
+Blockers worked around: this is still covered with stub target binaries rather than real npm executable fixtures because `PKG_RUST_REAL_CACHE` is not configured in this shell.

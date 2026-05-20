@@ -85,6 +85,88 @@ fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
+fn copies_deploy_files_next_to_output_executable() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-deploy-copy-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    let package_dir = root.join("package");
+    let output = root.join("dist").join("demo");
+    std::fs::create_dir_all(package_dir.join("assets/nested"))?;
+    std::fs::write(
+        package_dir.join("app.js"),
+        "'use strict';\nconsole.log('ok');\n",
+    )?;
+    std::fs::write(package_dir.join("tool.sh"), "#!/bin/sh\n")?;
+    std::fs::write(package_dir.join("assets/nested/data.txt"), "payload\n")?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        r#"{
+          "name": "demo",
+          "bin": "app.js",
+          "pkg": {
+            "deployFiles": [
+              ["tool.sh", "tools/tool.sh"],
+              ["assets", "assets-copy", "directory"],
+              ["missing.txt", "missing.txt"]
+            ]
+          }
+        }"#,
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(
+            package_dir.join("tool.sh"),
+            PermissionsExt::from_mode(0o744),
+        )?;
+    }
+
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let package_text = package_dir
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary package path must be utf-8".to_owned()))?;
+    let plan = plan_package(["--target", "linux", "--output", output_text, package_text])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    assert_eq!(build.outputs.len(), 1);
+    assert!(output.is_file());
+    assert_eq!(
+        std::fs::read_to_string(root.join("dist/tools/tool.sh"))?,
+        "#!/bin/sh\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("dist/assets-copy/nested/data.txt"))?,
+        "payload\n"
+    );
+    assert!(!root.join("dist/missing.txt").exists());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode = std::fs::metadata(root.join("dist/tools/tool.sh"))?
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o744);
+    }
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
 fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
 -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join(format!(

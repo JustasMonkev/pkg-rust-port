@@ -160,7 +160,8 @@ pub fn build_package_with_provider(
                 .with_public_packages(plan.public_packages.clone())
                 .with_no_dictionary(plan.no_dictionary.clone()),
         )?;
-        warnings.extend(walked.warnings.clone());
+        let output_warnings = walked.warnings.clone();
+        warnings.extend(output_warnings.clone());
         let refined = refine_walked_with_snapshot_base(
             walked,
             &plan.entrypoint,
@@ -184,6 +185,7 @@ pub fn build_package_with_provider(
         if planned.target.platform != Platform::Win {
             plus_x(&planned.output)?;
         }
+        copy_deploy_files(&output_warnings, &planned.output)?;
         outputs.push(ProducedOutput {
             target: planned.target.clone(),
             output: planned.output.clone(),
@@ -192,6 +194,71 @@ pub fn build_package_with_provider(
     }
 
     Ok(PackageBuild { outputs, warnings })
+}
+
+fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), PkgError> {
+    let output_dir = output.parent().unwrap_or_else(|| Path::new(""));
+    for warning in warnings {
+        let PackageWarning::DeployFile { source, target, .. } = warning else {
+            continue;
+        };
+        copy_deploy_path(source, &output_dir.join(target))?;
+    }
+    Ok(())
+}
+
+fn copy_deploy_path(source: &Path, target: &Path) -> Result<(), PkgError> {
+    let Ok(metadata) = fs::metadata(source) else {
+        return Ok(());
+    };
+
+    if metadata.is_file() {
+        copy_deploy_file(source, target, &metadata)?;
+    } else if metadata.is_dir() {
+        copy_deploy_directory(source, target)?;
+    }
+    Ok(())
+}
+
+fn copy_deploy_directory(source: &Path, target: &Path) -> Result<(), PkgError> {
+    let mut entries = fs::read_dir(source)
+        .map_err(|source_error| PkgError::Io {
+            path: source.display().to_string(),
+            source: source_error,
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source_error| PkgError::Io {
+            path: source.display().to_string(),
+            source: source_error,
+        })?;
+    entries.sort_by_key(std::fs::DirEntry::path);
+
+    for entry in entries {
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        copy_deploy_path(&source_path, &target_path)?;
+    }
+    Ok(())
+}
+
+fn copy_deploy_file(source: &Path, target: &Path, metadata: &fs::Metadata) -> Result<(), PkgError> {
+    if let Some(parent) = target.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|source_error| PkgError::Io {
+            path: parent.display().to_string(),
+            source: source_error,
+        })?;
+    }
+    fs::copy(source, target).map_err(|source_error| PkgError::Io {
+        path: target.display().to_string(),
+        source: source_error,
+    })?;
+    fs::set_permissions(target, metadata.permissions()).map_err(|source_error| PkgError::Io {
+        path: target.display().to_string(),
+        source: source_error,
+    })?;
+    Ok(())
 }
 
 fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {
