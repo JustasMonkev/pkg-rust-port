@@ -1003,3 +1003,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the original `test-7
 Next: continue expanding deterministic non-native public npm fixtures, with deploy-file and native-package fixtures staying behind separate gates.
 
 Decisions made: keep `logform` on the current public package like the JS harness because its formatter API is stable and the test is a small consumer-path proof for dictionary script activation.
+
+## 2026-05-20 - Body-parser public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the original `test-79-npm/body-parser` fixture. The fixture installs `body-parser`, runs JSON and URL-encoded middleware paths, and covers the dictionary-provided `lib/types/*.js` parser glob on a real installed package.
+
+Next: continue expanding deterministic non-native public npm fixtures, adding pinned legacy variants only after the current package path stays green.
+
+Decisions made: start with the unpinned current `body-parser` fixture because the original JS harness treats that as the primary consumer-path check and the middleware API remains CommonJS-compatible.

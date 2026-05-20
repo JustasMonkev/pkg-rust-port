@@ -493,6 +493,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "logform.js",
             package_input: "logform.js",
         },
+        PublicNpmFixture {
+            name: "npm-body-parser",
+            fixture_subdir: "body-parser",
+            package_spec: "body-parser",
+            node_input: "body-parser.js",
+            package_input: "body-parser.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
