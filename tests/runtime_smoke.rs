@@ -222,6 +222,67 @@ fn compression_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dy
 }
 
 #[test]
+fn mountpoint_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+
+    let Some(mountpoints) = package_and_run_real_fixture_with_options(
+        "mountpoints",
+        &root.join("test-50-mountpoints"),
+        "test-x-index.js",
+        RealFixtureOptions {
+            run_from_output_dir: true,
+            prepare_output_dir: Some(copy_plugins_d_ext),
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+    assert_eq!(
+        String::from_utf8_lossy(&mountpoints.run.stdout),
+        "I am C\nI am D\ntest-x-index.js\ntest-y-common.js\nplugins-C-int\nplugins-D-ext\n"
+    );
+
+    let Some(mkdir_mountpoints) = package_and_run_real_fixture_with_options(
+        "mkdir-mountpoints",
+        &root.join("test-99-#1120-mkdir-mountpoints"),
+        "test-x-index.js",
+        RealFixtureOptions {
+            run_from_output_dir: true,
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+    assert_eq!(
+        String::from_utf8_lossy(&mkdir_mountpoints.run.stdout),
+        "hello.txt\n"
+    );
+
+    let Some(regexp_mountpoints) = package_and_run_real_fixture_with_options(
+        "regexp-mountpoints",
+        &root.join("test-99-#1121-regexp-mountpoints"),
+        "test-x-index.js",
+        RealFixtureOptions {
+            run_from_output_dir: true,
+            prepare_output_dir: Some(copy_plugins_d_ext),
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+    assert_eq!(
+        String::from_utf8_lossy(&regexp_mountpoints.run.stdout),
+        "I am D\ntest-x-index.js\n"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
@@ -699,7 +760,11 @@ fn package_and_run_real_fixture_with_options(
         return Ok(None);
     };
 
-    let output = real_output_path(name);
+    let output = if options.run_from_output_dir || options.prepare_output_dir.is_some() {
+        real_output_dir(name).join("test-output")
+    } else {
+        real_output_path(name)
+    };
     let package_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(fixture_dir)
         .env("PKG_CACHE_PATH", cache_root)
@@ -718,12 +783,31 @@ fn package_and_run_real_fixture_with_options(
         String::from_utf8_lossy(&package_result.stderr)
     );
 
+    if let Some(prepare_output_dir) = options.prepare_output_dir {
+        let output_dir = output
+            .parent()
+            .ok_or_else(|| "real output path has no parent".to_owned())?;
+        prepare_output_dir(fixture_dir, output_dir)?;
+    }
+    let run_cwd = if options.run_from_output_dir {
+        output
+            .parent()
+            .ok_or_else(|| "real output path has no parent".to_owned())?
+    } else {
+        fixture_dir
+    };
     let run_result = Command::new(&output)
-        .current_dir(fixture_dir)
+        .current_dir(run_cwd)
         .args(options.run_args)
         .envs(options.run_env.iter().copied())
         .output()?;
     fs::remove_file(output)?;
+    if options.run_from_output_dir || options.prepare_output_dir.is_some() {
+        let output_dir = real_output_dir(name);
+        if output_dir.is_dir() {
+            fs::remove_dir_all(output_dir)?;
+        }
+    }
     match options.run_expectation {
         RunExpectation::Success => assert!(
             run_result.status.success(),
@@ -756,12 +840,16 @@ struct PackageRun {
     run: std::process::Output,
 }
 
+type PrepareOutputDir = fn(&Path, &Path) -> Result<(), Box<dyn std::error::Error>>;
+
 struct RealFixtureOptions<'a> {
     package_args: &'a [&'a str],
     package_env: &'a [(&'a str, &'a str)],
     run_args: &'a [&'a str],
     run_env: &'a [(&'a str, &'a str)],
     run_expectation: RunExpectation,
+    run_from_output_dir: bool,
+    prepare_output_dir: Option<PrepareOutputDir>,
 }
 
 impl RealFixtureOptions<'_> {
@@ -772,6 +860,8 @@ impl RealFixtureOptions<'_> {
             run_args: &[],
             run_env: &[],
             run_expectation: RunExpectation::Success,
+            run_from_output_dir: false,
+            prepare_output_dir: None,
         }
     }
 }
@@ -784,4 +874,21 @@ enum RunExpectation {
 
 fn real_output_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
+}
+
+fn real_output_dir(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
+}
+
+fn copy_plugins_d_ext(
+    fixture_dir: &Path,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let target = output_dir.join("plugins-D-ext");
+    fs::create_dir_all(&target)?;
+    fs::copy(
+        fixture_dir.join("plugins-D-ext/test-y-require-D.js"),
+        target.join("test-y-require-D.js"),
+    )?;
+    Ok(())
 }

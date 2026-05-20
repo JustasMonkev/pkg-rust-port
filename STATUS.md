@@ -803,3 +803,11 @@ Shipped: matched the JS compression CLI surface by rendering invalid algorithms 
 Next: continue runtime fixture expansion into mountpoints and issue-regression groups, then make the real-cache smoke portable enough for CI.
 
 Decisions made: return both packaging output and executable output from the real-runtime harness so tests can assert CLI diagnostics without weakening the existing Node-oracle stdout comparisons.
+
+## 2026-05-20 - Mountpoint runtime coverage shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-50-mountpoints`, `test-99-#1120-mkdir-mountpoints`, and `test-99-#1121-regexp-mountpoints`. The runtime harness can now run produced executables from their output directory and prepare external files beside the executable before launch, matching the JS fixture shape for string and RegExp mountpoints.
+
+Next: continue issue-regression runtime coverage, especially snapshot file-copy and withFileTypes fixtures, then make the real-cache smoke portable enough for CI.
+
+Decisions made: keep this as a harness/parity-test slice because the embedded JS prelude already owns mountpoint behavior; no Rust runtime logic needed to change before executable-level proof.

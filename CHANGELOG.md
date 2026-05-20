@@ -18,6 +18,8 @@
   and `--no-signature` planning.
 - Matched compression CLI output and invalid-algorithm wording, with gated
   runtime smoke coverage for None/GZip/Brotli payloads.
+- Added gated real-runtime smoke coverage for mountpoint and mountpoint
+  regression fixtures.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
