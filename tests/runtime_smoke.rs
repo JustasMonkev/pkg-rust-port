@@ -584,6 +584,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "shelljs@0.1.4.js",
             package_input: "shelljs@0.1.4.js",
         },
+        PublicNpmFixture {
+            name: "npm-graceful-fs",
+            fixture_subdir: "graceful-fs",
+            package_spec: "graceful-fs",
+            node_input: "graceful-fs.js",
+            package_input: "graceful-fs.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

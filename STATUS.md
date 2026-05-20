@@ -1117,3 +1117,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: move on to another deterministic non-native dictionary fixture family.
 
 Decisions made: add the oldest ShellJS pin last so the current, 0.7, and 0.6 package layouts are already proven before testing the most divergent legacy version.
+
+## 2026-05-20 - Graceful FS public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/graceful-fs` fixture. The Node oracle exits before the patched path, while the packaged run enters the `process.pkg` branch and depends on the dictionary patch for old `graceful-fs` behavior.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: evaluate the pinned `graceful-fs@3.0.8` wrapper separately.
+
+Decisions made: start with the current package shape before the pinned wrapper so any failure in the patch behavior is isolated from version drift.
