@@ -157,7 +157,7 @@ The JS package exposes the CLI binary and `exec(argv2)` as the public API. Other
 | JS suite group | Rust parity target |
 | --- | --- |
 | `test-42-*` | path and fetch integration smoke tests. |
-| `test-46-*` | CLI input/output/target parsing tests, including default multi-target output suffixes, `--out-path`, package `pkg.outputPath`, and package `pkg.targets`. |
+| `test-46-*` | CLI input/output/target parsing tests, including default multi-target output suffixes, explicit output host fallback, single-target `--out-path`, package `pkg.outputPath`, package `pkg.targets`, scoped package basenames, and overwrite refusal. |
 | `test-48-common` | `common` path/snapshot helper unit tests. |
 | `test-50-*` | main packaging behavior, AST detection, VFS, package.json, runtime behavior. |
 | `test-77-*` | dictionary/test consistency checks. |
@@ -198,7 +198,7 @@ Initial Rust parity order:
 - Run CLI packaging on a dedicated larger-stack OS thread. This keeps `reqwest::blocking` outside the Tokio runtime and avoids stack overflow on larger VFS/prelude builds without requiring users to set `RUST_MIN_STACK`.
 - Render fatal CLI packaging errors to stdout with the `> Error!` marker and no ANSI escapes. This preserves the JS invalid-fixture contract even though Rust library callers still receive typed `PkgError` values.
 - Map CLI input and package-bin metadata misses to JS-style "does not exist" messages at the planning boundary. Lower-level filesystem operations keep structured `Io` errors, but user-facing invalid fixtures assert the original CLI wording.
-- Keep the `test-46` output-name matrix covered at the planning layer. The JS suite mostly proves these fixtures by checking produced filenames, so Rust locks the same basename, extension stripping, multi-target suffix, `--out-path`, `pkg.outputPath`, and `pkg.targets` contracts before target binary production.
+- Keep the `test-46` output-name matrix covered at the planning layer. The JS suite mostly proves these fixtures by checking produced filenames, so Rust locks the same basename, extension stripping, explicit-output host fallback, single-target and multi-target suffix behavior, `--out-path`, `pkg.outputPath`, `pkg.targets`, scoped package basenames, and overwrite refusal before target binary production.
 - Keep Node bytecode fabrication as an external process interaction. Rust cannot produce V8 cached data directly without a major V8 embedder dependency, so `fabricate` remains process-based.
 - Implement Node resolution directly. A subprocess bridge to Node's `resolve` package would be faster to write but would retain the JS resolver as part of the Rust product.
 

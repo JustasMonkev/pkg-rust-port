@@ -138,6 +138,96 @@ fn plans_package_json_targets_and_output_path_defaults() -> Result<(), Box<dyn s
 }
 
 #[test]
+fn plans_explicit_output_as_single_host_target() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-explicit-output");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("../test/test-46-input-output/test-x-index"),
+    ])?;
+
+    assert_eq!(plan.outputs.len(), 1);
+    match plan.outputs[0].target.platform {
+        Platform::Win => assert!(
+            plan.outputs[0]
+                .output
+                .ends_with("pkg-rust-cli-plan-explicit-output.exe")
+        ),
+        _ => assert!(
+            plan.outputs[0]
+                .output
+                .ends_with("pkg-rust-cli-plan-explicit-output")
+        ),
+    }
+    Ok(())
+}
+
+#[test]
+fn plans_single_target_out_path_without_platform_suffix() -> Result<(), Box<dyn std::error::Error>>
+{
+    let output_root = std::env::temp_dir().join("pkg-rust-cli-plan-single-out-path");
+    let output_root_text = output_root
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("linux"),
+        OsString::from("--out-path"),
+        OsString::from(output_root_text),
+        OsString::from("../test/test-46-outpath-target/test-x-index"),
+    ])?;
+
+    assert_eq!(plan.outputs.len(), 1);
+    assert_output_suffixes(&plan, &["pkg-rust-cli-plan-single-out-path/test-x-index"]);
+    Ok(())
+}
+
+#[test]
+fn plans_scoped_package_directory_with_unscoped_basename() -> Result<(), Box<dyn std::error::Error>>
+{
+    let plan = plan_package([OsString::from(
+        "../test/test-46-input-package-json-dir-scope",
+    )])?;
+
+    assert!(
+        plan.input
+            .ends_with("test-46-input-package-json-dir-scope/package.json")
+    );
+    assert!(plan.entrypoint.ends_with("test-x-index.js"));
+    assert_output_suffixes(
+        &plan,
+        &[
+            "palookaville-linux",
+            "palookaville-macos",
+            "palookaville-win.exe",
+        ],
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_explicit_output_that_would_overwrite_input() -> Result<(), Box<dyn std::error::Error>> {
+    let error = match plan_package([
+        OsString::from("--output"),
+        OsString::from("../test/test-46-input/test-x-index"),
+        OsString::from("../test/test-46-input/test-x-index"),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("explicit output unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(error, PkgError::Cli(message) if message.contains("Refusing to overwrite input file"))
+    );
+    Ok(())
+}
+
+#[test]
 fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan-options");
     let output_text = output

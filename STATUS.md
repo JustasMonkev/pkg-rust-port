@@ -499,3 +499,13 @@ Next: continue closing remaining `test-46` planning edges, then return to unreso
 Decisions made: keep these filename contracts at the planning layer because the JS fixtures assert output filenames after packaging, while the Rust planner is the authoritative source for basename, suffix, extension, and output directory decisions.
 
 Blockers worked around: none.
+
+## 2026-05-20 - CLI single-output planning parity locked
+
+Shipped: added planner parity coverage for explicit `--output` host-target fallback, single-target `--out-path` output without platform suffix, scoped package directory basename normalization, and refusal to overwrite the input path.
+
+Next: finish any remaining `test-46` planning-only edges, then continue through unresolved config/error and runtime smoke fixtures.
+
+Decisions made: keep overwrite refusal in the planner because it is a pre-production CLI contract in the JS implementation and does not depend on target binary fetching or payload writing.
+
+Blockers worked around: none.
