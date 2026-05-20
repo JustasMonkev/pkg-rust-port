@@ -640,6 +640,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "publicsuffixlist.js",
             package_input: "publicsuffixlist.js",
         },
+        PublicNpmFixture {
+            name: "npm-oauth2orize",
+            fixture_subdir: "oauth2orize",
+            package_spec: "oauth2orize",
+            node_input: "oauth2orize.js",
+            package_input: "oauth2orize.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
