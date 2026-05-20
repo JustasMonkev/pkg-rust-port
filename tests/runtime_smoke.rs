@@ -53,6 +53,38 @@ fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dy
 }
 
 #[test]
+fn not_found_wording_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+
+    let first_fixture = root.join("test-50-not-found-wording");
+    let Some(run_result) =
+        package_and_run_real_fixture("not-found-wording", &first_fixture, "test-x-index.js")?
+    else {
+        return Ok(());
+    };
+    let stdout = String::from_utf8_lossy(&run_result.stdout);
+    let mut parts = stdout.split("*****");
+    let fs_message = parts
+        .next()
+        .ok_or_else(|| "missing filesystem error section".to_owned())?;
+    let require_message = parts
+        .next()
+        .ok_or_else(|| "missing require error section".to_owned())?;
+    assert!(fs_message.contains("was not included into executable at compilation stage"));
+    assert!(require_message.contains("you want to compile the package"));
+
+    let second_fixture = root.join("test-50-not-found-wording-2");
+    package_and_compare_fixture(
+        "not-found-wording-2",
+        &second_fixture,
+        "test-x-index.js",
+        "test-x-index.js",
+    )?;
+    Ok(())
+}
+
+#[test]
 fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-spawn");

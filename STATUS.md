@@ -529,3 +529,13 @@ Next: continue through remaining not-found/error wording fixtures and broader ru
 Decisions made: keep this as an opt-in real-cache smoke test, matching the rest of the runtime suite, because normal CI still should not require a seeded pkg-fetch binary.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Not-found wording runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-not-found-wording` and `test-50-not-found-wording-2`. The first fixture asserts pkg-specific filesystem and require error wording, and the second compares dynamic require/resolve failures against the Node oracle.
+
+Next: continue expanding runtime smoke coverage across remaining `test-50` fixtures, prioritizing small error/runtime slices that exercise existing ported components.
+
+Decisions made: keep not-found wording checks in the runtime suite because the behavior lives in the generated executable prelude rather than in CLI planning or static walking.
+
+Blockers worked around: none.
