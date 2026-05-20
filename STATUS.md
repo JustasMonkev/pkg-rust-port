@@ -1127,3 +1127,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: evaluate the pinned `graceful-fs@3.0.8` wrapper separately.
 
 Decisions made: start with the current package shape before the pinned wrapper so any failure in the patch behavior is isolated from version drift.
+
+## 2026-05-20 - Graceful FS 3.0.8 public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned `test-79-npm/graceful-fs@3.0.8` fixture. The wrapper reuses the packaged-only `graceful-fs` oracle while installing the older package shape that originally needed the dictionary patch.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: move on to another deterministic non-native dictionary fixture family.
+
+Decisions made: keep the pinned graceful-fs wrapper separate from the current package slice so old-package patch behavior is independently visible.
