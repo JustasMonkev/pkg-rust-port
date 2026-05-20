@@ -156,9 +156,10 @@ where
     let Some(cli) = parse_cli_or_display(argv)? else {
         return Ok(());
     };
+    let debug = cli.debug;
     let plan = plan_from_cli(cli)?;
     let cache = PkgFetchCache::default_cache()?;
-    let prelude = prelude_template(false);
+    let prelude = prelude_template(debug);
     // DECISION: larger fixtures overflow Tokio's default blocking-worker stack
     // during synchronous packaging. A dedicated 8 MiB OS thread keeps reqwest's
     // blocking client outside the async runtime and gives the pack/produce path
@@ -180,7 +181,13 @@ where
     .map_err(|error| PkgError::Cli(format!("package build join task failed: {error}")))?;
     let build = build_result?;
     for warning in build.warnings {
-        println!("> Warning {}", warning.to_cli_message());
+        if warning.is_debug() {
+            if debug {
+                println!("> [debug] {}", warning.to_cli_message());
+            }
+        } else {
+            println!("> Warning {}", warning.to_cli_message());
+        }
     }
     Ok(())
 }

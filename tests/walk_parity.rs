@@ -11,6 +11,14 @@ fn empty_marker() -> Result<Marker, PkgError> {
     Ok(Marker::new(package))
 }
 
+fn rendered_warning(warning: &pkg_rust::PackageWarning) -> String {
+    if warning.is_debug() {
+        format!("> [debug] {}", warning.to_cli_message())
+    } else {
+        format!("> Warning {}", warning.to_cli_message())
+    }
+}
+
 #[test]
 fn walks_require_resolve_fixture_dependencies_in_fifo_order() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
@@ -143,6 +151,45 @@ fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
         message.contains("stylus options to resolve imports")
             && message.contains("stylus/package.json")
     }));
+    Ok(())
+}
+
+#[test]
+fn records_may_exclude_and_malformed_diagnostics_in_js_order() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-may-exclude-must-exclude");
+    let output = walk(
+        empty_marker()?,
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let diagnostics = output
+        .warnings
+        .iter()
+        .map(rendered_warning)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        diagnostics.iter().take(16).collect::<Vec<_>>(),
+        vec![
+            "> Warning Cannot resolve 'reqResSomeVar'",
+            "> [debug] Cannot resolve 'reqResSomeVarMay'",
+            "> Warning Malformed requirement for 'reqResSomeVar'",
+            "> Warning Malformed requirement for 'reqResSomeVar'",
+            "> Warning Cannot resolve 'reqSomeVar'",
+            "> [debug] Cannot resolve 'reqSomeVarMay'",
+            "> Warning Malformed requirement for 'reqSomeVar'",
+            "> Warning Malformed requirement for 'reqSomeVar'",
+            "> [debug] Cannot resolve 'tryReqResSomeVar'",
+            "> [debug] Cannot resolve 'tryReqResSomeVarMay'",
+            "> [debug] Cannot resolve 'tryReqSomeVar'",
+            "> [debug] Cannot resolve 'tryReqSomeVarMay'",
+            "> [debug] Cannot find module 'reqResSomeLit'",
+            "> [debug] Cannot find module 'reqResSomeLitMay'",
+            "> [debug] Cannot find module 'reqSomeLit'",
+            "> [debug] Cannot find module 'reqSomeLitMay'",
+        ]
+    );
     Ok(())
 }
 

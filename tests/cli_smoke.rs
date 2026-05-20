@@ -162,6 +162,69 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
 }
 
 #[test]
+fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
+    let temp_root = temp_root("may-exclude-debug-diagnostics")?;
+    let cache_root = temp_root.join("cache");
+    seed_cached_binary(&cache_root, "node18-macos-arm64")?;
+    let output_path = temp_root.join("test-output.exe");
+    let output_text = output_path
+        .to_str()
+        .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-may-exclude-must-exclude");
+    let output = run_cli_with_env(
+        &fixture,
+        [
+            "--debug",
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            output_text,
+            "./test-x-index.js",
+        ],
+        [("PKG_CACHE_PATH", cache_root.as_os_str())],
+    )?;
+
+    assert!(
+        output.status.success(),
+        "pkg CLI failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.as_bytes().contains(&0x1b),
+        "stdout contains ANSI escape bytes: {stdout}"
+    );
+    let diagnostics = diagnostic_lines(&stdout);
+    let first_diagnostics = diagnostics.iter().take(16).copied().collect::<Vec<_>>();
+    assert_eq!(
+        first_diagnostics,
+        vec![
+            "> Warning Cannot resolve 'reqResSomeVar'",
+            "> [debug] Cannot resolve 'reqResSomeVarMay'",
+            "> Warning Malformed requirement for 'reqResSomeVar'",
+            "> Warning Malformed requirement for 'reqResSomeVar'",
+            "> Warning Cannot resolve 'reqSomeVar'",
+            "> [debug] Cannot resolve 'reqSomeVarMay'",
+            "> Warning Malformed requirement for 'reqSomeVar'",
+            "> Warning Malformed requirement for 'reqSomeVar'",
+            "> [debug] Cannot resolve 'tryReqResSomeVar'",
+            "> [debug] Cannot resolve 'tryReqResSomeVarMay'",
+            "> [debug] Cannot resolve 'tryReqSomeVar'",
+            "> [debug] Cannot resolve 'tryReqSomeVarMay'",
+            "> [debug] Cannot find module 'reqResSomeLit'",
+            "> [debug] Cannot find module 'reqResSomeLitMay'",
+            "> [debug] Cannot find module 'reqSomeLit'",
+            "> [debug] Cannot find module 'reqSomeLitMay'",
+        ]
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
 fn cli_reports_missing_input_like_js_invalid_fixture() -> TestResult {
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let output = run_cli(
@@ -285,6 +348,13 @@ fn seed_cached_binary(cache_root: &Path, target: &str) -> Result<(), Box<dyn std
     )?;
     fs::write(&built, binary_with_placeholders())?;
     Ok(())
+}
+
+fn diagnostic_lines(stdout: &str) -> Vec<&str> {
+    stdout
+        .lines()
+        .filter(|line| line.contains(" [debug] ") || line.contains(" Warning "))
+        .collect()
 }
 
 fn temp_root(name: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {

@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use swc_common::{FileName, SourceMap, sync::Lrc};
+
 use swc_ecma_ast::{
     ArrayLit, BinExpr, Callee, Decl, Expr, ExprOrSpread, ImportDecl, ImportSpecifier, Lit,
     MemberExpr, MemberProp, ModuleDecl, ModuleExportName, ModuleItem, ObjectLit, Program, Prop,
@@ -139,80 +141,113 @@ struct Detector {
 
 impl Detector {
     fn program(&mut self, program: &Program) {
+        let mut queue = VecDeque::new();
         match program {
             Program::Module(module) => {
                 for item in &module.body {
-                    self.module_item(item, false);
+                    queue.push_back(VisitItem::new(VisitNode::ModuleItem(item), false));
                 }
             }
             Program::Script(script) => {
                 for stmt in &script.body {
-                    self.stmt(stmt, false);
+                    queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), false));
                 }
             }
         }
+
+        while let Some(item) = queue.pop_front() {
+            self.visit(item, &mut queue);
+        }
     }
 
-    fn module_item(&mut self, item: &ModuleItem, trying: bool) {
+    fn visit<'a>(&mut self, item: VisitItem<'a>, queue: &mut VecDeque<VisitItem<'a>>) {
+        match item.node {
+            VisitNode::ModuleItem(module_item) => {
+                self.module_item(module_item, item.trying, queue);
+            }
+            VisitNode::Stmt(stmt) => self.stmt(stmt, item.trying, queue),
+            VisitNode::Expr(expr) => self.expr(expr, item.trying, queue),
+            VisitNode::Decl(decl) => self.decl(decl, item.trying, queue),
+            VisitNode::VarDecl(var) => self.var_decl(var, item.trying, queue),
+            VisitNode::Array(array) => self.array_lit(array, item.trying, queue),
+            VisitNode::Object(object) => self.object_lit(object, item.trying, queue),
+            VisitNode::Prop(prop) => self.prop(prop, item.trying, queue),
+        }
+    }
+
+    fn module_item<'a>(
+        &mut self,
+        item: &'a ModuleItem,
+        trying: bool,
+        queue: &mut VecDeque<VisitItem<'a>>,
+    ) {
         match item {
             ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
                 self.import_decl(import, trying);
             }
             ModuleItem::ModuleDecl(_) => {}
-            ModuleItem::Stmt(stmt) => self.stmt(stmt, trying),
+            ModuleItem::Stmt(stmt) => {
+                queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying))
+            }
         }
     }
 
-    fn stmt(&mut self, stmt: &Stmt, trying: bool) {
+    fn stmt<'a>(&mut self, stmt: &'a Stmt, trying: bool, queue: &mut VecDeque<VisitItem<'a>>) {
         match stmt {
             Stmt::Block(block) => {
                 for stmt in &block.stmts {
-                    self.stmt(stmt, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
                 }
             }
             Stmt::Return(return_stmt) => {
                 if let Some(arg) = &return_stmt.arg {
-                    self.expr(arg, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(arg), trying));
                 }
             }
             Stmt::Try(try_stmt) => {
                 for stmt in &try_stmt.block.stmts {
-                    self.stmt(stmt, true);
+                    queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), true));
                 }
                 if let Some(handler) = &try_stmt.handler {
                     for stmt in &handler.body.stmts {
-                        self.stmt(stmt, true);
+                        queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), true));
                     }
                 }
                 if let Some(finalizer) = &try_stmt.finalizer {
                     for stmt in &finalizer.stmts {
-                        self.stmt(stmt, true);
+                        queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), true));
                     }
                 }
             }
             Stmt::If(if_stmt) => {
-                self.expr(&if_stmt.test, trying);
-                self.stmt(&if_stmt.cons, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(&if_stmt.test), trying));
+                queue.push_back(VisitItem::new(VisitNode::Stmt(&if_stmt.cons), trying));
                 if let Some(alt) = &if_stmt.alt {
-                    self.stmt(alt, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Stmt(alt), trying));
                 }
             }
-            Stmt::Decl(decl) => self.decl(decl, trying),
-            Stmt::Expr(expr_stmt) => self.expr(&expr_stmt.expr, trying),
-            Stmt::Labeled(labeled) => self.stmt(&labeled.body, trying),
-            Stmt::Throw(throw_stmt) => self.expr(&throw_stmt.arg, trying),
+            Stmt::Decl(decl) => queue.push_back(VisitItem::new(VisitNode::Decl(decl), trying)),
+            Stmt::Expr(expr_stmt) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&expr_stmt.expr), trying));
+            }
+            Stmt::Labeled(labeled) => {
+                queue.push_back(VisitItem::new(VisitNode::Stmt(&labeled.body), trying));
+            }
+            Stmt::Throw(throw_stmt) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&throw_stmt.arg), trying));
+            }
             Stmt::While(while_stmt) => {
-                self.expr(&while_stmt.test, trying);
-                self.stmt(&while_stmt.body, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(&while_stmt.test), trying));
+                queue.push_back(VisitItem::new(VisitNode::Stmt(&while_stmt.body), trying));
             }
             Stmt::For(for_stmt) => {
                 if let Some(test) = &for_stmt.test {
-                    self.expr(test, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(test), trying));
                 }
                 if let Some(update) = &for_stmt.update {
-                    self.expr(update, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(update), trying));
                 }
-                self.stmt(&for_stmt.body, trying);
+                queue.push_back(VisitItem::new(VisitNode::Stmt(&for_stmt.body), trying));
             }
             Stmt::Empty(_)
             | Stmt::Debugger(_)
@@ -226,16 +261,16 @@ impl Detector {
         }
     }
 
-    fn decl(&mut self, decl: &Decl, trying: bool) {
+    fn decl<'a>(&mut self, decl: &'a Decl, trying: bool, queue: &mut VecDeque<VisitItem<'a>>) {
         match decl {
             Decl::Fn(function) => {
                 if let Some(body) = &function.function.body {
                     for stmt in &body.stmts {
-                        self.stmt(stmt, trying);
+                        queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
                     }
                 }
             }
-            Decl::Var(var) => self.var_decl(var, trying),
+            Decl::Var(var) => queue.push_back(VisitItem::new(VisitNode::VarDecl(var), trying)),
             Decl::Class(_)
             | Decl::Using(_)
             | Decl::TsInterface(_)
@@ -245,15 +280,20 @@ impl Detector {
         }
     }
 
-    fn var_decl(&mut self, decl: &VarDecl, trying: bool) {
+    fn var_decl<'a>(
+        &mut self,
+        decl: &'a VarDecl,
+        trying: bool,
+        queue: &mut VecDeque<VisitItem<'a>>,
+    ) {
         for declarator in &decl.decls {
             if let Some(init) = &declarator.init {
-                self.expr(init, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(init), trying));
             }
         }
     }
 
-    fn expr(&mut self, expr: &Expr, trying: bool) {
+    fn expr<'a>(&mut self, expr: &'a Expr, trying: bool, queue: &mut VecDeque<VisitItem<'a>>) {
         if let Some(kind) = successful(expr, self.include_invalid_successful) {
             self.detected.push(DetectedUse { kind, trying });
             return;
@@ -277,43 +317,49 @@ impl Detector {
         match expr {
             Expr::Call(call) => {
                 if let Callee::Expr(callee) = &call.callee {
-                    self.expr(callee, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(callee), trying));
                 }
                 for arg in &call.args {
-                    self.expr(&arg.expr, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&arg.expr), trying));
                 }
             }
             Expr::Member(member) => {
-                self.expr(&member.obj, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(&member.obj), trying));
                 if let MemberProp::Computed(prop) = &member.prop {
-                    self.expr(&prop.expr, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&prop.expr), trying));
                 }
             }
             Expr::Bin(binary) => {
-                self.expr(&binary.left, trying);
-                self.expr(&binary.right, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(&binary.left), trying));
+                queue.push_back(VisitItem::new(VisitNode::Expr(&binary.right), trying));
             }
             Expr::Cond(cond) => {
-                self.expr(&cond.test, trying);
-                self.expr(&cond.cons, trying);
-                self.expr(&cond.alt, trying);
+                queue.push_back(VisitItem::new(VisitNode::Expr(&cond.test), trying));
+                queue.push_back(VisitItem::new(VisitNode::Expr(&cond.cons), trying));
+                queue.push_back(VisitItem::new(VisitNode::Expr(&cond.alt), trying));
             }
-            Expr::Array(array) => self.array_lit(array, trying),
-            Expr::Object(object) => self.object_lit(object, trying),
+            Expr::Array(array) => queue.push_back(VisitItem::new(VisitNode::Array(array), trying)),
+            Expr::Object(object) => {
+                queue.push_back(VisitItem::new(VisitNode::Object(object), trying));
+            }
             Expr::Fn(function) => {
                 if let Some(body) = &function.function.body {
                     for stmt in &body.stmts {
-                        self.stmt(stmt, trying);
+                        queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
                     }
                 }
             }
-            Expr::Paren(paren) => self.expr(&paren.expr, trying),
+            Expr::Paren(paren) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&paren.expr), trying));
+            }
             Expr::Tpl(tpl) => {
                 for expr in &tpl.exprs {
-                    self.expr(expr, trying);
+                    queue.push_back(VisitItem::new(VisitNode::Expr(expr), trying));
                 }
             }
-            Expr::Assign(assign) => self.expr(&assign.right, trying),
+            Expr::Assign(assign) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&assign.right), trying));
+            }
             Expr::This(_)
             | Expr::Unary(_)
             | Expr::Update(_)
@@ -345,43 +391,68 @@ impl Detector {
         }
     }
 
-    fn array_lit(&mut self, array: &ArrayLit, trying: bool) {
+    fn array_lit<'a>(
+        &mut self,
+        array: &'a ArrayLit,
+        trying: bool,
+        queue: &mut VecDeque<VisitItem<'a>>,
+    ) {
         for element in array.elems.iter().flatten() {
-            self.expr(&element.expr, trying);
+            queue.push_back(VisitItem::new(VisitNode::Expr(&element.expr), trying));
         }
     }
 
-    fn object_lit(&mut self, object: &ObjectLit, trying: bool) {
+    fn object_lit<'a>(
+        &mut self,
+        object: &'a ObjectLit,
+        trying: bool,
+        queue: &mut VecDeque<VisitItem<'a>>,
+    ) {
         for prop in &object.props {
-            match prop {
-                PropOrSpread::Spread(spread) => self.expr(&spread.expr, trying),
-                PropOrSpread::Prop(prop) => match prop.as_ref() {
-                    Prop::KeyValue(key_value) => self.expr(&key_value.value, trying),
-                    Prop::Assign(assign) => self.expr(&assign.value, trying),
-                    Prop::Getter(getter) => {
-                        if let Some(body) = &getter.body {
-                            for stmt in &body.stmts {
-                                self.stmt(stmt, trying);
-                            }
-                        }
-                    }
-                    Prop::Setter(setter) => {
-                        if let Some(body) = &setter.body {
-                            for stmt in &body.stmts {
-                                self.stmt(stmt, trying);
-                            }
-                        }
-                    }
-                    Prop::Method(method) => {
-                        if let Some(body) = &method.function.body {
-                            for stmt in &body.stmts {
-                                self.stmt(stmt, trying);
-                            }
-                        }
-                    }
-                    Prop::Shorthand(_) => {}
-                },
+            queue.push_back(VisitItem::new(VisitNode::Prop(prop), trying));
+        }
+    }
+
+    fn prop<'a>(
+        &mut self,
+        prop: &'a PropOrSpread,
+        trying: bool,
+        queue: &mut VecDeque<VisitItem<'a>>,
+    ) {
+        match prop {
+            PropOrSpread::Spread(spread) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&spread.expr), trying));
             }
+            PropOrSpread::Prop(prop) => match prop.as_ref() {
+                Prop::KeyValue(key_value) => {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&key_value.value), trying));
+                }
+                Prop::Assign(assign) => {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&assign.value), trying));
+                }
+                Prop::Getter(getter) => {
+                    if let Some(body) = &getter.body {
+                        for stmt in &body.stmts {
+                            queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
+                        }
+                    }
+                }
+                Prop::Setter(setter) => {
+                    if let Some(body) = &setter.body {
+                        for stmt in &body.stmts {
+                            queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
+                        }
+                    }
+                }
+                Prop::Method(method) => {
+                    if let Some(body) = &method.function.body {
+                        for stmt in &body.stmts {
+                            queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
+                        }
+                    }
+                }
+                Prop::Shorthand(_) => {}
+            },
         }
     }
 
@@ -399,6 +470,28 @@ impl Detector {
             trying,
         });
     }
+}
+
+struct VisitItem<'a> {
+    node: VisitNode<'a>,
+    trying: bool,
+}
+
+impl<'a> VisitItem<'a> {
+    fn new(node: VisitNode<'a>, trying: bool) -> Self {
+        Self { node, trying }
+    }
+}
+
+enum VisitNode<'a> {
+    ModuleItem(&'a ModuleItem),
+    Stmt(&'a Stmt),
+    Expr(&'a Expr),
+    Decl(&'a Decl),
+    VarDecl(&'a VarDecl),
+    Array(&'a ArrayLit),
+    Object(&'a ObjectLit),
+    Prop(&'a PropOrSpread),
 }
 
 fn parse_program(source: &str) -> Result<Program, PkgError> {
@@ -525,7 +618,10 @@ fn non_literal_require_like(expr: &Expr, kind: RequireKind) -> Option<(&Expr, Op
     if literal_value(&first.expr).is_some() {
         return None;
     }
-    let second = call.args.get(1).and_then(|arg| literal_value(&arg.expr));
+    let second = match call.args.get(1) {
+        Some(arg) => Some(literal_value(&arg.expr)?),
+        None => None,
+    };
     Some((&first.expr, second))
 }
 

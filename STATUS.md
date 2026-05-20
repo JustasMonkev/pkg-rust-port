@@ -509,3 +509,13 @@ Next: finish any remaining `test-46` planning-only edges, then continue through 
 Decisions made: keep overwrite refusal in the planner because it is a pre-production CLI contract in the JS implementation and does not depend on target binary fetching or payload writing.
 
 Blockers worked around: none.
+
+## 2026-05-20 - May-exclude diagnostic parity shipped
+
+Shipped: matched the `test-50-may-exclude-must-exclude` diagnostic contract. The detector now traverses source nodes in JS-style breadth-first order, dynamic second-argument requires fall through to malformed diagnostics, the walker records debug-vs-warning diagnostics as typed values, and the CLI renders `> Warning` / `> [debug]` lines only when appropriate.
+
+Next: add real-runtime parity for `test-50-may-exclude`, then continue through remaining not-found/error wording and runtime smoke fixtures.
+
+Decisions made: keep diagnostic collection in the walker and rendering in the CLI. The lower layers preserve typed diagnostics, while `--debug` controls which messages become user-visible.
+
+Blockers worked around: the first Rust detector walked function and `try` bodies depth-first, which reordered diagnostics relative to JS. The JS detector uses a queue traversal, so Rust now mirrors that traversal model instead of sorting messages after the fact.

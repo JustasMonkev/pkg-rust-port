@@ -281,6 +281,27 @@ pub enum PackageWarning {
         /// Package metadata file that activated the dictionary entry.
         package_json: PathBuf,
     },
+    /// A dynamic `require` or `require.resolve` could not be resolved at
+    /// compile time.
+    CannotResolve {
+        /// Reconstructed dynamic argument.
+        alias: String,
+        /// Whether the message should be hidden unless CLI debug mode is on.
+        debug: bool,
+    },
+    /// A malformed `require` or `require.resolve` call was detected.
+    MalformedRequirement {
+        /// Reconstructed argument.
+        alias: String,
+        /// Whether the message should be hidden unless CLI debug mode is on.
+        debug: bool,
+    },
+    /// A literal dependency could not be resolved, but the JavaScript walker
+    /// treats this path as debug-only.
+    CannotFindModule {
+        /// Requested module/path alias.
+        alias: String,
+    },
 }
 
 impl PackageWarning {
@@ -310,6 +331,31 @@ impl PackageWarning {
                 "Add {{ paths: [ __dirname ] }} to stylus options to resolve imports in '{}'",
                 package_json.display()
             ),
+            Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
+            Self::MalformedRequirement { alias, .. } => {
+                format!("Malformed requirement for '{alias}'")
+            }
+            Self::CannotFindModule { alias } => format!("Cannot find module '{alias}'"),
+        }
+    }
+
+    /// Return whether this diagnostic should be rendered only in CLI debug
+    /// mode.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let warning = pkg_rust::PackageWarning::CannotFindModule {
+    ///     alias: "optional".to_owned(),
+    /// };
+    /// assert!(warning.is_debug());
+    /// ```
+    #[must_use]
+    pub fn is_debug(&self) -> bool {
+        match self {
+            Self::MissingMainEntry { .. } | Self::StylusResolveImports { .. } => false,
+            Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
+            Self::CannotFindModule { .. } => true,
         }
     }
 }
@@ -560,10 +606,37 @@ impl WalkerState {
         self.apply_patch(file, &mut body);
         let body = strip_bom_and_shebang(&body);
         self.record_mut(file).body = Some(body.as_bytes().to_vec());
+        let mut successful = Vec::new();
         for detected in detect(&body)? {
-            let DetectionKind::Successful(derivative) = detected.kind else {
-                continue;
-            };
+            match detected.kind {
+                DetectionKind::Successful(derivative) => {
+                    successful.push((derivative, detected.trying));
+                }
+                DetectionKind::NonLiteral {
+                    alias,
+                    must_exclude,
+                    may_exclude,
+                } => {
+                    if !must_exclude {
+                        self.output.warnings.push(PackageWarning::CannotResolve {
+                            alias,
+                            debug: !marker.is_top_level() || may_exclude || detected.trying,
+                        });
+                    }
+                }
+                DetectionKind::Malformed { alias } => {
+                    self.output
+                        .warnings
+                        .push(PackageWarning::MalformedRequirement {
+                            alias,
+                            debug: !marker.is_top_level() || detected.trying,
+                        });
+                }
+                DetectionKind::AmbiguousCwd { .. } => {}
+            }
+        }
+
+        for (derivative, trying) in successful {
             if derivative.must_exclude {
                 continue;
             }
@@ -589,7 +662,7 @@ impl WalkerState {
                         parent,
                         &derivative.alias,
                         marker.clone(),
-                        derivative.may_exclude || detected.trying,
+                        derivative.may_exclude || trying,
                     )?;
                 }
             }
@@ -694,7 +767,10 @@ impl WalkerState {
                     return Ok(());
                 }
                 if optional {
-                    tracing::debug!(alias, error = %error, "skipping optional dependency");
+                    let _ = error;
+                    self.output.warnings.push(PackageWarning::CannotFindModule {
+                        alias: alias.to_owned(),
+                    });
                     return Ok(());
                 }
                 Err(error)
