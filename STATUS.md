@@ -629,3 +629,13 @@ Next: continue expanding require/runtime fixtures, especially cases that need pa
 Decisions made: keep this fixture in the stdout compare helper because its JS oracle only asserts process output equality.
 
 Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
+
+## 2026-05-20 - Require-with-config runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-require-with-config`, packaging the fixture as a package directory so `package.json` `pkg.scripts` and `pkg.assets` participate in the runtime smoke path.
+
+Next: cover the original JS fixture's alternate run-directory normalization for require/config cases, then continue larger package and compression groups.
+
+Decisions made: this smoke test uses the standard Node stdout oracle for the compile-time fixture directory; the more complex run-time/run-time-3 host overlay behavior remains a separate helper slice.
+
+Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
