@@ -619,6 +619,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "later.js",
             package_input: "later.js",
         },
+        PublicNpmFixture {
+            name: "npm-nconf",
+            fixture_subdir: "nconf",
+            package_spec: "nconf",
+            node_input: "nconf.js",
+            package_input: "nconf.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
