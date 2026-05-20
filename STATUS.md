@@ -519,3 +519,13 @@ Next: add real-runtime parity for `test-50-may-exclude`, then continue through r
 Decisions made: keep diagnostic collection in the walker and rendering in the CLI. The lower layers preserve typed diagnostics, while `--debug` controls which messages become user-visible.
 
 Blockers worked around: the first Rust detector walked function and `try` bodies depth-first, which reordered diagnostics relative to JS. The JS detector uses a queue traversal, so Rust now mirrors that traversal model instead of sorting messages after the fact.
+
+## 2026-05-20 - May-exclude runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-may-exclude`. When `PKG_RUST_REAL_CACHE` is configured, the test packages the fixture and compares the produced executable output with the Node oracle output.
+
+Next: continue through remaining not-found/error wording fixtures and broader runtime smoke coverage.
+
+Decisions made: keep this as an opt-in real-cache smoke test, matching the rest of the runtime suite, because normal CI still should not require a seeded pkg-fetch binary.
+
+Blockers worked around: none.

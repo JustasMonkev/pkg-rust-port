@@ -40,6 +40,19 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-may-exclude");
+    package_and_compare_fixture(
+        "may-exclude",
+        &fixture_dir,
+        "test-x-index.js",
+        "test-x-index.js",
+    )
+}
+
+#[test]
 fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-spawn");
