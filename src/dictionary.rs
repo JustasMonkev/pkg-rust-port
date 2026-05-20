@@ -149,6 +149,8 @@ pub enum DictionaryLog {
 pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
         "busboy" => Some(busboy()),
+        "drivelist" => Some(drivelist()),
+        "electron" => Some(electron()),
         "exiftool.exe" => Some(exiftool_exe()),
         "exiftool.pl" => Some(exiftool_pl()),
         "express" => Some(express()),
@@ -156,10 +158,15 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "google-closure-compiler-java" => Some(google_closure_compiler_java()),
         "leveldown" => Some(leveldown()),
         "log4js" => Some(log4js()),
+        "nightmare" => Some(nightmare()),
+        "node-notifier" => Some(node_notifier()),
         "open" | "opn" => Some(open()),
+        "phantom" => Some(phantom()),
+        "phantomjs-prebuilt" => Some(phantomjs_prebuilt()),
         "publicsuffixlist" => Some(publicsuffixlist()),
         "puppeteer" => Some(puppeteer()),
         "sequelize" => Some(sequelize()),
+        "sharp" => Some(sharp()),
         "stylus" => Some(stylus()),
         "zeromq" => Some(zeromq()),
         _ => None,
@@ -234,6 +241,59 @@ fn dependency_value_is_active(value: &Value) -> bool {
 
 fn busboy() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/types/*.js"]))
+}
+
+fn drivelist() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "build/scripts.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, '..', 'scripts')",
+            "path.join(path.dirname(process.execPath), 'drivelist')"
+        ]),
+    );
+    patches.insert(
+        "lib/scripts.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, '..', 'scripts')",
+            "path.join(path.dirname(process.execPath), 'drivelist')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["build/Release/drivelist.node", "drivelist.node"],
+            ["scripts/darwin.sh", "drivelist/darwin.sh"],
+            ["scripts/linux.sh", "drivelist/linux.sh"],
+            ["scripts/win32.bat", "drivelist/win32.bat"]
+        ]),
+        ..PkgConfig::default()
+    })
+}
+
+fn electron() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, fs",
+            "path.join(path.dirname(process.execPath), 'electron', fs"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["dist", "electron/dist", "directory"],
+            ["../sliced/index.js", "node_modules/sliced/index.js"],
+            [
+                "../deep-defaults/lib/index.js",
+                "node_modules/deep-defaults/index.js"
+            ]
+        ]),
+        ..PkgConfig::default()
+    })
 }
 
 fn exiftool_exe() -> DictionaryEntry {
@@ -326,6 +386,74 @@ fn log4js() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/appenders/*.js"]))
 }
 
+fn nightmare() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/nightmare.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, 'runner.js')",
+            "path.join(path.dirname(process.execPath), 'nightmare/runner.js')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["lib/runner.js", "nightmare/runner.js"],
+            ["lib/frame-manager.js", "nightmare/frame-manager.js"],
+            ["lib/ipc.js", "nightmare/ipc.js"],
+            ["lib/preload.js", "nightmare/preload.js"]
+        ]),
+        ..PkgConfig::default()
+    })
+}
+
+fn node_notifier() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "notifiers/balloon.js".to_owned(),
+        serde_json::json!([
+            "__dirname, '../vendor/notifu/notifu'",
+            "path.dirname(process.execPath), 'notifier/notifu'"
+        ]),
+    );
+    patches.insert(
+        "notifiers/notificationcenter.js".to_owned(),
+        serde_json::json!([
+            "__dirname,\n  '../vendor/terminal-notifier.app/Contents/MacOS/terminal-notifier'",
+            "path.dirname(process.execPath), 'notifier/terminal-notifier'"
+        ]),
+    );
+    patches.insert(
+        "notifiers/toaster.js".to_owned(),
+        serde_json::json!([
+            "__dirname, '../vendor/snoreToast/snoretoast'",
+            "path.dirname(process.execPath), 'notifier/snoretoast'"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["vendor/notifu/notifu.exe", "notifier/notifu.exe"],
+            ["vendor/notifu/notifu64.exe", "notifier/notifu64.exe"],
+            [
+                "vendor/terminal-notifier.app/Contents/MacOS/terminal-notifier",
+                "notifier/terminal-notifier"
+            ],
+            [
+                "vendor/snoreToast/snoretoast-x64.exe",
+                "notifier/snoretoast-x64.exe"
+            ],
+            [
+                "vendor/snoreToast/snoretoast-x86.exe",
+                "notifier/snoretoast-x86.exe"
+            ]
+        ]),
+        ..PkgConfig::default()
+    })
+}
+
 fn leveldown() -> DictionaryEntry {
     let mut patches = Map::new();
     patches.insert(
@@ -353,6 +481,49 @@ fn open() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig {
         patches,
         deploy_files: serde_json::json!([["xdg-open", "xdg-open"]]),
+        ..PkgConfig::default()
+    })
+}
+
+fn phantom() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/phantom.js".to_owned(),
+        serde_json::json!([
+            "__dirname + '/shim/index.js'",
+            "_path2.default.join(_path2.default.dirname(process.execPath), 'phantom/index.js')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["lib/shim/index.js", "phantom/index.js"],
+            [
+                "lib/shim/function_bind_polyfill.js",
+                "phantom/function_bind_polyfill.js"
+            ]
+        ]),
+        ..PkgConfig::default()
+    })
+}
+
+fn phantomjs_prebuilt() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/phantomjs.js".to_owned(),
+        serde_json::json!([
+            "__dirname, location.location",
+            "path.dirname(process.execPath), 'phantom', path.basename(location.location)"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([
+            ["lib/phantom/bin/phantomjs", "phantom/phantomjs"],
+            ["lib/phantom/bin/phantomjs.exe", "phantom/phantomjs.exe"]
+        ]),
         ..PkgConfig::default()
     })
 }
@@ -386,6 +557,17 @@ fn puppeteer() -> DictionaryEntry {
 
 fn sequelize() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/**/*.js"]))
+}
+
+fn sharp() -> DictionaryEntry {
+    DictionaryEntry::with_pkg(PkgConfig {
+        scripts: serde_json::json!(["lib/*.js"]),
+        deploy_files: serde_json::json!([
+            ["build/Release", "sharp/build/Release", "directory"],
+            ["vendor/lib", "sharp/vendor/lib", "directory"]
+        ]),
+        ..PkgConfig::default()
+    })
 }
 
 fn stylus() -> DictionaryEntry {

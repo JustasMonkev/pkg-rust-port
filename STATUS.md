@@ -749,3 +749,13 @@ Next: continue the remaining deploy-file dictionaries with larger platform-speci
 Decisions made: keep these file mappings in `PkgConfig.deploy_files` instead of special-casing archive or binary-like names; the walker already treats absent third tuple items as `file`, matching the JS dictionary shape.
 
 Blockers worked around: this slice does not prove executable-level npm fixture behavior because deploy-file copying beside produced outputs remains a later increment.
+
+## 2026-05-20 - Remaining deploy dictionaries shipped
+
+Shipped: ported the remaining deploy-file dictionaries as typed data: `drivelist`, `electron`, `nightmare`, `node-notifier`, `phantom`, `phantomjs-prebuilt`, and `sharp`. The parity test now asserts each entry's deploy-file list plus representative patch/script metadata, so every JS dictionary containing `deployFiles` has a Rust `lookup_dictionary` entry.
+
+Next: add the higher-level package output behavior that copies deploy files beside produced executables for npm fixture parity, then revisit real npm fixture smoke coverage once a base-binary cache is configured.
+
+Decisions made: `sharp` keeps its dictionary `scripts` glob alongside deploy metadata; platform packages with nested node_modules deploy targets remain plain deploy tuples instead of becoming package dependency aliases.
+
+Blockers worked around: the Rust port still emits deploy-file warnings but does not copy external deploy files to output directories, so executable-level npm deploy fixtures remain incomplete.

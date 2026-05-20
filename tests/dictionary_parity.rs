@@ -216,3 +216,157 @@ fn file_deploy_dictionaries_carry_patch_and_deploy_files() -> Result<(), Box<dyn
 
     Ok(())
 }
+
+#[test]
+fn remaining_deploy_dictionaries_carry_expected_pkg_metadata()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct Case {
+        name: &'static str,
+        scripts: Option<serde_json::Value>,
+        deploy_files: serde_json::Value,
+        patch: Option<(&'static str, serde_json::Value)>,
+    }
+
+    let cases = [
+        Case {
+            name: "drivelist",
+            scripts: None,
+            deploy_files: json!([
+                ["build/Release/drivelist.node", "drivelist.node"],
+                ["scripts/darwin.sh", "drivelist/darwin.sh"],
+                ["scripts/linux.sh", "drivelist/linux.sh"],
+                ["scripts/win32.bat", "drivelist/win32.bat"]
+            ]),
+            patch: Some((
+                "build/scripts.js",
+                json!([
+                    "path.join(__dirname, '..', 'scripts')",
+                    "path.join(path.dirname(process.execPath), 'drivelist')"
+                ]),
+            )),
+        },
+        Case {
+            name: "electron",
+            scripts: None,
+            deploy_files: json!([
+                ["dist", "electron/dist", "directory"],
+                ["../sliced/index.js", "node_modules/sliced/index.js"],
+                [
+                    "../deep-defaults/lib/index.js",
+                    "node_modules/deep-defaults/index.js"
+                ]
+            ]),
+            patch: Some((
+                "index.js",
+                json!([
+                    "path.join(__dirname, fs",
+                    "path.join(path.dirname(process.execPath), 'electron', fs"
+                ]),
+            )),
+        },
+        Case {
+            name: "nightmare",
+            scripts: None,
+            deploy_files: json!([
+                ["lib/runner.js", "nightmare/runner.js"],
+                ["lib/frame-manager.js", "nightmare/frame-manager.js"],
+                ["lib/ipc.js", "nightmare/ipc.js"],
+                ["lib/preload.js", "nightmare/preload.js"]
+            ]),
+            patch: Some((
+                "lib/nightmare.js",
+                json!([
+                    "path.join(__dirname, 'runner.js')",
+                    "path.join(path.dirname(process.execPath), 'nightmare/runner.js')"
+                ]),
+            )),
+        },
+        Case {
+            name: "node-notifier",
+            scripts: None,
+            deploy_files: json!([
+                ["vendor/notifu/notifu.exe", "notifier/notifu.exe"],
+                ["vendor/notifu/notifu64.exe", "notifier/notifu64.exe"],
+                [
+                    "vendor/terminal-notifier.app/Contents/MacOS/terminal-notifier",
+                    "notifier/terminal-notifier"
+                ],
+                [
+                    "vendor/snoreToast/snoretoast-x64.exe",
+                    "notifier/snoretoast-x64.exe"
+                ],
+                [
+                    "vendor/snoreToast/snoretoast-x86.exe",
+                    "notifier/snoretoast-x86.exe"
+                ]
+            ]),
+            patch: Some((
+                "notifiers/notificationcenter.js",
+                json!([
+                    "__dirname,\n  '../vendor/terminal-notifier.app/Contents/MacOS/terminal-notifier'",
+                    "path.dirname(process.execPath), 'notifier/terminal-notifier'"
+                ]),
+            )),
+        },
+        Case {
+            name: "phantom",
+            scripts: None,
+            deploy_files: json!([
+                ["lib/shim/index.js", "phantom/index.js"],
+                [
+                    "lib/shim/function_bind_polyfill.js",
+                    "phantom/function_bind_polyfill.js"
+                ]
+            ]),
+            patch: Some((
+                "lib/phantom.js",
+                json!([
+                    "__dirname + '/shim/index.js'",
+                    "_path2.default.join(_path2.default.dirname(process.execPath), 'phantom/index.js')"
+                ]),
+            )),
+        },
+        Case {
+            name: "phantomjs-prebuilt",
+            scripts: None,
+            deploy_files: json!([
+                ["lib/phantom/bin/phantomjs", "phantom/phantomjs"],
+                ["lib/phantom/bin/phantomjs.exe", "phantom/phantomjs.exe"]
+            ]),
+            patch: Some((
+                "lib/phantomjs.js",
+                json!([
+                    "__dirname, location.location",
+                    "path.dirname(process.execPath), 'phantom', path.basename(location.location)"
+                ]),
+            )),
+        },
+        Case {
+            name: "sharp",
+            scripts: Some(json!(["lib/*.js"])),
+            deploy_files: json!([
+                ["build/Release", "sharp/build/Release", "directory"],
+                ["vendor/lib", "sharp/vendor/lib", "directory"]
+            ]),
+            patch: None,
+        },
+    ];
+
+    for case in cases {
+        let mut package = PackageJson::parse(&format!(r#"{{"name":"{}"}}"#, case.name))?;
+        let entry = lookup_dictionary(case.name).ok_or("missing remaining deploy dictionary")?;
+
+        apply_dictionary_entry(&mut package, &entry);
+
+        let config = package.pkg.ok_or("missing remaining deploy pkg config")?;
+        assert_eq!(config.deploy_files, case.deploy_files);
+        if let Some(scripts) = case.scripts {
+            assert_eq!(config.scripts, scripts);
+        }
+        if let Some((path, patch_ops)) = case.patch {
+            assert_eq!(config.patches.get(path), Some(&patch_ops));
+        }
+    }
+
+    Ok(())
+}
