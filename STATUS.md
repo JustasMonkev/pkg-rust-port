@@ -1035,3 +1035,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the pinned original 
 Next: continue with the remaining deterministic non-native public npm fixtures, including the last legacy `log4js` wrapper, before moving into deploy-file and native-package gates.
 
 Decisions made: add only one additional `log4js` version in this slice so any package-shape regression remains easy to isolate.
+
+## 2026-05-20 - Log4js 1.1 public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/log4js@1.1.1` fixture. This completes the original legacy `log4js` wrapper set in the public npm gate and keeps appender-loader coverage on dictionary-provided `lib/appenders/*.js` scripts.
+
+Next: continue expanding deterministic non-native public npm fixtures that directly exercise dictionary assets or patches before moving into deploy-file and native-package gates.
+
+Decisions made: keep the final `log4js` wrapper as its own slice so the 1.x package shape is independently validated and easy to revert if registry/package drift appears.
