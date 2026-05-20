@@ -939,3 +939,11 @@ Shipped: added a separate opt-in native npm fixture smoke for `test-99-#1135` (`
 Next: run this gate in an environment where the native dependencies can install for the selected Node target, then address any real Rust packaging/native-addon gap it exposes.
 
 Decisions made: use a new `PKG_RUST_NATIVE_NPM_FIXTURES` gate rather than folding these into the existing npm smoke, because these fixtures are invalid evidence unless native install and the plain Node oracle both work first.
+
+## 2026-05-20 - Public npm dictionary fixture smoke gate shipped
+
+Shipped: added an opt-in smoke for selected original `test-79-npm` public package fixtures whose success depends on dictionary metadata already ported to Rust. The smoke copies each fixture, installs the requested public package spec, requires the plain Node oracle to print `ok`, then packages and compares executable output for `connect`, `connect@2.3.9`, and `rc`.
+
+Next: run this gate with registry access and a seeded real-runtime cache, then expand the public npm fixture subset to other deterministic non-native dictionary consumers before tackling broader networked or native packages.
+
+Decisions made: reuse `PKG_RUST_INSTALL_NPM_FIXTURES` instead of adding another gate because these fixtures need registry access but do not need native install scripts as proof of validity.

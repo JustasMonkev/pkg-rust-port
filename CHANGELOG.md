@@ -55,6 +55,8 @@
 - Added an opt-in native npm issue smoke gate for `#1135` (`canvas`) and
   `#1191` (`better-sqlite3`) that requires native install and Node oracle
   success before packaging.
+- Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
+  `connect`, `connect@2.3.9`, and `rc` fixtures.
 
 ### Behavior Changes
 

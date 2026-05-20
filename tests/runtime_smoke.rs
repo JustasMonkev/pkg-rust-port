@@ -429,6 +429,49 @@ fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::e
 }
 
 #[test]
+fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
+-> Result<(), Box<dyn std::error::Error>> {
+    if !npm_fixture_installs_enabled() {
+        eprintln!(
+            "skipping public npm fixture smoke: PKG_RUST_INSTALL_NPM_FIXTURES is not enabled"
+        );
+        return Ok(());
+    }
+    if std::env::var_os("PKG_RUST_REAL_CACHE").is_none() {
+        eprintln!("skipping public npm fixture smoke: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    }
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-79-npm");
+    for fixture in [
+        PublicNpmFixture {
+            name: "npm-connect",
+            fixture_subdir: "connect",
+            package_spec: "connect",
+            node_input: "connect.js",
+            package_input: "connect.js",
+        },
+        PublicNpmFixture {
+            name: "npm-connect-2-3-9",
+            fixture_subdir: "connect",
+            package_spec: "connect@2.3.9",
+            node_input: "connect@2.3.9.js",
+            package_input: "connect@2.3.9.js",
+        },
+        PublicNpmFixture {
+            name: "npm-rc",
+            fixture_subdir: "rc",
+            package_spec: "rc",
+            node_input: "rc.js",
+            package_input: "rc.config.json",
+        },
+    ] {
+        run_public_npm_fixture(&root, fixture)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn native_npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>>
 {
     if !native_npm_fixture_installs_enabled() {
@@ -496,6 +539,68 @@ fn run_native_npm_issue_1191(root: &Path) -> Result<(), Box<dyn std::error::Erro
     }
 
     fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+struct PublicNpmFixture<'a> {
+    name: &'a str,
+    fixture_subdir: &'a str,
+    package_spec: &'a str,
+    node_input: &'a str,
+    package_input: &'a str,
+}
+
+fn run_public_npm_fixture(
+    root: &Path,
+    fixture: PublicNpmFixture<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let source = root.join(fixture.fixture_subdir);
+    let fixture_dir = copied_fixture(&format!("{}-work", fixture.name), &source)?;
+    install_public_npm_package(&fixture_dir, fixture.package_spec)?;
+
+    let expected = run_node_oracle(&fixture_dir, fixture.node_input)?;
+    assert_eq!(
+        String::from_utf8_lossy(&expected.stdout),
+        "ok\n",
+        "{} node oracle did not match the JS harness success marker",
+        fixture.name
+    );
+
+    let Some(package_run) =
+        package_and_run_real_fixture(fixture.name, &fixture_dir, fixture.package_input)?
+    else {
+        fs::remove_dir_all(fixture_dir)?;
+        return Ok(());
+    };
+    assert_eq!(package_run.run.stdout, expected.stdout);
+    assert_eq!(package_run.run.stderr, expected.stderr);
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+fn install_public_npm_package(
+    fixture_dir: &Path,
+    package_spec: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let install = Command::new("npm")
+        .current_dir(fixture_dir)
+        .args([
+            "install",
+            package_spec,
+            "--no-save",
+            "--unsafe-perm",
+            "--no-audit",
+            "--no-fund",
+        ])
+        .output()?;
+    assert!(
+        install.status.success(),
+        "npm install {package_spec} failed in {}: {}{}",
+        fixture_dir.display(),
+        String::from_utf8_lossy(&install.stdout),
+        String::from_utf8_lossy(&install.stderr)
+    );
     Ok(())
 }
 
