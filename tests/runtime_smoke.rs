@@ -563,6 +563,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "shelljs.js",
             package_input: "shelljs.js",
         },
+        PublicNpmFixture {
+            name: "npm-shelljs-0-7-6",
+            fixture_subdir: "shelljs",
+            package_spec: "shelljs@0.7.6",
+            node_input: "shelljs@0.7.6.js",
+            package_input: "shelljs@0.7.6.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -671,10 +678,48 @@ fn run_public_npm_fixture(
         return Ok(());
     };
     assert_eq!(package_run.run.stdout, expected.stdout);
-    assert_eq!(package_run.run.stderr, expected.stderr);
+    assert_eq!(
+        normalize_node_warning_stderr(&package_run.run.stderr),
+        normalize_node_warning_stderr(&expected.stderr)
+    );
 
     fs::remove_dir_all(fixture_dir)?;
     Ok(())
+}
+
+#[test]
+fn node_warning_stderr_normalization_keeps_warning_content() {
+    let node = b"(node:123) Warning: Accessing non-existent property 'exec' of module exports inside circular dependency\n(Use `node --trace-warnings ...` to show where the warning was created)\n";
+    let packaged = b"(node:456) Warning: Accessing non-existent property 'exec' of module exports inside circular dependency\n(Use `pkg-rust-real-npm-shelljs-0-7-6-999 --trace-warnings ...` to show where the warning was created)\n";
+
+    assert_eq!(
+        normalize_node_warning_stderr(packaged),
+        normalize_node_warning_stderr(node)
+    );
+}
+
+fn normalize_node_warning_stderr(stderr: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .map(normalize_node_warning_line)
+        .collect()
+}
+
+fn normalize_node_warning_line(line: &str) -> String {
+    if let Some(rest) = line.strip_prefix("(node:") {
+        if let Some(warning) = rest.split_once(") Warning: ") {
+            return format!("(node:<pid>) Warning: {}", warning.1);
+        }
+    }
+
+    if let Some(command) = line
+        .strip_prefix("(Use `")
+        .and_then(|rest| rest.split_once(" --trace-warnings ...` "))
+    {
+        return format!("(Use `<exec> --trace-warnings ...` {}", command.1);
+    }
+
+    line.to_owned()
 }
 
 fn install_public_npm_package(
