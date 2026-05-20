@@ -1347,3 +1347,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `tiny-worker` because the direct public npm install has a clean `ok` Node oracle and exercises a worker helper asset dictionary entry without native dependencies, external services, or pinned-version drift.
+
+## 2026-05-21 - Uglify-js public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/uglify-js` fixture. The fixture checks modern `minify` output and depends on the dictionary-provided recursive `lib/**/*.js` and `tools/*.js` asset entries.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: add current `uglify-js` alongside the existing pinned `uglify-js@2.7.5` smoke because the direct public npm install has a clean `ok` Node oracle and exercises the same recursive asset dictionary against the latest package shape without native dependencies or external services.

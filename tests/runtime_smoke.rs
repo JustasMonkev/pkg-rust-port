@@ -487,6 +487,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "uglify-js@2.7.5.js",
         },
         PublicNpmFixture {
+            name: "npm-uglify-js",
+            fixture_subdir: "uglify-js",
+            package_spec: "uglify-js",
+            node_input: "uglify-js.js",
+            package_input: "uglify-js.js",
+        },
+        PublicNpmFixture {
             name: "npm-logform",
             fixture_subdir: "logform",
             package_spec: "logform",
