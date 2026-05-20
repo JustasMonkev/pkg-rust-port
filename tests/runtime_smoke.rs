@@ -329,6 +329,18 @@ fn issue_regression_fixtures_run_when_real_cache_is_configured()
         "stat.js",
         ".",
     )?;
+    package_and_compare_fixture(
+        "worker-threads-package",
+        &root.join("test-99-#775"),
+        "a.js",
+        ".",
+    )?;
+    package_and_compare_fixture(
+        "worker-threads-file",
+        &root.join("test-99-#775"),
+        "a.js",
+        "a.js",
+    )?;
 
     Ok(())
 }

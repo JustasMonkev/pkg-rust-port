@@ -827,3 +827,11 @@ Shipped: added gated real-runtime smoke coverage for `test-99-#1505`, comparing 
 Next: continue remaining `test-99-*` issue fixtures, separating portable runtime coverage from native-install and Windows-only cases.
 
 Decisions made: keep `#1505` inside the existing issue-regression smoke group because it exercises already-ported snapshot filesystem metadata behavior and does not require a separate production change.
+
+## 2026-05-20 - Worker-thread issue-regression runtime coverage shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-99-#775`, including both package-directory input and direct `a.js` input. The smoke compares Node-oracle output with the packaged executable to prove worker-thread child script bundling still works in both packaging modes.
+
+Next: continue remaining `test-99-*` fixtures that need external installs (`#1135`, `#1191`, `#1192`) or platform-specific handling (`#1207`, `#1861`).
+
+Decisions made: keep this as runtime coverage because the existing detector/config paths already include the worker child script; the new executable proof guards the issue regression without broadening production logic.

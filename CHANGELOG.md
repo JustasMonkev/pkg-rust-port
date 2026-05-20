@@ -24,6 +24,8 @@
   smoke coverage for snapshot-copy and `withFileTypes` issue regressions.
 - Added gated real-runtime smoke coverage for packaged `fs.stat`/`fs.lstat`
   issue regression behavior.
+- Added gated real-runtime smoke coverage for worker-thread child script
+  packaging through both package and file inputs.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
