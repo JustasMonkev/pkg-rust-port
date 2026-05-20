@@ -559,3 +559,13 @@ Next: continue broader runtime fixture expansion across small `test-50` slices, 
 Decisions made: keep the normalization local to the runtime smoke suite because it is only an oracle comparison detail; the executable output itself remains unmodified.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Argument forwarding runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-arguments`. The runtime suite now packages the fixture and executes the produced binary with positional, short-flag, and long-flag arguments to verify `process.argv` forwarding.
+
+Next: continue adding small real-runtime smoke fixtures that exercise already-ported prelude behavior, then return to larger groups such as compression and npm package fixtures.
+
+Decisions made: package-and-run smoke helpers now accept runtime arguments while keeping the existing no-argument helper as the default wrapper.
+
+Blockers worked around: none.

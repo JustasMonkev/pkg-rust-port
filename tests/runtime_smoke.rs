@@ -83,6 +83,26 @@ fn filesystem_runtime_layer_2_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn arguments_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-arguments");
+    for (name, arg, expected) in [
+        ("arguments-number", "42", "42\n"),
+        ("arguments-short-flag", "-ft", "-ft\n"),
+        ("arguments-long-flag", "--fourty-two", "--fourty-two\n"),
+    ] {
+        let Some(run_result) =
+            package_and_run_real_fixture_with_args(name, &fixture_dir, "test-x-index.js", &[arg])?
+        else {
+            return Ok(());
+        };
+        assert_eq!(String::from_utf8_lossy(&run_result.stdout), expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
@@ -381,6 +401,15 @@ fn package_and_run_real_fixture(
     fixture_dir: &Path,
     input: &str,
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+    package_and_run_real_fixture_with_args(name, fixture_dir, input, &[])
+}
+
+fn package_and_run_real_fixture_with_args(
+    name: &str,
+    fixture_dir: &Path,
+    input: &str,
+    run_args: &[&str],
+) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
     let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
         return Ok(None);
@@ -403,7 +432,10 @@ fn package_and_run_real_fixture(
         String::from_utf8_lossy(&package_result.stderr)
     );
 
-    let run_result = Command::new(&output).current_dir(fixture_dir).output()?;
+    let run_result = Command::new(&output)
+        .current_dir(fixture_dir)
+        .args(run_args)
+        .output()?;
     fs::remove_file(output)?;
     assert!(
         run_result.status.success(),
