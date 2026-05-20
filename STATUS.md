@@ -590,6 +590,16 @@ Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50
 
 Blockers worked around: none.
 
+## 2026-05-20 - Dictionary disclosure walker slice shipped
+
+Shipped: ported the JS walker's `hasDictionary` disclosure rule. Packages that activate a typed dictionary entry now store JavaScript blobs as content too, matching upstream's `marker.public || marker.hasDictionary` behavior.
+
+Next: continue through remaining runtime fixture groups, especially public package and npm package fixtures that need a configured real base-binary cache for executable-level proof.
+
+Decisions made: keep dictionary disclosure as marker state instead of treating typed dictionary entries as package licenses or CLI public flags; this preserves the original walker's distinct source-disclosure reasons.
+
+Blockers worked around: real-runtime proof remains gated on `PKG_RUST_REAL_CACHE`, so this slice is locked with walker parity over dictionary fixture packages.
+
 ## 2026-05-20 - Public disclosure walker slice shipped
 
 Shipped: wired CLI `--public` and `--public-packages` through package planning into the dependency walker, and taught the walker to disclose JavaScript source for public top-level packages, selected public dependency packages, wildcard public packages, and permissively licensed packages.

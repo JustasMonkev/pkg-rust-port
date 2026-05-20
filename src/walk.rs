@@ -20,6 +20,7 @@ pub struct Marker {
     package: PackageJson,
     package_path: Option<PathBuf>,
     activated: bool,
+    has_dictionary: bool,
     public: bool,
     top_level: bool,
 }
@@ -41,6 +42,7 @@ impl Marker {
             package,
             package_path: None,
             activated: false,
+            has_dictionary: false,
             public: false,
             top_level: true,
         }
@@ -63,6 +65,7 @@ impl Marker {
             package,
             package_path: Some(package_path.into()),
             activated: false,
+            has_dictionary: false,
             public: false,
             top_level: true,
         }
@@ -73,6 +76,7 @@ impl Marker {
             package,
             package_path: Some(package_path.into()),
             activated: false,
+            has_dictionary: false,
             public: false,
             top_level: false,
         }
@@ -568,6 +572,7 @@ impl WalkerState {
         {
             self.append_dictionary_logs(marker.package_path.as_deref(), &entry.logs);
             apply_dictionary_entry(&mut marker.package, &entry);
+            marker.has_dictionary = true;
         }
 
         let dependencies = active_dependencies(&marker.package);
@@ -664,7 +669,7 @@ impl WalkerState {
             return Ok(false);
         }
 
-        if marker.public {
+        if marker.public || marker.has_dictionary {
             self.append(file.to_path_buf(), StoreKind::Content, marker.clone());
         }
 
@@ -1366,7 +1371,14 @@ fn package_marker_for_file(
             }
             let body = read_to_string(&package_path)?;
             let package = PackageJson::parse(&body).map_err(package_error)?;
-            return Ok(Some(Marker::dependency(package, package_path)));
+            let mut marker = Marker::dependency(package, package_path);
+            marker.has_dictionary = marker
+                .package
+                .name
+                .as_deref()
+                .and_then(lookup_dictionary)
+                .is_some();
+            return Ok(Some(marker));
         }
         directory = candidate_dir.parent();
     }

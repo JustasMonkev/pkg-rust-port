@@ -189,6 +189,27 @@ fn public_license_discloses_entrypoint_source() -> Result<(), PkgError> {
 }
 
 #[test]
+fn dictionary_packages_disclose_blob_source_like_js() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-package-json-4");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let busboy_entrypoint = fixture_dir.join("node_modules/busboy/index.js");
+    let log4js_entrypoint = fixture_dir.join("node_modules/log4js/index.js");
+
+    let output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(&busboy_entrypoint, StoreKind::Blob));
+    assert!(output.contains_store(&busboy_entrypoint, StoreKind::Content));
+    assert!(output.contains_store(&log4js_entrypoint, StoreKind::Blob));
+    assert!(output.contains_store(&log4js_entrypoint, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
 fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-require-with-config");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
