@@ -1287,3 +1287,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `mongodb-core` before the pinned `mongodb-core@1.0.5` fixture because it exercises patch-only dictionary behavior without adding pinned-version drift to this slice.
+
+## 2026-05-20 - Pinned mongodb-core public npm smoke rejected
+
+Investigated: attempted to extend the opt-in public npm dictionary smoke to `test-79-npm/mongodb-core/mongodb-core@1.0.5.js`. The fixture delegates to the current `mongodb-core` oracle while installing the legacy `mongodb-core@1.0.5` package.
+
+Verified: direct Node oracle reproduction under the public npm install prints a missing `../build/Release/bson` error and `js-bson: Failed to load c++ bson extension, using pure JS version` before the final `ok`. The smoke harness requires the Node oracle stdout to be exactly `ok\n`, so this fixture is not a deterministic success-marker candidate under the current harness.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: do not add pinned `mongodb-core@1.0.5` without a deliberate harness change for fixtures that rely on "last line" semantics. The JS fixture metadata has `take: 'last-line'`, but the Rust public npm smoke intentionally requires raw Node oracle stdout to match the success marker before comparing packaged output.
