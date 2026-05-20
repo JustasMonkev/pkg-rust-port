@@ -718,6 +718,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "pg.js",
         },
         PublicNpmFixture {
+            name: "npm-pg-cursor",
+            fixture_subdir: "pg-cursor",
+            package_spec: "pg-cursor",
+            node_input: "pg-cursor.js",
+            package_input: "pg-cursor.js",
+        },
+        PublicNpmFixture {
             name: "npm-mongodb",
             fixture_subdir: "mongodb",
             package_spec: "mongodb",
@@ -863,7 +870,11 @@ fn run_public_npm_fixture(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let source = root.join(fixture.fixture_subdir);
     let fixture_dir = copied_fixture(&format!("{}-work", fixture.name), &source)?;
-    install_public_npm_package(&fixture_dir, fixture.package_spec)?;
+    install_public_npm_packages(
+        &fixture_dir,
+        fixture.package_spec,
+        public_npm_extra_package_specs(fixture.name),
+    )?;
 
     let expected = run_node_oracle(&fixture_dir, fixture.node_input)?;
     let output_mode = public_npm_output_mode(fixture.name);
@@ -902,6 +913,13 @@ fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
             PublicNpmOutputMode::LastStdoutLine
         }
         _ => PublicNpmOutputMode::ExactStdout,
+    }
+}
+
+fn public_npm_extra_package_specs(name: &str) -> &'static [&'static str] {
+    match name {
+        "npm-pg-cursor" => &["pg"],
+        _ => &[],
     }
 }
 
@@ -950,6 +968,12 @@ fn public_npm_last_line_mode_matches_js_harness_metadata() {
     );
 }
 
+#[test]
+fn public_npm_extra_packages_match_js_harness_metadata() {
+    assert_eq!(public_npm_extra_package_specs("npm-pg-cursor"), ["pg"]);
+    assert_eq!(public_npm_extra_package_specs("npm-pg"), [] as [&str; 0]);
+}
+
 fn normalize_node_warning_stderr(stderr: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(stderr)
         .lines()
@@ -974,24 +998,27 @@ fn normalize_node_warning_line(line: &str) -> String {
     line.to_owned()
 }
 
-fn install_public_npm_package(
+fn install_public_npm_packages(
     fixture_dir: &Path,
     package_spec: &str,
+    extra_package_specs: &[&str],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let install = Command::new("npm")
+    let mut command = Command::new("npm");
+    command
         .current_dir(fixture_dir)
-        .args([
-            "install",
-            package_spec,
-            "--no-save",
-            "--unsafe-perm",
-            "--no-audit",
-            "--no-fund",
-        ])
-        .output()?;
+        .arg("install")
+        .arg(package_spec);
+    command.args(extra_package_specs);
+    command.args(["--no-save", "--unsafe-perm", "--no-audit", "--no-fund"]);
+    let install = command.output()?;
+
+    let package_specs = std::iter::once(package_spec)
+        .chain(extra_package_specs.iter().copied())
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
         install.status.success(),
-        "npm install {package_spec} failed in {}: {}{}",
+        "npm install {package_specs} failed in {}: {}{}",
         fixture_dir.display(),
         String::from_utf8_lossy(&install.stdout),
         String::from_utf8_lossy(&install.stderr)

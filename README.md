@@ -127,10 +127,10 @@ appender-loader packages such as `log4js@0.5.8` /
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, pinned `bson@0.2.22` /
 `bson@0.4.0`, `compressjs`, `later`, `mongodb`, `mongodb-core`, `nconf`,
-`node-forge`, `npm-registry-client`, `oauth2orize`, `pg`, `pgpass`, and
-`pg-types` / `pg-types@1.0.0`, dictionary asset packages such as `errors`,
-`geoip-lite`, `node-zookeeper-client`, and `steam-crypto` / `tinify` /
-`tiny-worker`, dictionary
+`node-forge`, `npm-registry-client`, `oauth2orize`, `pg`, `pg-cursor`,
+`pgpass`, and `pg-types` / `pg-types@1.0.0`, dictionary asset packages such as
+`errors`, `geoip-lite`, `node-zookeeper-client`, and `steam-crypto` /
+`tinify` / `tiny-worker`, dictionary
 asset/dependency-pruning packages such as
 `publicsuffixlist`, patch packages such as `graceful-fs` /
 `graceful-fs@3.0.8`, and loader-heavy packages such as `logform` and

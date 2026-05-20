@@ -1397,3 +1397,13 @@ Verified: the escalated Rust public npm smoke fails during packaging because the
 Next: handle ESM bytecode/content semantics as a separate implementation slice before retrying current `connect-mongodb`, or find another deterministic non-ESM dictionary fixture.
 
 Decisions made: do not add current `connect-mongodb` under the current public smoke gate. Treat it as the same class of ESM dependency drift exposed by current `reload`.
+
+## 2026-05-21 - Pg-cursor companion-package public npm smoke
+
+Shipped: taught the opt-in public npm smoke harness to install explicit companion package specs for fixtures that mirror JS `meta.packages`, then added the current `test-79-npm/pg-cursor` fixture with its `pg` companion package.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `pg-cursor` and its `pg` companion package installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: keep companion packages explicit per fixture instead of broadening every public fixture install. Choose current `pg-cursor` because the direct public npm oracle installs `pg-cursor pg` cleanly and prints exactly `ok`.
