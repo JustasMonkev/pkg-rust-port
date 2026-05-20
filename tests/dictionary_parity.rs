@@ -160,3 +160,59 @@ fn native_dictionary_entries_carry_directory_deploy_files() -> Result<(), Box<dy
 
     Ok(())
 }
+
+#[test]
+fn file_deploy_dictionaries_carry_patch_and_deploy_files() -> Result<(), Box<dyn std::error::Error>>
+{
+    let cases = [
+        (
+            "exiftool.exe",
+            json!([["vendor/exiftool.exe", "exiftool.exe"]]),
+            "index.js",
+            json!([
+                "path.join(__dirname, 'vendor', 'exiftool.exe')",
+                "path.join(path.dirname(process.execPath), 'exiftool.exe')"
+            ]),
+        ),
+        (
+            "exiftool.pl",
+            json!([["vendor/exiftool", "exiftool"]]),
+            "index.js",
+            json!([
+                "path.join(__dirname, 'vendor', 'exiftool')",
+                "path.join(path.dirname(process.execPath), 'exiftool')"
+            ]),
+        ),
+        (
+            "google-closure-compiler",
+            json!([["compiler.jar", "compiler/compiler.jar"]]),
+            "lib/node/closure-compiler.js",
+            json!([
+                "require.resolve('../../compiler.jar')",
+                "require('path').join(require('path').dirname(process.execPath), 'compiler/compiler.jar')"
+            ]),
+        ),
+        (
+            "google-closure-compiler-java",
+            json!([["compiler.jar", "compiler/compiler.jar"]]),
+            "index.js",
+            json!([
+                "require.resolve('./compiler.jar')",
+                "require('path').join(require('path').dirname(process.execPath), 'compiler/compiler.jar')"
+            ]),
+        ),
+    ];
+
+    for (name, deploy_files, patch_path, patch_ops) in cases {
+        let mut package = PackageJson::parse(&format!(r#"{{"name":"{name}"}}"#))?;
+        let entry = lookup_dictionary(name).ok_or("missing file deploy dictionary")?;
+
+        apply_dictionary_entry(&mut package, &entry);
+
+        let config = package.pkg.ok_or("missing file deploy pkg config")?;
+        assert_eq!(config.deploy_files, deploy_files);
+        assert_eq!(config.patches.get(patch_path), Some(&patch_ops));
+    }
+
+    Ok(())
+}

@@ -149,7 +149,11 @@ pub enum DictionaryLog {
 pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
         "busboy" => Some(busboy()),
+        "exiftool.exe" => Some(exiftool_exe()),
+        "exiftool.pl" => Some(exiftool_pl()),
         "express" => Some(express()),
+        "google-closure-compiler" => Some(google_closure_compiler()),
+        "google-closure-compiler-java" => Some(google_closure_compiler_java()),
         "leveldown" => Some(leveldown()),
         "log4js" => Some(log4js()),
         "open" | "opn" => Some(open()),
@@ -232,6 +236,40 @@ fn busboy() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/types/*.js"]))
 }
 
+fn exiftool_exe() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, 'vendor', 'exiftool.exe')",
+            "path.join(path.dirname(process.execPath), 'exiftool.exe')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["vendor/exiftool.exe", "exiftool.exe"]]),
+        ..PkgConfig::default()
+    })
+}
+
+fn exiftool_pl() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, 'vendor', 'exiftool')",
+            "path.join(path.dirname(process.execPath), 'exiftool')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["vendor/exiftool", "exiftool"]]),
+        ..PkgConfig::default()
+    })
+}
+
 fn express() -> DictionaryEntry {
     let mut patches = Map::new();
     patches.insert(
@@ -246,6 +284,40 @@ fn express() -> DictionaryEntry {
 
     DictionaryEntry::with_pkg(PkgConfig {
         patches,
+        ..PkgConfig::default()
+    })
+}
+
+fn google_closure_compiler() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/node/closure-compiler.js".to_owned(),
+        serde_json::json!([
+            "require.resolve('../../compiler.jar')",
+            "require('path').join(require('path').dirname(process.execPath), 'compiler/compiler.jar')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["compiler.jar", "compiler/compiler.jar"]]),
+        ..PkgConfig::default()
+    })
+}
+
+fn google_closure_compiler_java() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "index.js".to_owned(),
+        serde_json::json!([
+            "require.resolve('./compiler.jar')",
+            "require('path').join(require('path').dirname(process.execPath), 'compiler/compiler.jar')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["compiler.jar", "compiler/compiler.jar"]]),
         ..PkgConfig::default()
     })
 }

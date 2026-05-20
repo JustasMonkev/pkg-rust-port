@@ -739,3 +739,13 @@ Next: continue deploy-file parity for the remaining npm fixture dictionaries wit
 Decisions made: keep the third `deployFiles` tuple item as the warning file kind rather than normalizing directory entries into generic files, matching the JS fixture harness and upstream warning text.
 
 Blockers worked around: real npm fixture execution remains gated on a configured base-binary cache; this slice proves the metadata and warning path without running the npm fixtures end to end.
+
+## 2026-05-20 - File deploy dictionaries shipped
+
+Shipped: ported `exiftool.exe`, `exiftool.pl`, `google-closure-compiler`, and `google-closure-compiler-java` into typed dictionary data with their JS path patches and file deploy tuples. Added dictionary parity coverage that asserts each package activates the expected patch target and external file mapping.
+
+Next: continue the remaining deploy-file dictionaries with larger platform-specific lists, especially `electron`, `phantom`, `phantomjs-prebuilt`, `node-notifier`, `sharp`, `drivelist`, and `nightmare`, then add producer or fixture-harness deploy-file copying.
+
+Decisions made: keep these file mappings in `PkgConfig.deploy_files` instead of special-casing archive or binary-like names; the walker already treats absent third tuple items as `file`, matching the JS dictionary shape.
+
+Blockers worked around: this slice does not prove executable-level npm fixture behavior because deploy-file copying beside produced outputs remains a later increment.
