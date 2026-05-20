@@ -923,3 +923,11 @@ Shipped: added a host-gated real-runtime smoke test for the remaining Windows is
 Next: run those hooks on a Windows machine or CI job with a seeded `PKG_RUST_REAL_CACHE`, then return to native npm fixture gaps such as `#1135`/`#1191`.
 
 Decisions made: keep the smoke host-gated rather than mocking `cmd.exe`/`subst`; the regression is about real Windows process/path behavior and needs a Windows runtime to prove executable parity.
+
+## 2026-05-20 - Windows issue smoke CI shipped
+
+Shipped: added a dedicated `windows-latest` Rust-port CI job that runs only `windows_issue_regression_fixtures_run_when_real_cache_is_configured` with `PKG_RUST_REAL_TARGET=node18-win-x64` and a cached `.pkg-rust-real-cache` keyed to the pkg-fetch 3.5 Windows artifact.
+
+Next: inspect the first Windows CI result when available and fix any true platform gap it exposes; otherwise return to native npm fixture gaps such as `#1135` and `#1191`.
+
+Decisions made: keep this separate from the full Linux real-runtime smoke because the Windows fixtures need `subst`/`cmd.exe` and should not make the broader runtime matrix platform-dependent.

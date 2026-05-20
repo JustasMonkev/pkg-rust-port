@@ -50,6 +50,8 @@
   Windows snapshot-boundary handling for `inside_snapshot`/`strip_snapshot`.
 - Added host-gated Windows real-runtime smoke hooks for issue regressions
   `#1207` and `#1861`, including `subst` drive coverage.
+- Added a dedicated Windows CI smoke job that runs the Windows issue-regression
+  runtime hook with a cached `node18-win-x64` pkg-fetch binary.
 
 ### Behavior Changes
 
