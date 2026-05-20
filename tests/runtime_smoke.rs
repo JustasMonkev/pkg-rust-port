@@ -703,6 +703,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "mongodb-core.js",
             package_input: "mongodb-core.js",
         },
+        PublicNpmFixture {
+            name: "npm-errors",
+            fixture_subdir: "errors",
+            package_spec: "errors",
+            node_input: "errors.js",
+            package_input: "errors.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
