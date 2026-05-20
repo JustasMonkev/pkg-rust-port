@@ -612,6 +612,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "compressjs.js",
             package_input: "compressjs.js",
         },
+        PublicNpmFixture {
+            name: "npm-later",
+            fixture_subdir: "later",
+            package_spec: "later",
+            node_input: "later.js",
+            package_input: "later.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

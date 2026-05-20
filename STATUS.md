@@ -1157,3 +1157,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose `compressjs` as a small script-glob fixture before CLI-style fixtures that need custom output trimming.
+
+## 2026-05-20 - Later public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/later` fixture. The fixture checks the schedule API surface and depends on the dictionary-provided `later.js` script entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose `later` because it exercises a package-specific script entry without custom CLI output, native dependencies, or pinned-version drift.
