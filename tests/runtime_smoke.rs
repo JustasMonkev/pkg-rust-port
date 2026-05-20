@@ -717,6 +717,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "geoip-lite.js",
             package_input: "geoip-lite.js",
         },
+        PublicNpmFixture {
+            name: "npm-steam-crypto",
+            fixture_subdir: "steam-crypto",
+            package_spec: "steam-crypto",
+            node_input: "steam-crypto.js",
+            package_input: "steam-crypto.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

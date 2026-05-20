@@ -66,7 +66,8 @@
   `graceful-fs@3.0.8`, `buffermaker`, `compressjs`, `errors`,
   `geoip-lite`, `later`, `nconf`, `node-forge`, `node-zookeeper-client`,
   `npm-registry-client`, `mongodb`, `mongodb-core`, `oauth2orize`, `pg`,
-  `pgpass`, `pg-types`, pinned `pg-types@1.0.0`, and `publicsuffixlist`.
+  `pgpass`, `pg-types`, pinned `pg-types@1.0.0`, `publicsuffixlist`, and
+  `steam-crypto`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,
