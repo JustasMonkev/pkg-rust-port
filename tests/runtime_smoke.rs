@@ -528,6 +528,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "log4js@1.1.1.js",
             package_input: "log4js@1.1.1.js",
         },
+        PublicNpmFixture {
+            name: "npm-negotiator",
+            fixture_subdir: "negotiator",
+            package_spec: "negotiator",
+            node_input: "negotiator.js",
+            package_input: "negotiator.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
