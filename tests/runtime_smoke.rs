@@ -472,6 +472,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "socket.io-client@1.7.0.js",
             package_input: "socket.io-client@1.7.0.js",
         },
+        PublicNpmFixture {
+            name: "npm-moment",
+            fixture_subdir: "moment",
+            package_spec: "moment",
+            node_input: "moment.js",
+            package_input: "moment.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

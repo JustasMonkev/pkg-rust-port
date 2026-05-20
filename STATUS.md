@@ -979,3 +979,11 @@ Shipped: extended the opt-in public npm dictionary smoke to `socket.io-client@1.
 Next: continue adding pinned, deterministic public npm fixtures with no native install requirements, then separately handle packages whose meta files intentionally gate platform or network behavior.
 
 Decisions made: use the pinned `1.7.0` fixture instead of latest `socket.io-client` first because the original test aliases it to the canonical asset check while avoiding package-shape drift in newer major releases.
+
+## 2026-05-20 - Moment public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the original `test-79-npm/moment` fixture. The fixture installs `moment`, switches to the Russian locale, and checks formatted month text, proving the Rust dictionary's `locale/*.js` scripts are included on the real package path.
+
+Next: continue the same public npm expansion with other non-native dictionary consumers, then handle deploy-file/native packages under separate environment assumptions.
+
+Decisions made: keep `moment` unpinned like the original JS harness because its locale packaging contract is stable and the test is specifically intended to follow the current public package.
