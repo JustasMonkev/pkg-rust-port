@@ -787,3 +787,11 @@ Next: add real native npm fixture smoke once a configured base-binary cache and 
 Decisions made: support `PKG_PREBUILD_INSTALL`, source-tree/local `node_modules/.bin/prebuild-install`, and `PATH` discovery instead of hard-coding only the JS `__dirname` path. Rust restores the backed-up `.node` even on installer failure before falling back, which avoids leaving fixture/package directories mutated after failed attempts.
 
 Blockers worked around: tests use a stub target binary path named like the pkg-fetch cache artifact to prove Node-version parsing without requiring a real downloaded base binary.
+
+## 2026-05-20 - Mach-O patching and signature flag shipped
+
+Shipped: added `src/macho.rs` with the JS `patchMachOExecutable` behavior for little-endian 64-bit Mach-O load commands and the ad-hoc signing wrapper that tries `codesign -f --sign -` before `ldid -Cadhoc -S`. Package production now carries CLI signature intent, honors `--no-signature`, patches/signs macOS outputs when signatures are enabled, and emits a non-fatal arm64 warning if signing tools fail. Added unit coverage for `__LINKEDIT`/symtab patching, truncated Mach-O rejection, and `codesign` to `ldid` fallback; CLI smoke tests that use fake macOS cache binaries now pass `--no-signature`.
+
+Next: add real macOS signing smoke coverage when a real cached Mach-O base binary and signing tools are available, then continue broader fixture coverage and JS oracle retirement.
+
+Decisions made: keep fake-binary smoke tests unsigned because placeholder test binaries are not valid Mach-O files. The production path still patches before signing for real macOS outputs, preserving the JS behavior boundary.

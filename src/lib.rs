@@ -27,6 +27,7 @@ mod dictionary;
 mod error;
 mod fetch;
 mod fsx;
+mod macho;
 mod pack;
 mod package;
 mod prelude;
@@ -54,6 +55,7 @@ pub use crate::dictionary::{
 pub use crate::error::PkgError;
 pub use crate::fetch::{BinaryKind, PkgFetchCache};
 pub use crate::fsx::plus_x;
+pub use crate::macho::{patch_macho_executable, sign_macho_executable};
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,

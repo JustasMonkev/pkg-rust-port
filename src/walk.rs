@@ -374,6 +374,13 @@ pub enum PackageWarning {
         /// Target path relative to the executable directory.
         target: PathBuf,
     },
+    /// A macOS arm64 output could not be ad-hoc signed.
+    MacosSignature {
+        /// Output executable path.
+        output: PathBuf,
+        /// Signing failure details.
+        message: String,
+    },
     /// A dynamic `require` or `require.resolve` could not be resolved at
     /// compile time.
     CannotResolve {
@@ -433,6 +440,10 @@ impl PackageWarning {
                 source.display(),
                 target.display()
             ),
+            Self::MacosSignature { output, message } => format!(
+                "Unable to sign the macOS executable '{}'. Due to the mandatory code signing requirement, before the executable is distributed to end users, it must be signed. Otherwise, it will be immediately killed by kernel on launch. An ad-hoc signature is sufficient. Signing failure: {message}",
+                output.display()
+            ),
             Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
             Self::MalformedRequirement { alias, .. } => {
                 format!("Malformed requirement for '{alias}'")
@@ -457,7 +468,8 @@ impl PackageWarning {
         match self {
             Self::MissingMainEntry { .. }
             | Self::StylusResolveImports { .. }
-            | Self::DeployFile { .. } => false,
+            | Self::DeployFile { .. }
+            | Self::MacosSignature { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
         }

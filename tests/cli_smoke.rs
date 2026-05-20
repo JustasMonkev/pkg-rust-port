@@ -37,6 +37,7 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
         .env("PKG_CACHE_PATH", &cache_root)
         .arg("--target")
         .arg("node18-macos-arm64")
+        .arg("--no-signature")
         .arg("--output")
         .arg(&output)
         .arg("--options")
@@ -85,6 +86,7 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
         [
             "--target",
             "node18-macos-arm64",
+            "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",
@@ -132,6 +134,7 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
         [
             "--target",
             "node18-macos-arm64",
+            "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",
@@ -178,6 +181,7 @@ fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
             "--debug",
             "--target",
             "node18-macos-arm64",
+            "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",

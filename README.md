@@ -62,7 +62,9 @@ against the embedded SHA-256 table.
 - Native addon handling supports cached `.node.<platform>.<nodeVersion>`
   payloads and can invoke a discoverable `prebuild-install`, but broad real npm
   native fixture coverage still depends on a configured base-binary cache.
-- Mach-O patching/signing is not complete.
+- Mach-O patching and ad-hoc signing are wired for macOS outputs when
+  `codesign` or `ldid` is available; fake-binary smoke tests use
+  `--no-signature`.
 - Bytecode fabrication can use a real target binary when a runnable cached
   binary path is available; otherwise tests fall back to host `node`.
 - The JS suite remains the behavioral oracle until every fixture has a Rust

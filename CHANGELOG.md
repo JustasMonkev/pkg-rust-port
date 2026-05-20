@@ -14,6 +14,8 @@
   path support when a runnable cached binary is available.
 - Added native addon prebuild selection and `prebuild-install` invocation for
   missing platform/version `.node` payloads.
+- Added macOS Mach-O payload patching, ad-hoc signing through `codesign`/`ldid`,
+  and `--no-signature` planning.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes

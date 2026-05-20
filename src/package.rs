@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use crate::cli::PackagePlan;
 use crate::error::PkgError;
 use crate::fsx::plus_x;
+use crate::macho::{patch_macho_executable_file, sign_macho_executable};
 use crate::pack::pack;
 use crate::produce::{
     NativeAddonOptions, ProducedExecutable, ProducerBuildOptions,
     write_executable_image_with_fabricator,
 };
 use crate::refine::refine_walked_with_snapshot_base;
-use crate::target::{NodeTarget, Platform};
+use crate::target::{Arch, NodeTarget, Platform};
 use crate::walk::{PackageWarning, WalkerParams, walk};
 
 /// Target binary data plus optional cache path metadata.
@@ -187,6 +188,17 @@ pub fn build_package_with_provider(
             },
         )?;
         if planned.target.platform != Platform::Win {
+            if plan.signature && planned.target.platform == Platform::Macos {
+                patch_macho_executable_file(&planned.output)?;
+                if let Err(error) = sign_macho_executable(&planned.output)
+                    && planned.target.arch == Arch::Arm64
+                {
+                    warnings.push(PackageWarning::MacosSignature {
+                        output: planned.output.clone(),
+                        message: error.to_string(),
+                    });
+                }
+            }
             plus_x(&planned.output)?;
         }
         copy_deploy_files(&output_warnings, &planned.output)?;

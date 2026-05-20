@@ -6,8 +6,8 @@ Items parked until JS parity is complete.
   fabrication once all provider paths and signing requirements are covered.
 - Add portable CI coverage for the real runtime smoke by seeding a small
   verified pkg-fetch cache artifact or running a dedicated network-enabled job.
-- Port Mach-O patching and signing behavior instead of relying on unsigned
-  local smoke binaries.
+- Add real macOS signing smoke coverage with an actual cached Mach-O base
+  binary and available signing tools.
 - Expand real native npm fixture coverage now that cached prebuild selection
   and `prebuild-install` invocation are wired.
 - Add criterion benchmarks for packaging throughput and warm-cache release build

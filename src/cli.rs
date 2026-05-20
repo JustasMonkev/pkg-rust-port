@@ -100,6 +100,8 @@ pub struct PackagePlan {
     pub bytecode: bool,
     /// Whether native addon prebuild selection/building is enabled.
     pub native_build: bool,
+    /// Whether macOS outputs should be ad-hoc signed.
+    pub signature: bool,
     /// Whether JavaScript source should be disclosed for the top-level package.
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
@@ -329,6 +331,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         compression,
         bytecode: !cli.no_bytecode,
         native_build: !cli.no_native_build,
+        signature: !cli.no_signature,
         public_toplevel: cli.public,
         public_packages,
         no_dictionary,
