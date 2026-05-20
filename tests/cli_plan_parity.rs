@@ -55,6 +55,17 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
 }
 
 #[test]
+fn package_json_input_uses_package_directory_as_walk_root_for_subpath_bin()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plan = plan_package([OsString::from("../test/test-99-#1192")])?;
+
+    assert!(plan.entrypoint.ends_with("test-99-#1192/src/index.js"));
+    assert!(plan.root.ends_with("test-99-#1192"));
+    assert!(plan.snapshot_base.ends_with("test"));
+    Ok(())
+}
+
+#[test]
 fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std::error::Error>> {
     let plan = plan_package([OsString::from("../test/test-46-input/test-x-index")])?;
 

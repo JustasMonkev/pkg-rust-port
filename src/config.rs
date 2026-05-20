@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
@@ -18,6 +18,7 @@ pub struct PackageJson {
     /// Legacy npm `licenses` field.
     pub licenses: Option<Value>,
     /// Main module entrypoint.
+    #[serde(default, deserialize_with = "optional_string")]
     pub main: Option<String>,
     /// Binary entrypoint declaration.
     pub bin: Option<BinField>,
@@ -29,6 +30,17 @@ pub struct PackageJson {
     pub files: Vec<String>,
     /// `pkg` configuration.
     pub pkg: Option<PkgConfig>,
+}
+
+fn optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| match value {
+        Value::String(string) => Some(string),
+        _ => None,
+    }))
 }
 
 impl PackageJson {

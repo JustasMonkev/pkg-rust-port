@@ -28,12 +28,17 @@
   packaging through both package and file inputs.
 - Added a Linux real-runtime smoke CI job using `PKG_RUST_REAL_TARGET` and a
   cached pkg-fetch binary directory.
+- Added opt-in npm-install real-runtime smoke coverage for the Express/Pug
+  issue `#1192` fixture across None/GZip/Brotli package modes.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
 
 - The Rust walker bounds directory-link expansion to the requested package root
   to avoid host-machine-dependent records outside the package tree.
+- Package-json inputs now use the package directory, rather than a `bin`
+  subdirectory, as the walk root so sibling `node_modules` dependencies are
+  included when `bin` points below `src/`.
 - `node18-macos-arm64` is rejected unless an expected pkg-fetch hash is added;
   the embedded pkg-fetch 3.5 hash table does not currently include that artifact.
 - Real runtime smoke is opt-in through `PKG_RUST_REAL_CACHE` rather than running

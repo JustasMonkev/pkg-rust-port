@@ -348,6 +348,69 @@ fn issue_regression_fixtures_run_when_real_cache_is_configured()
 }
 
 #[test]
+fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>> {
+    if !npm_fixture_installs_enabled() {
+        eprintln!("skipping npm fixture smoke: PKG_RUST_INSTALL_NPM_FIXTURES is not enabled");
+        return Ok(());
+    }
+    if std::env::var_os("PKG_RUST_REAL_CACHE").is_none() {
+        eprintln!("skipping npm fixture smoke: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    }
+
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-99-#1192");
+    let fixture_dir = copied_fixture("issue-1192-express-pug-work", &source)?;
+    let install = Command::new("npm")
+        .current_dir(&fixture_dir)
+        .args(["install", "--ignore-scripts", "--no-audit", "--no-fund"])
+        .output()?;
+    assert!(
+        install.status.success(),
+        "npm install failed: {}{}",
+        String::from_utf8_lossy(&install.stdout),
+        String::from_utf8_lossy(&install.stderr)
+    );
+
+    let expected = Command::new("node")
+        .current_dir(&fixture_dir)
+        .arg("src/index.js")
+        .output()?;
+    assert!(
+        expected.status.success(),
+        "node oracle failed: {}{}",
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    for (name, package_args) in [
+        ("issue-1192-express-pug", &[][..]),
+        ("issue-1192-express-pug-gzip", &["--compress", "GZip"][..]),
+        (
+            "issue-1192-express-pug-brotli",
+            &["--compress", "Brotli"][..],
+        ),
+    ] {
+        let Some(package_run) = package_and_run_real_fixture_with_options(
+            name,
+            &fixture_dir,
+            ".",
+            RealFixtureOptions {
+                package_args,
+                ..RealFixtureOptions::success()
+            },
+        )?
+        else {
+            return Ok(());
+        };
+        assert_eq!(package_run.run.stdout, expected.stdout);
+        assert_eq!(package_run.run.stderr, expected.stderr);
+    }
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
@@ -945,6 +1008,47 @@ fn real_output_path(name: &str) -> PathBuf {
 
 fn real_output_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
+}
+
+fn copied_fixture(name: &str, source: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let target = real_output_dir(name).join("fixture");
+    if target.exists() {
+        fs::remove_dir_all(&target)?;
+    }
+    copy_directory(source, &target)?;
+    Ok(target)
+}
+
+fn copy_directory(source: &Path, target: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        if name == "node_modules"
+            || name == "package-lock.json"
+            || name == "output"
+            || name == "dist"
+            || name == "run-time"
+        {
+            continue;
+        }
+        let destination = target.join(name);
+        let metadata = entry.metadata()?;
+        if metadata.is_dir() {
+            copy_directory(&path, &destination)?;
+        } else if metadata.is_file() {
+            fs::copy(&path, &destination)?;
+        }
+    }
+    Ok(())
+}
+
+fn npm_fixture_installs_enabled() -> bool {
+    std::env::var("PKG_RUST_INSTALL_NPM_FIXTURES").is_ok_and(|value| {
+        let value = value.to_ascii_lowercase();
+        matches!(value.as_str(), "1" | "true" | "yes")
+    })
 }
 
 fn copy_plugins_d_ext(

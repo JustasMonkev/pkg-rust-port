@@ -843,3 +843,11 @@ Shipped: added `PKG_RUST_REAL_TARGET` support to the runtime smoke harness while
 Next: continue the remaining external-install and Windows-specific issue fixtures, then decide how much native package setup belongs in CI versus local gated smoke.
 
 Decisions made: keep the main Rust matrix free of large binary downloads, and put executable-level proof in a separate job with an explicit cache and target. This preserves fast unit/parity gates while making the real runtime smoke portable beyond this machine.
+
+## 2026-05-20 - Npm issue-regression runtime coverage shipped
+
+Shipped: added opt-in npm-install real-runtime smoke coverage for `test-99-#1192`, the Express/Pug issue fixture. The smoke copies the fixture, installs dependencies with `npm install --ignore-scripts --no-audit --no-fund`, compares the Node oracle against packaged executables, and runs the package in None, GZip, and Brotli modes. Fixed package-json input planning so a package whose `bin` points below `src/` still walks from the package directory and includes sibling `node_modules`. Also made package metadata parsing tolerant of `"main": false`, which appears in real npm dependency package markers.
+
+Next: continue the remaining external-install/native fixtures (`#1135`, `#1191`) and Windows-specific fixtures (`#1207`, `#1861`), keeping them behind explicit gates until the CI/runtime setup is sized for them.
+
+Decisions made: keep npm-install fixture coverage behind `PKG_RUST_INSTALL_NPM_FIXTURES` because it reaches the npm registry and the Brotli packaging path is materially slower over installed dependencies.

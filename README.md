@@ -107,3 +107,12 @@ PKG_RUST_REAL_CACHE=.pkg-rust-real-cache \
 PKG_RUST_REAL_TARGET=node18-linux-x64 \
   cargo test --test runtime_smoke -- --nocapture
 ```
+
+External npm fixture smoke is additionally gated because it runs `npm install`
+inside copied JS fixtures:
+
+```sh
+PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
+  cargo test --test runtime_smoke -- npm_issue_fixtures_run_when_install_is_enabled --nocapture
+```

@@ -283,10 +283,6 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     } else {
         None
     };
-    let root = entrypoint
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
     // DECISION: Treat only the immediate parent package as the snapshot package
     // for file inputs; ancestor packages would accidentally make repo roots part
     // of unrelated fixture packages. Package files below node_modules keep the
@@ -296,6 +292,12 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     } else {
         immediate_package_dir(&entrypoint)
     };
+    let root = package_dir
+        .as_ref()
+        .filter(|_| input_package.is_some())
+        .cloned()
+        .or_else(|| entrypoint.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
     let snapshot_base = if let Some(package_dir) = package_dir {
         package_snapshot_base(&package_dir, &root)
     } else {

@@ -70,3 +70,12 @@ fn object_bin_prefers_package_basename_then_first_entry() -> Result<(), Box<dyn 
     assert_eq!(fallback.selected_bin().as_deref(), Some("first.js"));
     Ok(())
 }
+
+#[test]
+fn treats_non_string_main_as_absent() -> Result<(), Box<dyn std::error::Error>> {
+    let package = PackageJson::parse(r#"{"name":"dunder-proto","main":false}"#)?;
+
+    assert_eq!(package.name.as_deref(), Some("dunder-proto"));
+    assert_eq!(package.main, None);
+    Ok(())
+}
