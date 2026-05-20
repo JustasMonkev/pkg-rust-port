@@ -123,6 +123,29 @@ fn modern_js_runtime_fixtures_run_when_real_cache_is_configured()
 }
 
 #[test]
+fn path_and_resolution_runtime_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    for (name, fixture, package_input) in [
+        (
+            "path-as-buffer",
+            "test-50-path-as-buffer",
+            "test-x-index.js",
+        ),
+        ("path-separators", "test-50-path-separators", "."),
+        ("module-parent", "test-50-module-parent", "test-x-index.js"),
+        (
+            "resolve-and-nearby",
+            "test-50-resolve-and-nearby",
+            "test-x-index.js",
+        ),
+    ] {
+        package_and_compare_fixture(name, &root.join(fixture), "test-x-index.js", package_input)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =

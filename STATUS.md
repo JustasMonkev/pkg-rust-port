@@ -579,3 +579,13 @@ Next: continue filling small `test-50` runtime smoke gaps, then move back to bro
 Decisions made: group syntax/runtime-only fixtures together because they all exercise the same already-ported packaging path and do not need fixture-specific assertions.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Path and resolution runtime smoke fixtures locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-path-as-buffer`, `test-50-path-separators`, `test-50-module-parent`, and `test-50-resolve-and-nearby`. These fixtures now compare produced executable stdout against the Node oracle for path object handling and resolution edge cases.
+
+Next: continue runtime-smoke expansion for remaining small fixtures, with special handling where fixtures need environment variables, stderr comparisons, or intentional failure assertions.
+
+Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50-chdir-env-var` for a helper that can set packaging environment variables.
+
+Blockers worked around: none.
