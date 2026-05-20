@@ -12,6 +12,8 @@
   generated plain-JS common helper.
 - Added bytecode payload fabrication via Node cached data, with target-binary
   path support when a runnable cached binary is available.
+- Added native addon prebuild selection and `prebuild-install` invocation for
+  missing platform/version `.node` payloads.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
@@ -22,4 +24,3 @@
   the embedded pkg-fetch 3.5 hash table does not currently include that artifact.
 - Real runtime smoke is opt-in through `PKG_RUST_REAL_CACHE` rather than running
   unconditionally in normal CI.
-

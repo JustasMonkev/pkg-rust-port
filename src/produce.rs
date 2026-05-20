@@ -311,7 +311,10 @@ pub(crate) struct ProducerBuildOptions<'a> {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct NativeAddonOptions {
     pub(crate) platform: Option<String>,
+    pub(crate) install_platform: Option<String>,
+    pub(crate) arch: Option<String>,
     pub(crate) node_version: Option<String>,
+    pub(crate) prebuild_install: Option<PathBuf>,
 }
 
 pub(crate) fn write_executable_image_with_fabricator(
@@ -737,7 +740,146 @@ fn native_addon_file(file: &str, native_addons: &NativeAddonOptions) -> Option<P
     let platform = native_addons.platform.as_deref()?;
     let node_version = native_addons.node_version.as_deref()?;
     let candidate = PathBuf::from(format!("{file}.{platform}.{node_version}"));
-    candidate.is_file().then_some(candidate)
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+
+    try_native_prebuild_install(Path::new(file), &candidate, native_addons)
+        .ok()
+        .and_then(|installed| installed.then_some(candidate))
+        .filter(|installed| installed.is_file())
+}
+
+fn try_native_prebuild_install(
+    node_file: &Path,
+    native_file: &Path,
+    native_addons: &NativeAddonOptions,
+) -> Result<bool, PkgError> {
+    let Some(prebuild_install) = native_addons.prebuild_install.as_ref() else {
+        return Ok(false);
+    };
+    let Some(install_platform) = native_addons.install_platform.as_deref() else {
+        return Ok(false);
+    };
+    let Some(arch) = native_addons.arch.as_deref() else {
+        return Ok(false);
+    };
+    let Some(node_version) = native_addons.node_version.as_deref() else {
+        return Ok(false);
+    };
+    let Some(package_dir) = find_package_dir(node_file) else {
+        return Ok(false);
+    };
+
+    let backup = PathBuf::from(format!("{}.bak", node_file.display()));
+    if !backup.is_file() {
+        fs::copy(node_file, &backup).map_err(|source| PkgError::Io {
+            path: backup.display().to_string(),
+            source,
+        })?;
+    }
+
+    let result = run_prebuild_install(
+        prebuild_install,
+        &package_dir,
+        install_platform,
+        arch,
+        node_version,
+        package_uses_napi_versions(&package_dir)?,
+    )
+    .and_then(|()| {
+        fs::copy(node_file, native_file).map_err(|source| PkgError::Io {
+            path: native_file.display().to_string(),
+            source,
+        })?;
+        Ok(())
+    });
+
+    let restore_result = restore_native_backup(&backup, node_file);
+    result.and(restore_result)?;
+    Ok(true)
+}
+
+fn find_package_dir(node_file: &Path) -> Option<PathBuf> {
+    let mut dir = node_file.parent()?;
+    loop {
+        let package_json = dir.join("package.json");
+        if package_json.is_file() {
+            return Some(dir.to_path_buf());
+        }
+        dir = dir.parent()?;
+    }
+}
+
+fn package_uses_napi_versions(package_dir: &Path) -> Result<bool, PkgError> {
+    let package_json = package_dir.join("package.json");
+    let body = fs::read_to_string(&package_json).map_err(|source| PkgError::Io {
+        path: package_json.display().to_string(),
+        source,
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|error| PkgError::Pack(format!("package.json parse failed: {error}")))?;
+    Ok(value
+        .get("binary")
+        .and_then(|binary| binary.get("napi_versions"))
+        .is_some_and(|versions| !versions.is_null()))
+}
+
+fn run_prebuild_install(
+    prebuild_install: &Path,
+    package_dir: &Path,
+    install_platform: &str,
+    arch: &str,
+    node_version: &str,
+    uses_napi_versions: bool,
+) -> Result<(), PkgError> {
+    let mut command = Command::new(prebuild_install);
+    command
+        .arg("--platform")
+        .arg(install_platform)
+        .arg("--arch")
+        .arg(arch)
+        .current_dir(package_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    if !uses_napi_versions {
+        command.arg("--target").arg(node_version);
+    }
+
+    let output = command.output().map_err(|source| PkgError::Io {
+        path: prebuild_install.display().to_string(),
+        source,
+    })?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    Err(PkgError::Pack(format!(
+        "prebuild-install failed for {}: {}",
+        package_dir.display(),
+        String::from_utf8_lossy(&output.stderr)
+    )))
+}
+
+fn restore_native_backup(backup: &Path, node_file: &Path) -> Result<(), PkgError> {
+    if !backup.is_file() {
+        return Ok(());
+    }
+    match fs::remove_file(node_file) {
+        Ok(()) => {}
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+        Err(source) => {
+            return Err(PkgError::Io {
+                path: node_file.display().to_string(),
+                source,
+            });
+        }
+    }
+    fs::rename(backup, node_file).map_err(|source| PkgError::Io {
+        path: node_file.display().to_string(),
+        source,
+    })
 }
 
 fn fabricate_bytecode(
@@ -890,6 +1032,187 @@ mod tests {
 
         fs::remove_dir_all(temp_dir)?;
         Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prebuild_install_caches_native_addon_and_restores_original()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-prebuild-install-cache-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let addon = temp_dir.join("addon.node");
+        fs::write(&addon, b"ORIGINAL_NATIVE")?;
+        fs::write(
+            temp_dir.join("package.json"),
+            r#"{"name":"demo","binary":{}}"#,
+        )?;
+        let prebuild_install = fake_prebuild_install(&temp_dir)?;
+
+        let produced = produce_with_native_addon(
+            &temp_dir,
+            &addon,
+            NativeAddonOptions {
+                platform: Some("linux".to_owned()),
+                install_platform: Some("linux".to_owned()),
+                arch: Some("x64".to_owned()),
+                node_version: Some("v18.5.0".to_owned()),
+                prebuild_install: Some(prebuild_install),
+            },
+        )?;
+
+        let native_file = PathBuf::from(format!("{}.linux.v18.5.0", addon.display()));
+        assert!(contains_bytes(&produced.bytes, b"GENERATED_NATIVE"));
+        assert!(!contains_bytes(&produced.bytes, b"ORIGINAL_NATIVE"));
+        assert_eq!(fs::read(&native_file)?, b"GENERATED_NATIVE");
+        assert_eq!(fs::read(&addon)?, b"ORIGINAL_NATIVE");
+        let args = fs::read_to_string(temp_dir.join("args.txt"))?;
+        assert!(args.contains("--platform\nlinux"));
+        assert!(args.contains("--arch\nx64"));
+        assert!(args.contains("--target\nv18.5.0"));
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prebuild_install_skips_target_when_package_uses_napi_versions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-prebuild-install-napi-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let addon = temp_dir.join("addon.node");
+        fs::write(&addon, b"ORIGINAL_NATIVE")?;
+        fs::write(
+            temp_dir.join("package.json"),
+            r#"{"name":"demo","binary":{"napi_versions":[3]}}"#,
+        )?;
+        let prebuild_install = fake_prebuild_install(&temp_dir)?;
+
+        let produced = produce_with_native_addon(
+            &temp_dir,
+            &addon,
+            NativeAddonOptions {
+                platform: Some("linux".to_owned()),
+                install_platform: Some("linux".to_owned()),
+                arch: Some("x64".to_owned()),
+                node_version: Some("v18.5.0".to_owned()),
+                prebuild_install: Some(prebuild_install),
+            },
+        )?;
+
+        assert!(contains_bytes(&produced.bytes, b"GENERATED_NATIVE"));
+        let args = fs::read_to_string(temp_dir.join("args.txt"))?;
+        assert!(!args.contains("--target"));
+        assert_eq!(fs::read(&addon)?, b"ORIGINAL_NATIVE");
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_prebuild_install_falls_back_to_original_addon()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-prebuild-install-fallback-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let addon = temp_dir.join("addon.node");
+        fs::write(&addon, b"ORIGINAL_NATIVE")?;
+        fs::write(
+            temp_dir.join("package.json"),
+            r#"{"name":"demo","binary":{}}"#,
+        )?;
+        let prebuild_install = temp_dir.join("prebuild-install-fail");
+        fs::write(
+            &prebuild_install,
+            "#!/bin/sh\nprintf BROKEN_NATIVE > addon.node\nprintf failed >&2\nexit 9\n",
+        )?;
+        let mut permissions = fs::metadata(&prebuild_install)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&prebuild_install, permissions)?;
+
+        let produced = produce_with_native_addon(
+            &temp_dir,
+            &addon,
+            NativeAddonOptions {
+                platform: Some("linux".to_owned()),
+                install_platform: Some("linux".to_owned()),
+                arch: Some("x64".to_owned()),
+                node_version: Some("v18.5.0".to_owned()),
+                prebuild_install: Some(prebuild_install),
+            },
+        )?;
+
+        let native_file = PathBuf::from(format!("{}.linux.v18.5.0", addon.display()));
+        assert!(contains_bytes(&produced.bytes, b"ORIGINAL_NATIVE"));
+        assert!(!contains_bytes(&produced.bytes, b"BROKEN_NATIVE"));
+        assert!(!native_file.exists());
+        assert_eq!(fs::read(&addon)?, b"ORIGINAL_NATIVE");
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn fake_prebuild_install(temp_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let prebuild_install = temp_dir.join("prebuild-install");
+        fs::write(
+            &prebuild_install,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > args.txt\nprintf GENERATED_NATIVE > addon.node\n",
+        )?;
+        let mut permissions = fs::metadata(&prebuild_install)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&prebuild_install, permissions)?;
+        Ok(prebuild_install)
+    }
+
+    #[cfg(unix)]
+    fn produce_with_native_addon(
+        temp_dir: &Path,
+        addon: &Path,
+        native_addons: NativeAddonOptions,
+    ) -> Result<ProducedExecutable, PkgError> {
+        let file = addon
+            .to_str()
+            .ok_or_else(|| PkgError::Pack("addon path must be utf-8".to_owned()))?
+            .to_owned();
+        write_executable_image_with_fabricator(
+            temp_dir.join("out"),
+            binary_with_placeholders(),
+            PackedOutput {
+                entrypoint: "/app.js".to_owned(),
+                symlinks: BTreeMap::new(),
+                stripes: vec![Stripe {
+                    snap: "/addon.node".to_owned(),
+                    store: StoreKind::Content,
+                    file: Some(file),
+                    buffer: None,
+                }],
+            },
+            "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+            ProducerBuildOptions {
+                compression: PayloadCompression::None,
+                style: PathStyle::Posix,
+                bakery: Vec::new(),
+                fabricator_path: None,
+                native_addons,
+            },
+        )
+    }
+
+    fn contains_bytes(bytes: &[u8], needle: &[u8]) -> bool {
+        bytes.windows(needle.len()).any(|window| window == needle)
     }
 
     fn binary_with_placeholders() -> Vec<u8> {

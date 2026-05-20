@@ -298,8 +298,65 @@ fn native_addon_options(
 
     NativeAddonOptions {
         platform: Some(target.platform.to_string()),
+        install_platform: Some(prebuild_platform(target.platform).to_owned()),
+        arch: Some(target.arch.to_string()),
         node_version: binary_path.and_then(node_version_from_binary_path),
+        prebuild_install: prebuild_install_path(),
     }
+}
+
+fn prebuild_platform(platform: Platform) -> &'static str {
+    match platform {
+        Platform::Macos => "darwin",
+        Platform::Win => "win32",
+        Platform::Alpine | Platform::Linux | Platform::LinuxStatic => "linux",
+        Platform::Freebsd => "freebsd",
+    }
+}
+
+fn prebuild_install_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("PKG_PREBUILD_INSTALL").filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(path));
+    }
+
+    source_tree_prebuild_install()
+        .or_else(|| local_prebuild_install().filter(|path| path.is_file()))
+        .or_else(|| find_on_path("prebuild-install"))
+}
+
+fn source_tree_prebuild_install() -> Option<PathBuf> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let candidate = manifest_dir
+        .parent()?
+        .join("node_modules")
+        .join(".bin")
+        .join(executable_name("prebuild-install"));
+    candidate.is_file().then_some(candidate)
+}
+
+fn local_prebuild_install() -> Option<PathBuf> {
+    Some(
+        PathBuf::from("node_modules")
+            .join(".bin")
+            .join(executable_name("prebuild-install")),
+    )
+}
+
+fn find_on_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths)
+        .map(|path| path.join(executable_name(name)))
+        .find(|candidate| candidate.is_file())
+}
+
+#[cfg(windows)]
+fn executable_name(name: &str) -> String {
+    format!("{name}.cmd")
+}
+
+#[cfg(not(windows))]
+fn executable_name(name: &str) -> String {
+    name.to_owned()
 }
 
 fn node_version_from_binary_path(path: &Path) -> Option<String> {

@@ -59,7 +59,9 @@ against the embedded SHA-256 table.
 
 ## Current Limits
 
-- Native addon rebuild/prebuild handling is not complete.
+- Native addon handling supports cached `.node.<platform>.<nodeVersion>`
+  payloads and can invoke a discoverable `prebuild-install`, but broad real npm
+  native fixture coverage still depends on a configured base-binary cache.
 - Mach-O patching/signing is not complete.
 - Bytecode fabrication can use a real target binary when a runnable cached
   binary path is available; otherwise tests fall back to host `node`.

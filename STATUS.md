@@ -778,4 +778,12 @@ Next: port the missing `prebuild-install` invocation path for native addons that
 
 Decisions made: this slice only selects already-existing platform prebuilds. Running `prebuild-install`, backing up/restoring the original `.node`, and parsing package `binary.napi_versions` remain separate because they require an external tool boundary and more failure-mode tests.
 
+## 2026-05-20 - Native addon prebuild-install invocation shipped
+
+Shipped: producer native-addon selection now tries a discoverable `prebuild-install` when the cached `.node.<platform>.<nodeVersion>` sibling is missing. The Rust path finds the owning package, backs up the original `.node`, passes the JS platform mapping plus target arch, adds `--target <nodeVersion>` only when `binary.napi_versions` is absent/null, caches the generated native payload under the platform/version suffix, and restores the original `.node`. Installer errors are swallowed at the native-addon selection boundary so packaging falls back to the original payload, matching the JS producer's catch-and-fallback behavior. Added fake-installer coverage for cache creation, N-API target omission, and failure fallback.
+
+Next: add real native npm fixture smoke once a configured base-binary cache and installer environment are available, then continue platform patching/signing gaps.
+
+Decisions made: support `PKG_PREBUILD_INSTALL`, source-tree/local `node_modules/.bin/prebuild-install`, and `PATH` discovery instead of hard-coding only the JS `__dirname` path. Rust restores the backed-up `.node` even on installer failure before falling back, which avoids leaving fixture/package directories mutated after failed attempts.
+
 Blockers worked around: tests use a stub target binary path named like the pkg-fetch cache artifact to prove Node-version parsing without requiring a real downloaded base binary.

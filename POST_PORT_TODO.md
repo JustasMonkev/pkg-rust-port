@@ -8,7 +8,8 @@ Items parked until JS parity is complete.
   verified pkg-fetch cache artifact or running a dedicated network-enabled job.
 - Port Mach-O patching and signing behavior instead of relying on unsigned
   local smoke binaries.
-- Complete native addon handling, including `prebuild-install` parity.
+- Expand real native npm fixture coverage now that cached prebuild selection
+  and `prebuild-install` invocation are wired.
 - Add criterion benchmarks for packaging throughput and warm-cache release build
   timing before optimizing.
 - Retire the JS oracle only after every mapped JS fixture has a Rust parity test.
