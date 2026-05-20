@@ -1407,3 +1407,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: keep companion packages explicit per fixture instead of broadening every public fixture install. Choose current `pg-cursor` because the direct public npm oracle installs `pg-cursor pg` cleanly and prints exactly `ok`.
+
+## 2026-05-21 - Pg-query-stream companion-package public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/pg-query-stream` fixture using the existing explicit `pg` companion-package path that mirrors JS `meta.packages`.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `pg-query-stream` and its `pg` companion package installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: choose current `pg-query-stream` because the direct public npm oracle installs `pg-query-stream pg` cleanly and prints exactly `ok`, exercising a second companion-package fixture without adding a new harness concept.

@@ -725,6 +725,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "pg-cursor.js",
         },
         PublicNpmFixture {
+            name: "npm-pg-query-stream",
+            fixture_subdir: "pg-query-stream",
+            package_spec: "pg-query-stream",
+            node_input: "pg-query-stream.js",
+            package_input: "pg-query-stream.js",
+        },
+        PublicNpmFixture {
             name: "npm-mongodb",
             fixture_subdir: "mongodb",
             package_spec: "mongodb",
@@ -918,7 +925,7 @@ fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
 
 fn public_npm_extra_package_specs(name: &str) -> &'static [&'static str] {
     match name {
-        "npm-pg-cursor" => &["pg"],
+        "npm-pg-cursor" | "npm-pg-query-stream" => &["pg"],
         _ => &[],
     }
 }
@@ -971,6 +978,10 @@ fn public_npm_last_line_mode_matches_js_harness_metadata() {
 #[test]
 fn public_npm_extra_packages_match_js_harness_metadata() {
     assert_eq!(public_npm_extra_package_specs("npm-pg-cursor"), ["pg"]);
+    assert_eq!(
+        public_npm_extra_package_specs("npm-pg-query-stream"),
+        ["pg"]
+    );
     assert_eq!(public_npm_extra_package_specs("npm-pg"), [] as [&str; 0]);
 }
 
