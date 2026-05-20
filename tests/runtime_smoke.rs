@@ -647,6 +647,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "oauth2orize.js",
             package_input: "oauth2orize.js",
         },
+        PublicNpmFixture {
+            name: "npm-pgpass",
+            fixture_subdir: "pgpass",
+            package_spec: "pgpass",
+            node_input: "pgpass.js",
+            package_input: "pgpass.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

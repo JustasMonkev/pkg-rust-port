@@ -1207,3 +1207,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose `oauth2orize` because it exercises a recursive package-specific script glob without native dependencies, custom CLI output, or pinned-version drift.
+
+## 2026-05-20 - Pgpass public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/pgpass` fixture. The fixture checks the async connection lookup path and depends on the dictionary-provided `lib/helper.js` script entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose `pgpass` because it exercises a package-specific helper script without native dependencies, custom CLI output, or pinned-version drift.
