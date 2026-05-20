@@ -116,3 +116,47 @@ fn open_dictionary_carries_xdg_open_patch_and_deploy_file() -> Result<(), Box<dy
     );
     Ok(())
 }
+
+#[test]
+fn native_dictionary_entries_carry_directory_deploy_files() -> Result<(), Box<dyn std::error::Error>>
+{
+    let cases = [
+        (
+            "leveldown",
+            json!([["prebuilds", "prebuilds", "directory"]]),
+            "binding.js",
+            json!(["__dirname", "require('path').dirname(process.execPath)"]),
+        ),
+        (
+            "puppeteer",
+            json!([[".local-chromium", "puppeteer", "directory"]]),
+            "utils/ChromiumDownloader.js",
+            json!([
+                "path.join(__dirname, '..', '.local-chromium')",
+                "path.join(path.dirname(process.execPath), 'puppeteer')"
+            ]),
+        ),
+        (
+            "zeromq",
+            json!([["prebuilds", "prebuilds", "directory"]]),
+            "lib/native.js",
+            json!([
+                "path.join(__dirname, \"..\")",
+                "path.dirname(process.execPath)"
+            ]),
+        ),
+    ];
+
+    for (name, deploy_files, patch_path, patch_ops) in cases {
+        let mut package = PackageJson::parse(&format!(r#"{{"name":"{name}"}}"#))?;
+        let entry = lookup_dictionary(name).ok_or("missing native dictionary")?;
+
+        apply_dictionary_entry(&mut package, &entry);
+
+        let config = package.pkg.ok_or("missing native pkg config")?;
+        assert_eq!(config.deploy_files, deploy_files);
+        assert_eq!(config.patches.get(patch_path), Some(&patch_ops));
+    }
+
+    Ok(())
+}

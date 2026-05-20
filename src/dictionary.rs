@@ -150,11 +150,14 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
         "busboy" => Some(busboy()),
         "express" => Some(express()),
+        "leveldown" => Some(leveldown()),
         "log4js" => Some(log4js()),
         "open" | "opn" => Some(open()),
         "publicsuffixlist" => Some(publicsuffixlist()),
+        "puppeteer" => Some(puppeteer()),
         "sequelize" => Some(sequelize()),
         "stylus" => Some(stylus()),
+        "zeromq" => Some(zeromq()),
         _ => None,
     }
 }
@@ -251,6 +254,20 @@ fn log4js() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/appenders/*.js"]))
 }
 
+fn leveldown() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "binding.js".to_owned(),
+        serde_json::json!(["__dirname", "require('path').dirname(process.execPath)"]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["prebuilds", "prebuilds", "directory"]]),
+        ..PkgConfig::default()
+    })
+}
+
 fn open() -> DictionaryEntry {
     let mut patches = Map::new();
     patches.insert(
@@ -278,6 +295,23 @@ fn publicsuffixlist() -> DictionaryEntry {
         .with_dependency(DictionaryDependency::disabled("mocha"))
 }
 
+fn puppeteer() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "utils/ChromiumDownloader.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, '..', '.local-chromium')",
+            "path.join(path.dirname(process.execPath), 'puppeteer')"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([[".local-chromium", "puppeteer", "directory"]]),
+        ..PkgConfig::default()
+    })
+}
+
 fn sequelize() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_scripts(["lib/**/*.js"]))
 }
@@ -285,4 +319,21 @@ fn sequelize() -> DictionaryEntry {
 fn stylus() -> DictionaryEntry {
     DictionaryEntry::with_pkg(PkgConfig::with_assets(["lib/**/*.styl"]))
         .with_log(DictionaryLog::StylusResolveImports)
+}
+
+fn zeromq() -> DictionaryEntry {
+    let mut patches = Map::new();
+    patches.insert(
+        "lib/native.js".to_owned(),
+        serde_json::json!([
+            "path.join(__dirname, \"..\")",
+            "path.dirname(process.execPath)"
+        ]),
+    );
+
+    DictionaryEntry::with_pkg(PkgConfig {
+        patches,
+        deploy_files: serde_json::json!([["prebuilds", "prebuilds", "directory"]]),
+        ..PkgConfig::default()
+    })
 }

@@ -729,3 +729,13 @@ Next: continue npm fixture parity for the remaining deploy-file dictionaries, es
 Decisions made: keep dictionary deploy metadata inside `PkgConfig` so the existing activation path registers patches and warnings uniformly for package config, built-in dictionaries, and root `pkg.dictionary` overrides.
 
 Blockers worked around: this slice still does not copy deploy files beside produced executables; it locks the metadata and warning boundary first.
+
+## 2026-05-20 - Directory deploy dictionaries shipped
+
+Shipped: ported the `leveldown`, `puppeteer`, and `zeromq` dictionaries as typed Rust entries carrying their JS path patches and directory-style `deployFiles` metadata. Added dictionary parity coverage for all three entries and walker coverage proving the deploy warning preserves the `directory` file kind.
+
+Next: continue deploy-file parity for the remaining npm fixture dictionaries with executable/file payloads, then add the higher-level copy behavior that places deploy files beside produced executables.
+
+Decisions made: keep the third `deployFiles` tuple item as the warning file kind rather than normalizing directory entries into generic files, matching the JS fixture harness and upstream warning text.
+
+Blockers worked around: real npm fixture execution remains gated on a configured base-binary cache; this slice proves the metadata and warning path without running the npm fixtures end to end.
