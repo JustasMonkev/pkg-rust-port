@@ -44,6 +44,8 @@
   `socket.io-client`, `tesseract.js`, and `webdriverio`.
 - Added walker-level parity coverage proving dictionary-provided script and
   asset globs affect packaged records and still obey `--no-dict`.
+- Added walker-level parity coverage proving dictionary-provided patches are
+  registered and applied before dependency blobs are parsed.
 
 ### Behavior Changes
 

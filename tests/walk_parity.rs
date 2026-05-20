@@ -667,6 +667,59 @@ fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError
     Ok(())
 }
 
+#[test]
+fn dictionary_patches_apply_before_dependency_blob_detection()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::env::temp_dir().join(format!("pkg-rust-rc-dictionary-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    let package_dir = fixture_dir.join("node_modules/rc");
+    fs::create_dir_all(package_dir.join("lib"))?;
+    fs::write(fixture_dir.join("app.js"), "require('rc');\n")?;
+    fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"rc","main":"index.js"}"#,
+    )?;
+    fs::write(package_dir.join("index.js"), "require('./lib/utils');\n")?;
+    fs::write(
+        package_dir.join("lib/utils.js"),
+        "module.exports = process.cwd();\n",
+    )?;
+
+    let output = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let patched = output
+        .record(package_dir.join("lib/utils.js"))
+        .and_then(|record| record.body.as_ref())
+        .map(|body| String::from_utf8_lossy(body).into_owned())
+        .ok_or("missing patched rc utils body")?;
+    assert!(patched.contains("require('path').dirname(require.main.filename)"));
+    assert!(!patched.contains("process.cwd()"));
+
+    let disabled = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_no_dictionary(["rc.js"]),
+    )?;
+    let original = disabled
+        .record(package_dir.join("lib/utils.js"))
+        .and_then(|record| record.body.as_ref())
+        .map(|body| String::from_utf8_lossy(body).into_owned())
+        .ok_or("missing unpatched rc utils body")?;
+    assert!(original.contains("process.cwd()"));
+    assert!(!original.contains("require('path').dirname(require.main.filename)"));
+
+    fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn tracks_blob_symlinks_to_real_files() -> Result<(), Box<dyn std::error::Error>> {

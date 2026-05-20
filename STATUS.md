@@ -899,3 +899,11 @@ Shipped: added a walker parity fixture for a synthetic `connect` dependency prov
 Next: continue consumer-path validation for patch/deploy-file dictionary entries where existing tests do not already exercise the activated walker behavior, then revisit native/platform-specific runtime smoke gaps.
 
 Decisions made: use a generated temporary fixture instead of changing JS fixtures so the Rust test can isolate the dictionary activation path without relying on npm-installed package contents.
+
+## 2026-05-20 - Dictionary patch consumer path shipped
+
+Shipped: added a walker parity fixture for a synthetic `rc` dependency proving dictionary-provided patch metadata registers during dependency package activation, rewrites the dependency blob before detection, and is removed by `--no-dict rc.js`.
+
+Next: dictionary deploy-file and log activation already have walker coverage, so continue with the remaining runtime smoke gaps and any high-value npm fixture consumer proofs.
+
+Decisions made: use `rc` as the representative dictionary patch because its replacement is small, deterministic, and already present as typed static metadata.
