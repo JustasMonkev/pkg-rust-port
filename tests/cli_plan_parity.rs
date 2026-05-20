@@ -249,11 +249,31 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(plan.compression, Compression::Brotli);
     assert!(plan.snapshot_base.ends_with("test-50-require-resolve"));
     assert!(!plan.bytecode);
+    assert!(plan.native_build);
     assert_eq!(
         plan.bakes,
         vec!["--trace-warnings", "--max-old-space-size=64"]
     );
     assert_eq!(plan.outputs.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn plans_no_native_build_flag() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-no-native-build");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("--no-native-build"),
+        OsString::from("../test/test-50-native-addon/test-x-index.js"),
+    ])?;
+
+    assert!(!plan.native_build);
     Ok(())
 }
 

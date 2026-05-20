@@ -6,7 +6,8 @@ use crate::error::PkgError;
 use crate::fsx::plus_x;
 use crate::pack::pack;
 use crate::produce::{
-    ProducedExecutable, ProducerBuildOptions, write_executable_image_with_fabricator,
+    NativeAddonOptions, ProducedExecutable, ProducerBuildOptions,
+    write_executable_image_with_fabricator,
 };
 use crate::refine::refine_walked_with_snapshot_base;
 use crate::target::{NodeTarget, Platform};
@@ -150,6 +151,8 @@ pub fn build_package_with_provider(
         let binary = provider.binary_artifact_for(&planned.target)?;
         let (binary_bytes, binary_path) = binary.into_parts();
         let fabricator_path = runnable_fabricator_path(&binary_bytes, binary_path.as_deref());
+        let native_addons =
+            native_addon_options(plan.native_build, &planned.target, binary_path.as_deref());
         let walked = walk(
             plan.marker.clone(),
             &plan.entrypoint,
@@ -180,6 +183,7 @@ pub fn build_package_with_provider(
                 style: planned.path_style,
                 bakery: bakery_from_bakes(&plan.bakes),
                 fabricator_path,
+                native_addons,
             },
         )?;
         if planned.target.platform != Platform::Win {
@@ -281,6 +285,51 @@ fn runnable_fabricator_path<'a>(binary: &[u8], path: Option<&'a Path>) -> Option
     } else {
         None
     }
+}
+
+fn native_addon_options(
+    native_build: bool,
+    target: &NodeTarget,
+    binary_path: Option<&Path>,
+) -> NativeAddonOptions {
+    if !native_build {
+        return NativeAddonOptions::default();
+    }
+
+    NativeAddonOptions {
+        platform: Some(target.platform.to_string()),
+        node_version: binary_path.and_then(node_version_from_binary_path),
+    }
+}
+
+fn node_version_from_binary_path(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    name.split('-')
+        .find(|part| node_version_token(part))
+        .map(ToOwned::to_owned)
+}
+
+fn node_version_token(value: &str) -> bool {
+    let Some(version) = value.strip_prefix('v') else {
+        return false;
+    };
+    let mut parts = version.split('.');
+    let Some(major) = parts.next() else {
+        return false;
+    };
+    let Some(minor) = parts.next() else {
+        return false;
+    };
+    let Some(patch) = parts.next() else {
+        return false;
+    };
+    parts.next().is_none()
+        && !major.is_empty()
+        && !minor.is_empty()
+        && !patch.is_empty()
+        && major.chars().all(|character| character.is_ascii_digit())
+        && minor.chars().all(|character| character.is_ascii_digit())
+        && patch.chars().all(|character| character.is_ascii_digit())
 }
 
 fn looks_like_executable(binary: &[u8]) -> bool {

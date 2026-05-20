@@ -769,3 +769,13 @@ Next: add npm fixture smoke coverage for deploy-file packages once a configured 
 Decisions made: use deploy warnings as the package-production copy plan so package config and dictionary metadata share one path without a second deploy-file parser.
 
 Blockers worked around: this is still covered with stub target binaries rather than real npm executable fixtures because `PKG_RUST_REAL_CACHE` is not configured in this shell.
+
+## 2026-05-20 - Native addon cached prebuild selection shipped
+
+Shipped: wired CLI `--no-native-build` into `PackagePlan` and package production. Producer payload reads now prefer an existing `.node.<platform>.<nodeVersion>` sibling when native build is enabled and the target binary cache path exposes a Node version, matching the JS producer's cached-prebuild branch before it invokes `prebuild-install`. Added package-build coverage proving native build uses the platform payload and `--no-native-build` keeps the original addon payload.
+
+Next: port the missing `prebuild-install` invocation path for native addons that do not already have a platform-specific prebuild file, then continue toward real native npm fixture coverage with a configured cache.
+
+Decisions made: this slice only selects already-existing platform prebuilds. Running `prebuild-install`, backing up/restoring the original `.node`, and parsing package `binary.napi_versions` remain separate because they require an external tool boundary and more failure-mode tests.
+
+Blockers worked around: tests use a stub target binary path named like the pkg-fetch cache artifact to prove Node-version parsing without requiring a real downloaded base binary.

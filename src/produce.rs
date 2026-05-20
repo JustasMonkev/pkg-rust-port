@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::common::{PathStyle, StoreKind, snapshotify};
@@ -140,7 +140,9 @@ pub fn produce_manifest(
     compression: PayloadCompression,
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
-    let (manifest, _payload) = build_manifest_and_payload(packed, compression, style, None)?;
+    let native_addons = NativeAddonOptions::default();
+    let (manifest, _payload) =
+        build_manifest_and_payload(packed, compression, style, None, &native_addons)?;
     Ok(manifest)
 }
 
@@ -191,7 +193,9 @@ pub fn produce_executable_image(
     style: PathStyle,
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
-    let (manifest, payload) = build_manifest_and_payload(packed, compression, style, None)?;
+    let native_addons = NativeAddonOptions::default();
+    let (manifest, payload) =
+        build_manifest_and_payload(packed, compression, style, None, &native_addons)?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
     let payload_size = payload.len() as u64;
@@ -291,6 +295,7 @@ pub fn write_executable_image(
             style,
             bakery,
             fabricator_path: None,
+            native_addons: NativeAddonOptions::default(),
         },
     )
 }
@@ -300,6 +305,13 @@ pub(crate) struct ProducerBuildOptions<'a> {
     pub(crate) style: PathStyle,
     pub(crate) bakery: Vec<u8>,
     pub(crate) fabricator_path: Option<&'a Path>,
+    pub(crate) native_addons: NativeAddonOptions,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct NativeAddonOptions {
+    pub(crate) platform: Option<String>,
+    pub(crate) node_version: Option<String>,
 }
 
 pub(crate) fn write_executable_image_with_fabricator(
@@ -315,6 +327,7 @@ pub(crate) fn write_executable_image_with_fabricator(
         options.compression,
         options.style,
         options.fabricator_path,
+        &options.native_addons,
     )?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
@@ -366,6 +379,7 @@ fn build_manifest_and_payload(
     compression: PayloadCompression,
     style: PathStyle,
     fabricator_path: Option<&Path>,
+    native_addons: &NativeAddonOptions,
 ) -> Result<(ProducerManifest, Vec<u8>), PkgError> {
     let mut offset = 0_u64;
     let mut payload = Vec::new();
@@ -374,7 +388,7 @@ fn build_manifest_and_payload(
 
     for stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
-        let stripe_bytes = stripe_bytes(&stripe)?;
+        let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
         let payload_bytes = if stripe.store == StoreKind::Blob {
             // DECISION: full JS parity compiles bytecode with the target binary.
             // Until the provider layer carries target binary paths, use host
@@ -693,7 +707,7 @@ fn base36(mut value: usize) -> String {
     output.iter().rev().collect()
 }
 
-fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
+fn stripe_bytes(stripe: &Stripe, native_addons: &NativeAddonOptions) -> Result<Vec<u8>, PkgError> {
     if let Some(buffer) = stripe.buffer.as_ref() {
         return Ok(buffer.clone());
     }
@@ -704,10 +718,26 @@ fn stripe_bytes(stripe: &Stripe) -> Result<Vec<u8>, PkgError> {
             stripe.snap
         )));
     };
-    fs::read(file).map_err(|source| PkgError::Io {
-        path: file.clone(),
+    let selected_file =
+        native_addon_file(file, native_addons).unwrap_or_else(|| PathBuf::from(file));
+    fs::read(&selected_file).map_err(|source| PkgError::Io {
+        path: selected_file.display().to_string(),
         source,
     })
+}
+
+fn native_addon_file(file: &str, native_addons: &NativeAddonOptions) -> Option<PathBuf> {
+    if Path::new(file)
+        .extension()
+        .is_none_or(|extension| extension != "node")
+    {
+        return None;
+    }
+
+    let platform = native_addons.platform.as_deref()?;
+    let node_version = native_addons.node_version.as_deref()?;
+    let candidate = PathBuf::from(format!("{file}.{platform}.{node_version}"));
+    candidate.is_file().then_some(candidate)
 }
 
 fn fabricate_bytecode(
@@ -838,6 +868,7 @@ mod tests {
                 style: PathStyle::Posix,
                 bakery: Vec::new(),
                 fabricator_path: Some(&fabricator),
+                native_addons: NativeAddonOptions::default(),
             },
         )?;
         let pointer = produced

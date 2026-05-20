@@ -1,7 +1,8 @@
 //! Parity tests for package build orchestration.
 
 use pkg_rust::{
-    NodeTarget, PkgError, TargetBinaryProvider, build_package_with_provider, plan_package,
+    NodeTarget, PkgError, TargetBinary, TargetBinaryProvider, build_package_with_provider,
+    plan_package,
 };
 
 struct StubBinary;
@@ -9,6 +10,22 @@ struct StubBinary;
 impl TargetBinaryProvider for StubBinary {
     fn binary_for(&self, _target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
         Ok(binary_with_placeholders())
+    }
+}
+
+struct StubBinaryWithPath {
+    path: std::path::PathBuf,
+}
+
+impl TargetBinaryProvider for StubBinaryWithPath {
+    fn binary_for(&self, _target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        Ok(binary_with_placeholders())
+    }
+
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        self.binary_for(target)
+            .map(TargetBinary::from_bytes)
+            .map(|binary| binary.with_path(self.path.clone()))
     }
 }
 
@@ -167,6 +184,104 @@ fn copies_deploy_files_next_to_output_executable() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn native_build_uses_cached_platform_addon_when_available() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-native-cache-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    let package_dir = root.join("package");
+    let output = root.join("dist").join("demo");
+    std::fs::create_dir_all(&package_dir)?;
+    std::fs::write(package_dir.join("app.js"), "require('./addon.node');\n")?;
+    let addon = package_dir.join("addon.node");
+    std::fs::write(&addon, b"ORIGINAL_NATIVE")?;
+    let canonical_addon = addon.canonicalize()?;
+    std::fs::write(
+        format!("{}.linux.v18.5.0", canonical_addon.display()),
+        b"PLATFORM_NATIVE",
+    )?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"demo","bin":"app.js"}"#,
+    )?;
+    let binary_path = root.join("cache").join("fetched-v18.5.0-linux-x64");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let package_text = package_dir
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary package path must be utf-8".to_owned()))?;
+    let plan = plan_package(["--target", "linux", "--output", output_text, package_text])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinaryWithPath { path: binary_path },
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = &build.outputs[0].image.bytes;
+    assert!(contains_bytes(image, b"PLATFORM_NATIVE"));
+    assert!(!contains_bytes(image, b"ORIGINAL_NATIVE"));
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn no_native_build_keeps_original_addon_payload() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-no-native-cache-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    let package_dir = root.join("package");
+    let output = root.join("dist").join("demo");
+    std::fs::create_dir_all(&package_dir)?;
+    std::fs::write(package_dir.join("app.js"), "require('./addon.node');\n")?;
+    let addon = package_dir.join("addon.node");
+    std::fs::write(&addon, b"ORIGINAL_NATIVE")?;
+    let canonical_addon = addon.canonicalize()?;
+    std::fs::write(
+        format!("{}.linux.v18.5.0", canonical_addon.display()),
+        b"PLATFORM_NATIVE",
+    )?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"demo","bin":"app.js"}"#,
+    )?;
+    let binary_path = root.join("cache").join("fetched-v18.5.0-linux-x64");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let package_text = package_dir
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary package path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "--no-native-build",
+        package_text,
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinaryWithPath { path: binary_path },
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = &build.outputs[0].image.bytes;
+    assert!(contains_bytes(image, b"ORIGINAL_NATIVE"));
+    assert!(!contains_bytes(image, b"PLATFORM_NATIVE"));
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
 fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
 -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join(format!(
@@ -275,4 +390,10 @@ fn binary_with_placeholders() -> Vec<u8> {
     binary.extend_from_slice(b"// PRELUDE_POSITION //");
     binary.extend_from_slice(b"// PRELUDE_SIZE //");
     binary
+}
+
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }

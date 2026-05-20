@@ -98,6 +98,8 @@ pub struct PackagePlan {
     pub compression: Compression,
     /// Whether bytecode generation is enabled.
     pub bytecode: bool,
+    /// Whether native addon prebuild selection/building is enabled.
+    pub native_build: bool,
     /// Whether JavaScript source should be disclosed for the top-level package.
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
@@ -326,6 +328,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         snapshot_base,
         compression,
         bytecode: !cli.no_bytecode,
+        native_build: !cli.no_native_build,
         public_toplevel: cli.public,
         public_packages,
         no_dictionary,

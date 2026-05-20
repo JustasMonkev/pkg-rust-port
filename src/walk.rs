@@ -817,6 +817,10 @@ impl WalkerState {
     }
 
     fn step_content(&mut self, file: &Path) -> Result<(), PkgError> {
+        if is_dot_node(file) && !self.patches.contains_key(file) {
+            return Ok(());
+        }
+
         let mut body = fs::read(file).map_err(|source| io_error(file, source))?;
         if let Some(patch) = self.patches.get(file) {
             let mut text = String::from_utf8_lossy(&body).into_owned();
@@ -1125,6 +1129,11 @@ fn custom_dictionaries_from_marker(marker: &Marker) -> BTreeMap<String, Dictiona
 
 fn should_retag_blob_as_content(path: &Path) -> bool {
     !is_javascript_file(path)
+}
+
+fn is_dot_node(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension == "node")
 }
 
 fn deploy_files(value: &Value) -> Vec<DeployFile> {
