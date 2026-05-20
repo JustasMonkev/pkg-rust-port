@@ -639,3 +639,13 @@ Next: cover the original JS fixture's alternate run-directory normalization for 
 Decisions made: this smoke test uses the standard Node stdout oracle for the compile-time fixture directory; the more complex run-time/run-time-3 host overlay behavior remains a separate helper slice.
 
 Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
+
+## 2026-05-20 - Global object runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-global-object`, packaging the fixture as a directory so `package.json` `pkg.scripts` includes dynamically required files at runtime.
+
+Next: continue package-directory runtime fixtures and then return to environment-specific cases such as inspect/signal behavior.
+
+Decisions made: keep this as a package-directory smoke because the fixture's runtime behavior depends on package config script activation rather than direct static detection alone.
+
+Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.

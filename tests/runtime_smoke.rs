@@ -167,6 +167,14 @@ fn require_with_config_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn global_object_fixture_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-global-object");
+    package_and_compare_fixture("global-object", &fixture_dir, "test-x-index.js", ".")
+}
+
+#[test]
 fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
