@@ -619,3 +619,13 @@ Next: continue intentional-failure and stderr-focused runtime fixtures, then mov
 Decisions made: model runtime-smoke execution options with a small test-only options struct instead of adding more positional helper arguments.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Require edge-case runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-require-edge-cases`, comparing produced executable stdout against the Node oracle for dynamic path require, false exports, and empty-file module behavior.
+
+Next: continue expanding require/runtime fixtures, especially cases that need path normalization across different run directories.
+
+Decisions made: keep this fixture in the stdout compare helper because its JS oracle only asserts process output equality.
+
+Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.

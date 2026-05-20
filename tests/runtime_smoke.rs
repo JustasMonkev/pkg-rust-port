@@ -146,6 +146,19 @@ fn path_and_resolution_runtime_fixtures_run_when_real_cache_is_configured()
 }
 
 #[test]
+fn require_edge_cases_fixture_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-require-edge-cases");
+    package_and_compare_fixture(
+        "require-edge-cases",
+        &fixture_dir,
+        "test-x-index.js",
+        "test-x-index.js",
+    )
+}
+
+#[test]
 fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
