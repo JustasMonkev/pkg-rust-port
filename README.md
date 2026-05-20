@@ -118,7 +118,8 @@ PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
 ```
 
 The same gate also covers selected public `test-79-npm` package fixtures whose
-success depends on dictionary metadata:
+success depends on dictionary metadata, such as `connect`, `rc`, and
+`socket.io-client`:
 
 ```sh
 PKG_RUST_INSTALL_NPM_FIXTURES=1 \

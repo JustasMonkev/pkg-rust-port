@@ -971,3 +971,11 @@ Shipped: ran `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/p
 Next: expand this opt-in gate to another deterministic non-native `test-79-npm` dictionary consumer, then separately size native/deploy-file packages that require external payload copying or platform installers.
 
 Decisions made: keep the real public npm smoke opt-in because it reaches the npm registry and uses a machine-local real-runtime cache, even though this subset is now proven on the local macOS cache.
+
+## 2026-05-20 - Socket.IO client public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to `socket.io-client@1.7.0`, covering the original `test-79-npm/socket.io-client` path that requires the browser bundle asset through `require.resolve(..., 'may-exclude')`.
+
+Next: continue adding pinned, deterministic public npm fixtures with no native install requirements, then separately handle packages whose meta files intentionally gate platform or network behavior.
+
+Decisions made: use the pinned `1.7.0` fixture instead of latest `socket.io-client` first because the original test aliases it to the canonical asset check while avoiding package-shape drift in newer major releases.

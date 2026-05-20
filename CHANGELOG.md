@@ -56,7 +56,7 @@
   `#1191` (`better-sqlite3`) that requires native install and Node oracle
   success before packaging.
 - Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
-  `connect`, `connect@2.3.9`, and `rc` fixtures.
+  `connect`, `connect@2.3.9`, `rc`, and `socket.io-client@1.7.0` fixtures.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,

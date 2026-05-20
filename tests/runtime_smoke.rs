@@ -465,6 +465,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "rc.js",
             package_input: "rc.config.json",
         },
+        PublicNpmFixture {
+            name: "npm-socket-io-client-1-7-0",
+            fixture_subdir: "socket.io-client",
+            package_spec: "socket.io-client@1.7.0",
+            node_input: "socket.io-client@1.7.0.js",
+            package_input: "socket.io-client@1.7.0.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
