@@ -1067,3 +1067,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the original `test-7
 Next: continue adding deterministic non-native public npm fixtures that exercise dictionary metadata, with legacy variants kept as separate slices.
 
 Decisions made: start with the current package fixture because it has a small stable CommonJS surface and no native install or deploy-file requirements.
+
+## 2026-05-20 - Machinepack URLs legacy public npm smoke pending focused verification
+
+Added: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/machinepack-urls@5.0.0` fixture. The fixture installs the older package shape, checks the validator function surface, and keeps coverage on dictionary-provided `machines/*.js` modules.
+
+Next: run the focused public npm smoke with fixture installation enabled, then commit this slice if it passes. After that, continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches before moving into native/deploy-file gates.
+
+Decisions made: keep the pinned machinepack variant separate from the current package slice so package-version drift remains easy to isolate.

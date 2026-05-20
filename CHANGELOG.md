@@ -60,7 +60,8 @@
   fixtures, plus pinned `uglify-js@2.7.5`, the `logform` formatter loader,
   `body-parser`, pinned `body-parser@1.10.2`, and pinned `log4js@0.5.8` /
   `log4js@0.6.34` / `log4js@1.1.1`, `negotiator`, and pinned
-  `negotiator@0.4.9`, plus `machinepack-urls`.
+  `negotiator@0.4.9`, plus `machinepack-urls` and pinned
+  `machinepack-urls@5.0.0`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,

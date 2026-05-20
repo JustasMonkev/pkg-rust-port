@@ -549,6 +549,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "machinepack-urls.js",
             package_input: "machinepack-urls.js",
         },
+        PublicNpmFixture {
+            name: "npm-machinepack-urls-5-0-0",
+            fixture_subdir: "machinepack-urls",
+            package_spec: "machinepack-urls@5.0.0",
+            node_input: "machinepack-urls@5.0.0.js",
+            package_input: "machinepack-urls@5.0.0.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
