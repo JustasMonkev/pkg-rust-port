@@ -165,6 +165,38 @@ fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn console_trace_fixture_reports_packaged_stack_paths() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-console-trace");
+    let Some(run_result) =
+        package_and_run_real_fixture("console-trace", &fixture_dir, "test-x-index.js")?
+    else {
+        return Ok(());
+    };
+
+    let stderr = String::from_utf8_lossy(&run_result.stderr);
+    let lines = stderr.split('\n').collect::<Vec<_>>();
+    let first_line = lines
+        .first()
+        .ok_or_else(|| "console trace stderr was empty".to_owned())?;
+    let frame_file = extract_stack_file_name(
+        lines
+            .get(2)
+            .ok_or_else(|| format!("missing console trace frame line: {stderr}"))?,
+    )
+    .ok_or_else(|| format!("could not parse console trace frame line: {stderr}"))?;
+    let prelude_file = extract_stack_file_name(
+        lines
+            .get(3)
+            .ok_or_else(|| format!("missing console trace prelude frame line: {stderr}"))?,
+    )
+    .ok_or_else(|| format!("could not parse console trace prelude frame line: {stderr}"))?;
+    assert_eq!(*first_line, frame_file);
+    assert_eq!(prelude_file, "pkg/prelude/bootstrap.js");
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
@@ -456,6 +488,25 @@ fn normalize_out_of_range_line(line: &str, other_line: Option<&str>) -> Option<S
     normalized.push(' ');
     normalized.push_str(&line[end..]);
     Some(normalized)
+}
+
+fn extract_stack_file_name(line: &str) -> Option<&str> {
+    let mut end = line.rfind(')')?;
+    let mut start = line[..end].rfind('(')? + 1;
+    if let Some(line_end) = line[start..end].rfind(':') {
+        end = start + line_end;
+        if let Some(column_end) = line[start..end].rfind(':') {
+            end = start + column_end;
+        }
+    }
+    while line
+        .as_bytes()
+        .get(start)
+        .is_some_and(u8::is_ascii_whitespace)
+    {
+        start += 1;
+    }
+    Some(&line[start..end])
 }
 
 fn package_and_run_real_fixture(

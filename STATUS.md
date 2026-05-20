@@ -599,3 +599,13 @@ Next: continue runtime-smoke expansion for fixtures needing stderr comparisons o
 Decisions made: keep `CHDIR` handling in `src/main.rs`, matching the JS `lib/bin.ts` boundary, instead of moving it into the public `exec` API.
 
 Blockers worked around: normal Rust gates still skip real executable packaging unless `PKG_RUST_REAL_CACHE` is configured, so this fixture is locked as opt-in real-runtime coverage like the rest of `runtime_smoke`.
+
+## 2026-05-20 - Console trace runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-console-trace`. The smoke test now validates stderr stack path rewriting by checking the top traced file and the prelude frame path, matching the JS fixture's core assertion.
+
+Next: continue fixtures that need non-stdout assertions, especially intentional runtime failures such as source-position errors.
+
+Decisions made: keep a tiny stack-frame parser inside the runtime smoke suite because it is fixture assertion logic, not product behavior.
+
+Blockers worked around: none.
