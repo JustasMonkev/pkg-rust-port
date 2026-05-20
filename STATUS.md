@@ -590,6 +590,16 @@ Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50
 
 Blockers worked around: none.
 
+## 2026-05-20 - Public disclosure walker slice shipped
+
+Shipped: wired CLI `--public` and `--public-packages` through package planning into the dependency walker, and taught the walker to disclose JavaScript source for public top-level packages, selected public dependency packages, wildcard public packages, and permissively licensed packages.
+
+Next: extend real-runtime smoke coverage for `test-50-public-packages` once the local base-binary cache is configured, then continue the remaining public/dictionary disclosure edge cases.
+
+Decisions made: keep disclosure as walker state and marker metadata, matching the JS walker boundary, while leaving dictionary `hasDictionary` source disclosure as a separate parity slice.
+
+Blockers worked around: no real cache is configured in this shell, so this slice uses non-gated walker and CLI parity tests rather than packaging the fixture executable.
+
 ## 2026-05-20 - CHDIR entrypoint parity shipped
 
 Shipped: preserved the JS CLI entrypoint's `CHDIR` environment override before argument execution, and added gated real-runtime smoke coverage for `test-50-chdir-env-var`.

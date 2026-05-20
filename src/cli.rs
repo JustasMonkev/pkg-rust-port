@@ -98,6 +98,10 @@ pub struct PackagePlan {
     pub compression: Compression,
     /// Whether bytecode generation is enabled.
     pub bytecode: bool,
+    /// Whether JavaScript source should be disclosed for the top-level package.
+    pub public_toplevel: bool,
+    /// Dependency package names whose JavaScript source should be disclosed.
+    pub public_packages: Vec<String>,
     /// Command-line options baked into the executable.
     pub bakes: Vec<String>,
     /// Output artifacts in target order.
@@ -305,6 +309,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .filter(|option| !option.is_empty())
         .map(|option| format!("--{option}"))
         .collect();
+    let public_packages = parse_public_packages(cli.public_packages.as_deref());
 
     Ok(PackagePlan {
         input,
@@ -315,9 +320,28 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         snapshot_base,
         compression,
         bytecode: !cli.no_bytecode,
+        public_toplevel: cli.public,
+        public_packages,
         bakes,
         outputs,
     })
+}
+
+fn parse_public_packages(packages: Option<&str>) -> Vec<String> {
+    let Some(packages) = packages else {
+        return Vec::new();
+    };
+    let parsed = packages
+        .split(',')
+        .map(str::trim)
+        .filter(|package| !package.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if parsed.iter().any(|package| package == "*") {
+        vec!["*".to_owned()]
+    } else {
+        parsed
+    }
 }
 
 fn build_marker(

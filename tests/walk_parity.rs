@@ -103,6 +103,92 @@ fn explicit_addition_is_stored_as_content() -> Result<(), PkgError> {
 }
 
 #[test]
+fn public_toplevel_discloses_entrypoint_source() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-extensions");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+
+    let output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_public_toplevel(true),
+    )?;
+
+    assert!(output.contains_store(&entrypoint, StoreKind::Blob));
+    assert!(output.contains_store(&entrypoint, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
+fn public_package_list_discloses_dependency_source() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let dependency = fixture_dir.join("node_modules/crusader/index.js");
+
+    let private_output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    assert!(private_output.contains_store(&dependency, StoreKind::Blob));
+    assert!(!private_output.contains_store(&dependency, StoreKind::Content));
+
+    let public_output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_public_packages(["crusader"]),
+    )?;
+    assert!(public_output.contains_store(&dependency, StoreKind::Blob));
+    assert!(public_output.contains_store(&dependency, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
+fn public_package_wildcard_discloses_dependency_source() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let dependency = fixture_dir.join("node_modules/crusader/index.js");
+
+    let output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_public_packages(["*"]),
+    )?;
+
+    assert!(output.contains_store(&dependency, StoreKind::Blob));
+    assert!(output.contains_store(&dependency, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
+fn public_license_discloses_entrypoint_source() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-extensions");
+    let entrypoint = fixture_dir.join("test-x-index.js");
+    let package = PackageJson::parse(r#"{"name":"demo","license":"MIT"}"#)
+        .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+
+    let output = walk(
+        Marker::new(package),
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(&entrypoint, StoreKind::Blob));
+    assert!(output.contains_store(&entrypoint, StoreKind::Content));
+    Ok(())
+}
+
+#[test]
 fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-require-with-config");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;

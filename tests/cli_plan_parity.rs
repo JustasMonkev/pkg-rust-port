@@ -258,6 +258,49 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn plans_public_disclosure_flags() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-public");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("--public"),
+        OsString::from("--public-packages"),
+        OsString::from("crusader,swordsman"),
+        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+    ])?;
+
+    assert!(plan.public_toplevel);
+    assert_eq!(plan.public_packages, vec!["crusader", "swordsman"]);
+    Ok(())
+}
+
+#[test]
+fn plans_public_package_wildcard_like_js() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-public-wildcard");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--target"),
+        OsString::from("host"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("--public-packages"),
+        OsString::from("crusader,*,swordsman"),
+        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+    ])?;
+
+    assert!(!plan.public_toplevel);
+    assert_eq!(plan.public_packages, vec!["*"]);
+    Ok(())
+}
+
+#[test]
 fn file_input_inside_package_keeps_package_directory_in_snapshot()
 -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan-package-file");

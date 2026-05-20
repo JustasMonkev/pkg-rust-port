@@ -154,7 +154,10 @@ pub fn build_package_with_provider(
             plan.marker.clone(),
             &plan.entrypoint,
             plan.addition.clone(),
-            WalkerParams::new().with_root(&plan.root),
+            WalkerParams::new()
+                .with_root(&plan.root)
+                .with_public_toplevel(plan.public_toplevel)
+                .with_public_packages(plan.public_packages.clone()),
         )?;
         warnings.extend(walked.warnings.clone());
         let refined = refine_walked_with_snapshot_base(

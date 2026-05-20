@@ -20,6 +20,7 @@ pub struct Marker {
     package: PackageJson,
     package_path: Option<PathBuf>,
     activated: bool,
+    public: bool,
     top_level: bool,
 }
 
@@ -40,6 +41,7 @@ impl Marker {
             package,
             package_path: None,
             activated: false,
+            public: false,
             top_level: true,
         }
     }
@@ -61,6 +63,7 @@ impl Marker {
             package,
             package_path: Some(package_path.into()),
             activated: false,
+            public: false,
             top_level: true,
         }
     }
@@ -70,6 +73,7 @@ impl Marker {
             package,
             package_path: Some(package_path.into()),
             activated: false,
+            public: false,
             top_level: false,
         }
     }
@@ -116,6 +120,21 @@ impl Marker {
     pub fn is_top_level(&self) -> bool {
         self.top_level
     }
+
+    /// Whether this package is public and should disclose JavaScript source.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let package = pkg_rust::PackageJson::parse(r#"{"name":"demo"}"#)?;
+    /// let marker = pkg_rust::Marker::new(package);
+    /// assert!(!marker.is_public());
+    /// # Ok::<(), pkg_rust::PackageJsonError>(())
+    /// ```
+    #[must_use]
+    pub fn is_public(&self) -> bool {
+        self.public
+    }
 }
 
 /// Options controlling dependency walking.
@@ -123,6 +142,10 @@ impl Marker {
 pub struct WalkerParams {
     /// Optional root that bounds directory-link expansion.
     pub root: Option<PathBuf>,
+    /// Whether to disclose JavaScript source for the top-level package.
+    pub public_toplevel: bool,
+    /// Dependency package names whose JavaScript source should be disclosed.
+    pub public_packages: Vec<String>,
 }
 
 impl WalkerParams {
@@ -150,6 +173,40 @@ impl WalkerParams {
     #[must_use]
     pub fn with_root(mut self, root: impl Into<PathBuf>) -> Self {
         self.root = Some(root.into());
+        self
+    }
+
+    /// Disclose JavaScript source for the top-level package.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let params = pkg_rust::WalkerParams::new().with_public_toplevel(true);
+    /// assert!(params.public_toplevel);
+    /// ```
+    #[must_use]
+    pub fn with_public_toplevel(mut self, public: bool) -> Self {
+        self.public_toplevel = public;
+        self
+    }
+
+    /// Disclose JavaScript source for named dependency packages.
+    ///
+    /// The wildcard package name `*` matches every dependency package.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let params = pkg_rust::WalkerParams::new().with_public_packages(["left-pad"]);
+    /// assert_eq!(params.public_packages, vec!["left-pad"]);
+    /// ```
+    #[must_use]
+    pub fn with_public_packages<I, S>(mut self, packages: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.public_packages = packages.into_iter().map(Into::into).collect();
         self
     }
 }
@@ -419,16 +476,20 @@ struct WalkerState {
     output: WalkOutput,
     tasks: VecDeque<Task>,
     root: PathBuf,
+    public_toplevel: bool,
+    public_packages: Vec<String>,
     activated_packages: BTreeSet<PathBuf>,
     patches: BTreeMap<PathBuf, Vec<PatchOp>>,
 }
 
 impl WalkerState {
-    fn new(root: PathBuf) -> Self {
+    fn new(root: PathBuf, public_toplevel: bool, public_packages: Vec<String>) -> Self {
         Self {
             output: WalkOutput::default(),
             tasks: VecDeque::new(),
             root,
+            public_toplevel,
+            public_packages,
             activated_packages: BTreeSet::new(),
             patches: BTreeMap::new(),
         }
@@ -511,6 +572,7 @@ impl WalkerState {
 
         let dependencies = active_dependencies(&marker.package);
         marker.activated = true;
+        marker.public = self.is_public_marker(marker);
 
         let Some(base_dir) = marker.package_path.as_deref().and_then(Path::parent) else {
             return Ok(());
@@ -600,6 +662,10 @@ impl WalkerState {
         if should_retag_blob_as_content(file) {
             self.append(file.to_path_buf(), StoreKind::Content, marker.clone());
             return Ok(false);
+        }
+
+        if marker.public {
+            self.append(file.to_path_buf(), StoreKind::Content, marker.clone());
         }
 
         let mut body = read_to_string(file)?;
@@ -745,6 +811,8 @@ impl WalkerState {
         match resolve_module(alias, &options) {
             Ok(file) => {
                 if let Some(package_marker) = package_marker_for_file(&file, &marker, &self.root)? {
+                    let mut package_marker = package_marker;
+                    package_marker.public = self.is_public_marker(&package_marker);
                     if let Some(package_path) = package_marker.package_path.as_deref() {
                         self.append(
                             package_path.to_path_buf(),
@@ -838,6 +906,23 @@ impl WalkerState {
             .entry(file.to_path_buf())
             .or_insert_with(|| FileRecord::new(file.to_path_buf()))
     }
+
+    fn is_public_marker(&self, marker: &Marker) -> bool {
+        if is_public_package(&marker.package) {
+            return true;
+        }
+        if marker.top_level {
+            return self.public_toplevel;
+        }
+        if self.public_packages.first().is_some_and(|name| name == "*") {
+            return true;
+        }
+        marker
+            .package
+            .name
+            .as_ref()
+            .is_some_and(|name| self.public_packages.iter().any(|public| public == name))
+    }
 }
 
 fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<PackageWarning> {
@@ -891,7 +976,7 @@ pub fn walk(
         .or_else(|| entrypoint.parent().map(canonicalize_or_self))
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let mut state = WalkerState::new(root);
+    let mut state = WalkerState::new(root, params.public_toplevel, params.public_packages);
     state.append(entrypoint, StoreKind::Blob, marker.clone());
     if let Some(addition) = addition {
         state.append(canonicalize_or_self(&addition), StoreKind::Content, marker);
@@ -901,6 +986,94 @@ pub fn walk(
 
 fn should_retag_blob_as_content(path: &Path) -> bool {
     !is_javascript_file(path)
+}
+
+fn is_public_package(package: &PackageJson) -> bool {
+    if package.private {
+        return false;
+    }
+
+    license_text(package).as_deref().is_some_and(|license| {
+        license_fragments(license)
+            .iter()
+            .any(|fragment| is_public_license(fragment))
+    })
+}
+
+fn license_text(package: &PackageJson) -> Option<String> {
+    package
+        .licenses
+        .as_ref()
+        .or(package.license.as_ref())
+        .and_then(license_value_text)
+}
+
+fn license_value_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(license) => Some(license.clone()),
+        Value::Object(object) => object
+            .get("type")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        Value::Array(items) => {
+            let licenses = items
+                .iter()
+                .filter_map(license_value_text)
+                .collect::<Vec<_>>();
+            if licenses.is_empty() {
+                None
+            } else {
+                Some(licenses.join(","))
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => None,
+    }
+}
+
+fn license_fragments(license: &str) -> Vec<String> {
+    let normalized = license
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .to_ascii_lowercase()
+        .replace(" or ", ",")
+        .replace(" and ", ",")
+        .replace('/', ",");
+    normalized
+        .split(',')
+        .map(str::trim)
+        .filter(|fragment| !fragment.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn is_public_license(license: &str) -> bool {
+    matches!(
+        license,
+        "isc"
+            | "mit"
+            | "apache-2.0"
+            | "apache 2.0"
+            | "public domain"
+            | "bsd"
+            | "bsd-2-clause"
+            | "bsd-3-clause"
+            | "wtfpl"
+            | "cc-by-3.0"
+            | "x11"
+            | "artistic-2.0"
+            | "gplv3"
+            | "mpl"
+            | "mplv2.0"
+            | "unlicense"
+            | "apache license 2.0"
+            | "zlib"
+            | "mpl-2.0"
+            | "nasa-1.3"
+            | "apache license, version 2.0"
+            | "lgpl-2.1+"
+            | "cc0-1.0"
+    )
 }
 
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
