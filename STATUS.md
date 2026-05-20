@@ -819,3 +819,11 @@ Shipped: added gated real-runtime smoke coverage for `test-99-#420-copy-from-sna
 Next: continue issue-regression runtime coverage across the remaining `test-99-*` fixtures, then make the real-cache smoke portable enough for CI.
 
 Decisions made: implement recursive glob matching in the Rust walker instead of special-casing the runtime smoke, because the failing executable path proved `pkg.assets` data was absent from the packed snapshot.
+
+## 2026-05-20 - Stat issue-regression runtime coverage shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-99-#1505`, comparing Node-oracle and packaged executable output for callback and promise `fs.stat`/`fs.lstat` metadata on packaged files.
+
+Next: continue remaining `test-99-*` issue fixtures, separating portable runtime coverage from native-install and Windows-only cases.
+
+Decisions made: keep `#1505` inside the existing issue-regression smoke group because it exercises already-ported snapshot filesystem metadata behavior and does not require a separate production change.

@@ -323,6 +323,12 @@ fn issue_regression_fixtures_run_when_real_cache_is_configured()
         "read.js",
         ".",
     )?;
+    package_and_compare_fixture(
+        "stat-file-metadata",
+        &root.join("test-99-#1505"),
+        "stat.js",
+        ".",
+    )?;
 
     Ok(())
 }

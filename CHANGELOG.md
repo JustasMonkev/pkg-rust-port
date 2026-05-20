@@ -22,6 +22,8 @@
   regression fixtures.
 - Added recursive `**` package-config glob expansion and gated real-runtime
   smoke coverage for snapshot-copy and `withFileTypes` issue regressions.
+- Added gated real-runtime smoke coverage for packaged `fs.stat`/`fs.lstat`
+  issue regression behavior.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
