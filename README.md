@@ -123,8 +123,9 @@ success depends on dictionary metadata, such as `connect`, `rc`, and
 `body-parser@1.10.2`, appender-loader packages such as `log4js@0.5.8` /
 `log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator` /
 `negotiator@0.4.9` and `machinepack-urls` / `machinepack-urls@5.0.0`,
-dictionary script packages such as `shelljs` / `shelljs@0.7.6`, and
-loader-heavy packages such as `logform` and `body-parser`:
+dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
+`shelljs@0.6.0`, and loader-heavy packages such as `logform` and
+`body-parser`:
 
 ```sh
 PKG_RUST_INSTALL_NPM_FIXTURES=1 \

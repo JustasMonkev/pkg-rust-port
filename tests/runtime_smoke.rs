@@ -570,6 +570,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "shelljs@0.7.6.js",
             package_input: "shelljs@0.7.6.js",
         },
+        PublicNpmFixture {
+            name: "npm-shelljs-0-6-0",
+            fixture_subdir: "shelljs",
+            package_spec: "shelljs@0.6.0",
+            node_input: "shelljs@0.6.0.js",
+            package_input: "shelljs@0.6.0.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

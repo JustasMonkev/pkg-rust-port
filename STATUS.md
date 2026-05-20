@@ -1095,3 +1095,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: evaluate older ShellJS pins independently.
 
 Decisions made: keep `shelljs@0.7.6` separate from the current ShellJS fixture so regressions in older layouts remain traceable to one version. The package emits Node circular-dependency warnings on current Node, so the public npm smoke now normalizes only volatile warning metadata (`node` PID and trace-warning executable name) while preserving warning content.
+
+## 2026-05-20 - ShellJS 0.6.0 public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned `test-79-npm/shelljs@0.6.0` fixture. The fixture reuses the ShellJS `shell.exec()` oracle while installing the older 0.6 package layout.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: evaluate the remaining older ShellJS pin independently.
+
+Decisions made: keep `shelljs@0.6.0` separate from adjacent ShellJS pins so regressions in older layouts remain traceable to one version.
