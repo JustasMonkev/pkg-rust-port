@@ -1059,3 +1059,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the pinned original 
 Next: continue adding deterministic non-native public npm fixtures that exercise dictionary scripts, assets, or patches, and keep native/deploy-file cases behind their separate gates.
 
 Decisions made: keep the pinned negotiator wrapper separate from the current package slice so package-version regressions stay isolated.
+
+## 2026-05-20 - Machinepack URLs public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the original `test-79-npm/machinepack-urls` fixture. The fixture installs `machinepack-urls`, checks its parser function surface, and covers the dictionary-provided `machines/*.js` module glob on a real installed package.
+
+Next: continue adding deterministic non-native public npm fixtures that exercise dictionary metadata, with legacy variants kept as separate slices.
+
+Decisions made: start with the current package fixture because it has a small stable CommonJS surface and no native install or deploy-file requirements.

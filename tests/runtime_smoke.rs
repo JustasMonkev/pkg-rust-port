@@ -542,6 +542,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "negotiator@0.4.9.js",
             package_input: "negotiator@0.4.9.js",
         },
+        PublicNpmFixture {
+            name: "npm-machinepack-urls",
+            fixture_subdir: "machinepack-urls",
+            package_spec: "machinepack-urls",
+            node_input: "machinepack-urls.js",
+            package_input: "machinepack-urls.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
