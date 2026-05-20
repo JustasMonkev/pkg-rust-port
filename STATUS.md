@@ -489,3 +489,13 @@ Next: continue through remaining config/error fixtures outside the current Rust 
 Decisions made: dictionary callbacks remain inert Rust data through `DictionaryLog` rather than executable JS. The CLI still owns stdout rendering; lower-level modules only return typed warning values.
 
 Blockers worked around: none.
+
+## 2026-05-20 - CLI output matrix parity locked
+
+Shipped: expanded `cli_plan_parity` coverage for the `test-46` output-name matrix. Rust now has fixture-backed tests for default bare-file multi-target outputs, `.js` stem stripping, `--out-path` multi-target outputs, package `pkg.targets`, and package `pkg.outputPath`.
+
+Next: continue closing remaining `test-46` planning edges, then return to unresolved config/error and runtime smoke fixtures.
+
+Decisions made: keep these filename contracts at the planning layer because the JS fixtures assert output filenames after packaging, while the Rust planner is the authoritative source for basename, suffix, extension, and output directory decisions.
+
+Blockers worked around: none.

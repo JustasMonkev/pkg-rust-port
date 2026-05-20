@@ -4,6 +4,24 @@ use std::ffi::OsString;
 
 use pkg_rust::{Compression, PathStyle, PkgError, Platform, plan_package};
 
+fn output_suffixes(plan: &pkg_rust::PackagePlan) -> Vec<String> {
+    plan.outputs
+        .iter()
+        .map(|output| output.output.to_string_lossy().into_owned())
+        .collect()
+}
+
+fn assert_output_suffixes(plan: &pkg_rust::PackagePlan, suffixes: &[&str]) {
+    let outputs = output_suffixes(plan);
+    assert_eq!(outputs.len(), suffixes.len());
+    for (output, suffix) in outputs.iter().zip(suffixes) {
+        assert!(
+            output.ends_with(suffix),
+            "expected output {output:?} to end with {suffix:?}"
+        );
+    }
+}
+
 #[test]
 fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan");
@@ -32,6 +50,89 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
         plan.outputs[1]
             .output
             .ends_with("pkg-rust-cli-plan-win.exe")
+    );
+    Ok(())
+}
+
+#[test]
+fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std::error::Error>> {
+    let plan = plan_package([OsString::from("../test/test-46-input/test-x-index")])?;
+
+    assert!(plan.entrypoint.ends_with("test-46-input/test-x-index"));
+    assert_output_suffixes(
+        &plan,
+        &[
+            "test-x-index-linux",
+            "test-x-index-macos",
+            "test-x-index-win.exe",
+        ],
+    );
+    Ok(())
+}
+
+#[test]
+fn plans_default_multi_target_outputs_without_js_extension()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plan = plan_package([OsString::from("../test/test-46-input-js/test-x-index.js")])?;
+
+    assert!(
+        plan.entrypoint
+            .ends_with("test-46-input-js/test-x-index.js")
+    );
+    assert_output_suffixes(
+        &plan,
+        &[
+            "test-x-index-linux",
+            "test-x-index-macos",
+            "test-x-index-win.exe",
+        ],
+    );
+    Ok(())
+}
+
+#[test]
+fn plans_out_path_multi_target_outputs() -> Result<(), Box<dyn std::error::Error>> {
+    let output_root = std::env::temp_dir().join("pkg-rust-cli-plan-out-path");
+    let output_root_text = output_root
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--out-path"),
+        OsString::from(output_root_text),
+        OsString::from("../test/test-46-outpath/test-x-index"),
+    ])?;
+
+    assert_output_suffixes(
+        &plan,
+        &[
+            "pkg-rust-cli-plan-out-path/test-x-index-linux",
+            "pkg-rust-cli-plan-out-path/test-x-index-macos",
+            "pkg-rust-cli-plan-out-path/test-x-index-win.exe",
+        ],
+    );
+    Ok(())
+}
+
+#[test]
+fn plans_package_json_targets_and_output_path_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    let target_plan = plan_package([OsString::from(
+        "../test/test-46-input-package-json-target/package.json",
+    )])?;
+    assert_eq!(target_plan.outputs.len(), 2);
+    assert_eq!(target_plan.outputs[0].target.platform, Platform::Linux);
+    assert_eq!(target_plan.outputs[1].target.platform, Platform::Macos);
+    assert_output_suffixes(&target_plan, &["palookaville-linux", "palookaville-macos"]);
+
+    let output_path_plan = plan_package([OsString::from(
+        "../test/test-46-input-package-json-outputdir",
+    )])?;
+    assert_output_suffixes(
+        &output_path_plan,
+        &[
+            "out/palookaville-linux",
+            "out/palookaville-macos",
+            "out/palookaville-win.exe",
+        ],
     );
     Ok(())
 }
