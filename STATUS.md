@@ -851,3 +851,11 @@ Shipped: added opt-in npm-install real-runtime smoke coverage for `test-99-#1192
 Next: continue the remaining external-install/native fixtures (`#1135`, `#1191`) and Windows-specific fixtures (`#1207`, `#1861`), keeping them behind explicit gates until the CI/runtime setup is sized for them.
 
 Decisions made: keep npm-install fixture coverage behind `PKG_RUST_INSTALL_NPM_FIXTURES` because it reaches the npm registry and the Brotli packaging path is materially slower over installed dependencies.
+
+## 2026-05-20 - Native npm fixture probe logged
+
+Shipped: probed the remaining `test-99-#1191` better-sqlite3 fixture in a copied `/private/tmp` workspace before adding any committed smoke coverage. `npm install --ignore-scripts --no-audit --no-fund` installs dependencies quickly, but the Node oracle fails because no native binding is present. `npm rebuild better-sqlite3` then fails under the current host Node 25 toolchain, so this fixture is not yet a reliable local smoke candidate.
+
+Next: defer `#1191` runtime proof until the harness can install or run native dependencies against a compatible Node target, or until CI provides a known-good native prebuild/build environment. Continue with fixture-level planning/parity that does not depend on host-native addon compilation.
+
+Decisions made: do not add a gated `#1191` smoke until the native dependency setup itself is reproducible; a test that cannot establish the plain Node oracle would not be useful Rust-port evidence.
