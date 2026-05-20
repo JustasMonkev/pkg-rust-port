@@ -1227,3 +1227,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose current `pg-types` before the pinned `pg-types@1.0.0` fixture because it exercises the same dictionary entry without adding pinned-version drift to this slice.
+
+## 2026-05-20 - Pg-types 1.0.0 public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned `test-79-npm/pg-types@1.0.0` fixture. The fixture reuses the package import/module path probe and checks the dictionary-provided `lib/arrayParser.js` script entry against an older package shape.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: keep the pinned `pg-types@1.0.0` coverage separate from the current-version fixture so any package-version drift is isolated to one verified slice.

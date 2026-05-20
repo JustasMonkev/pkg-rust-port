@@ -661,6 +661,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "pg-types.js",
             package_input: "pg-types.js",
         },
+        PublicNpmFixture {
+            name: "npm-pg-types-1-0-0",
+            fixture_subdir: "pg-types",
+            package_spec: "pg-types@1.0.0",
+            node_input: "pg-types@1.0.0.js",
+            package_input: "pg-types@1.0.0.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
