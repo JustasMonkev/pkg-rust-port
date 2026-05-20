@@ -605,6 +605,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "buffermaker.js",
             package_input: "buffermaker.js",
         },
+        PublicNpmFixture {
+            name: "npm-compressjs",
+            fixture_subdir: "compressjs",
+            package_spec: "compressjs",
+            node_input: "compressjs.js",
+            package_input: "compressjs.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
