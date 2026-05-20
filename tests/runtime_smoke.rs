@@ -197,6 +197,38 @@ fn console_trace_fixture_reports_packaged_stack_paths() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn error_source_position_fixture_reports_original_pointer() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/test-50-error-source-position");
+    let Some(run_result) = package_and_run_real_fixture_with_options(
+        "error-source-position",
+        &fixture_dir,
+        "test-x-index.js",
+        RealFixtureOptions {
+            package_args: &["--public"],
+            run_expectation: RunExpectation::Failure,
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+
+    let stderr = String::from_utf8_lossy(&run_result.stderr);
+    assert!(
+        stderr.contains("x.parse is not a function"),
+        "missing source error message: {stderr}"
+    );
+    let error_pointer = format!("x.parse();{}  ^", if cfg!(windows) { "\r\n" } else { "\n" });
+    assert!(
+        stderr.contains(&error_pointer),
+        "missing source error pointer: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
@@ -514,7 +546,12 @@ fn package_and_run_real_fixture(
     fixture_dir: &Path,
     input: &str,
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
-    package_and_run_real_fixture_with_args(name, fixture_dir, input, &[])
+    package_and_run_real_fixture_with_options(
+        name,
+        fixture_dir,
+        input,
+        RealFixtureOptions::success(),
+    )
 }
 
 fn package_and_run_real_fixture_with_args(
@@ -523,7 +560,15 @@ fn package_and_run_real_fixture_with_args(
     input: &str,
     run_args: &[&str],
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
-    package_and_run_real_fixture_with_args_and_package_env(name, fixture_dir, input, run_args, &[])
+    package_and_run_real_fixture_with_options(
+        name,
+        fixture_dir,
+        input,
+        RealFixtureOptions {
+            run_args,
+            ..RealFixtureOptions::success()
+        },
+    )
 }
 
 fn package_and_run_real_fixture_with_args_and_package_env(
@@ -532,6 +577,24 @@ fn package_and_run_real_fixture_with_args_and_package_env(
     input: &str,
     run_args: &[&str],
     package_env: &[(&str, &str)],
+) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+    package_and_run_real_fixture_with_options(
+        name,
+        fixture_dir,
+        input,
+        RealFixtureOptions {
+            run_args,
+            package_env,
+            ..RealFixtureOptions::success()
+        },
+    )
+}
+
+fn package_and_run_real_fixture_with_options(
+    name: &str,
+    fixture_dir: &Path,
+    input: &str,
+    options: RealFixtureOptions<'_>,
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
     let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
@@ -542,7 +605,8 @@ fn package_and_run_real_fixture_with_args_and_package_env(
     let package_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(fixture_dir)
         .env("PKG_CACHE_PATH", cache_root)
-        .envs(package_env.iter().copied())
+        .envs(options.package_env.iter().copied())
+        .args(options.package_args)
         .arg("--target")
         .arg("node18-macos-x64")
         .arg("--output")
@@ -558,16 +622,47 @@ fn package_and_run_real_fixture_with_args_and_package_env(
 
     let run_result = Command::new(&output)
         .current_dir(fixture_dir)
-        .args(run_args)
+        .args(options.run_args)
         .output()?;
     fs::remove_file(output)?;
-    assert!(
-        run_result.status.success(),
-        "produced executable failed: {}{}",
-        String::from_utf8_lossy(&run_result.stdout),
-        String::from_utf8_lossy(&run_result.stderr)
-    );
+    match options.run_expectation {
+        RunExpectation::Success => assert!(
+            run_result.status.success(),
+            "produced executable failed: {}{}",
+            String::from_utf8_lossy(&run_result.stdout),
+            String::from_utf8_lossy(&run_result.stderr)
+        ),
+        RunExpectation::Failure => assert!(
+            !run_result.status.success(),
+            "produced executable succeeded unexpectedly: {}{}",
+            String::from_utf8_lossy(&run_result.stdout),
+            String::from_utf8_lossy(&run_result.stderr)
+        ),
+    }
     Ok(Some(run_result))
+}
+
+struct RealFixtureOptions<'a> {
+    package_args: &'a [&'a str],
+    package_env: &'a [(&'a str, &'a str)],
+    run_args: &'a [&'a str],
+    run_expectation: RunExpectation,
+}
+
+impl RealFixtureOptions<'_> {
+    fn success() -> Self {
+        Self {
+            package_args: &[],
+            package_env: &[],
+            run_args: &[],
+            run_expectation: RunExpectation::Success,
+        }
+    }
+}
+
+enum RunExpectation {
+    Success,
+    Failure,
 }
 
 fn real_output_path(name: &str) -> PathBuf {

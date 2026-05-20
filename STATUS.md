@@ -609,3 +609,13 @@ Next: continue fixtures that need non-stdout assertions, especially intentional 
 Decisions made: keep a tiny stack-frame parser inside the runtime smoke suite because it is fixture assertion logic, not product behavior.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Source-position failure smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-error-source-position`. The runtime suite can now package with extra CLI args, run produced executables that are expected to fail, and assert the original source error message and caret pointer in stderr.
+
+Next: continue intentional-failure and stderr-focused runtime fixtures, then move back to broader groups such as compression, mountpoints, and public package behavior.
+
+Decisions made: model runtime-smoke execution options with a small test-only options struct instead of adding more positional helper arguments.
+
+Blockers worked around: none.
