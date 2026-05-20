@@ -40,6 +40,24 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer-3");
+    let Some(run_result) =
+        package_and_run_real_fixture("fs-runtime-layer-3", &fixture_dir, "test-x-index.js")?
+    else {
+        return Ok(());
+    };
+
+    assert_eq!(
+        String::from_utf8_lossy(&run_result.stdout),
+        "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nCannot write to packaged file\nundefined\n"
+    );
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =

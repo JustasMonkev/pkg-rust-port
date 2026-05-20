@@ -539,3 +539,13 @@ Next: continue expanding runtime smoke coverage across remaining `test-50` fixtu
 Decisions made: keep not-found wording checks in the runtime suite because the behavior lives in the generated executable prelude rather than in CLI planning or static walking.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Filesystem write-guard runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-fs-runtime-layer-3`, which asserts the packaged filesystem rejects writes to bundled files with the JS prelude's `Cannot write to packaged file` wording.
+
+Next: cover the more version-sensitive `test-50-fs-runtime-layer-2` fixture with the same line-normalization the JS oracle uses, then continue broader runtime fixture expansion.
+
+Decisions made: split layer 3 from layer 2 because layer 3 has a fixed stdout contract, while layer 2 needs Node-version-specific normalization around out-of-range errors.
+
+Blockers worked around: none.
