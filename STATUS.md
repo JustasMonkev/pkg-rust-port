@@ -589,3 +589,13 @@ Next: continue runtime-smoke expansion for remaining small fixtures, with specia
 Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50-chdir-env-var` for a helper that can set packaging environment variables.
 
 Blockers worked around: none.
+
+## 2026-05-20 - CHDIR entrypoint parity shipped
+
+Shipped: preserved the JS CLI entrypoint's `CHDIR` environment override before argument execution, and added gated real-runtime smoke coverage for `test-50-chdir-env-var`.
+
+Next: continue runtime-smoke expansion for fixtures needing stderr comparisons or intentional failure assertions, then return to broader compression and npm package fixture groups.
+
+Decisions made: keep `CHDIR` handling in `src/main.rs`, matching the JS `lib/bin.ts` boundary, instead of moving it into the public `exec` API.
+
+Blockers worked around: normal Rust gates still skip real executable packaging unless `PKG_RUST_REAL_CACHE` is configured, so this fixture is locked as opt-in real-runtime coverage like the rest of `runtime_smoke`.

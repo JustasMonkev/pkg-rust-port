@@ -146,6 +146,25 @@ fn path_and_resolution_runtime_fixtures_run_when_real_cache_is_configured()
 }
 
 #[test]
+fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-chdir-env-var");
+    let Some(run_result) = package_and_run_real_fixture_with_args_and_package_env(
+        "chdir-env-var",
+        &fixture_dir,
+        "test-x-index.js",
+        &[],
+        &[("CHDIR", "source")],
+    )?
+    else {
+        return Ok(());
+    };
+    assert_eq!(String::from_utf8_lossy(&run_result.stdout), "ok\n");
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
@@ -453,6 +472,16 @@ fn package_and_run_real_fixture_with_args(
     input: &str,
     run_args: &[&str],
 ) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
+    package_and_run_real_fixture_with_args_and_package_env(name, fixture_dir, input, run_args, &[])
+}
+
+fn package_and_run_real_fixture_with_args_and_package_env(
+    name: &str,
+    fixture_dir: &Path,
+    input: &str,
+    run_args: &[&str],
+    package_env: &[(&str, &str)],
+) -> Result<Option<std::process::Output>, Box<dyn std::error::Error>> {
     let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
         return Ok(None);
@@ -462,6 +491,7 @@ fn package_and_run_real_fixture_with_args(
     let package_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(fixture_dir)
         .env("PKG_CACHE_PATH", cache_root)
+        .envs(package_env.iter().copied())
         .arg("--target")
         .arg("node18-macos-x64")
         .arg("--output")
