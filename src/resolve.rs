@@ -109,7 +109,10 @@ fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<Pa
 
 fn package_main(package_path: &Path) -> Option<String> {
     let body = std::fs::read_to_string(package_path).ok()?;
-    PackageJson::parse(&body).ok()?.main
+    PackageJson::parse(&body)
+        .ok()?
+        .main
+        .filter(|main| !main.is_empty())
 }
 
 fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<PathBuf> {

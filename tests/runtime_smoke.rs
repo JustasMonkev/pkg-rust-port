@@ -486,6 +486,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "uglify-js@2.7.5.js",
             package_input: "uglify-js@2.7.5.js",
         },
+        PublicNpmFixture {
+            name: "npm-logform",
+            fixture_subdir: "logform",
+            package_spec: "logform",
+            node_input: "logform.js",
+            package_input: "logform.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

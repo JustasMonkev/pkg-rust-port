@@ -119,7 +119,8 @@ PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
 
 The same gate also covers selected public `test-79-npm` package fixtures whose
 success depends on dictionary metadata, such as `connect`, `rc`, and
-`moment`, plus pinned legacy package shapes such as `uglify-js@2.7.5`:
+`moment`, plus pinned legacy package shapes such as `uglify-js@2.7.5` and
+loader-heavy packages such as `logform`:
 
 ```sh
 PKG_RUST_INSTALL_NPM_FIXTURES=1 \

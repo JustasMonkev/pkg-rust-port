@@ -995,3 +995,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the pinned original 
 Next: continue expanding deterministic non-native public npm fixtures, then split deploy-file and native-package cases into environment-specific gates.
 
 Decisions made: use the pinned legacy fixture rather than latest `uglify-js` first because the original test asserts the 2.x `parse` and `minify(..., { fromString: true })` API shape.
+
+## 2026-05-20 - Logform public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the original `test-79-npm/logform` fixture. The fixture installs `logform`, loads its formatter surface, and checks `format.combine()`, covering the dictionary-provided `*.js` script glob on a real installed package. Fixed the resolver to treat empty package `main` fields as absent, which prevents type-only dependencies such as `@types/triple-beam` from recursively resolving their package directory.
+
+Next: continue expanding deterministic non-native public npm fixtures, with deploy-file and native-package fixtures staying behind separate gates.
+
+Decisions made: keep `logform` on the current public package like the JS harness because its formatter API is stable and the test is a small consumer-path proof for dictionary script activation.
