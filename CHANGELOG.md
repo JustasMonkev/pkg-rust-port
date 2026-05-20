@@ -48,6 +48,8 @@
   registered and applied before dependency blobs are parsed.
 - Added Windows branch parity for the original common path helpers and fixed
   Windows snapshot-boundary handling for `inside_snapshot`/`strip_snapshot`.
+- Added host-gated Windows real-runtime smoke hooks for issue regressions
+  `#1207` and `#1861`, including `subst` drive coverage.
 
 ### Behavior Changes
 

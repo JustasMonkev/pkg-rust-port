@@ -915,3 +915,11 @@ Shipped: ported the Windows branch of the original `test-48-common` assertions i
 Next: continue Windows-specific issue regression coverage for `test-99-#1207` and `test-99-#1861` with host-gated runtime smoke, then return to native npm fixture gaps.
 
 Decisions made: keep these as target-platform string tests rather than `#[cfg(windows)]` tests so non-Windows CI can still verify the path logic needed by Windows targets.
+
+## 2026-05-20 - Windows issue smoke hooks shipped
+
+Shipped: added a host-gated real-runtime smoke test for the remaining Windows issue fixtures `test-99-#1207` and `test-99-#1861`. The test skips on non-Windows hosts, defaults Windows smoke to `node18-win-x64` when `PKG_RUST_REAL_TARGET` is unset, packages `#1861` as `index.exe` so `launch.bat` can recurse, and exercises `#1207` through a temporary `subst` drive plus local alternate-path runs.
+
+Next: run those hooks on a Windows machine or CI job with a seeded `PKG_RUST_REAL_CACHE`, then return to native npm fixture gaps such as `#1135`/`#1191`.
+
+Decisions made: keep the smoke host-gated rather than mocking `cmd.exe`/`subst`; the regression is about real Windows process/path behavior and needs a Windows runtime to prove executable parity.

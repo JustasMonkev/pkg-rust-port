@@ -348,6 +348,24 @@ fn issue_regression_fixtures_run_when_real_cache_is_configured()
 }
 
 #[test]
+fn windows_issue_regression_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    if !cfg!(windows) {
+        eprintln!("skipping Windows issue smoke: host platform is not Windows");
+        return Ok(());
+    }
+    let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
+        eprintln!("skipping Windows issue smoke: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    };
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    run_windows_issue_1861(&root, &cache_root)?;
+    run_windows_issue_1207(&root, &cache_root)?;
+    Ok(())
+}
+
+#[test]
 fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>> {
     if !npm_fixture_installs_enabled() {
         eprintln!("skipping npm fixture smoke: PKG_RUST_INSTALL_NPM_FIXTURES is not enabled");
@@ -407,6 +425,119 @@ fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::e
     }
 
     fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+fn run_windows_issue_1861(
+    root: &Path,
+    cache_root: &std::ffi::OsStr,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = root.join("test-99-#1861");
+    let output = fixture_dir.join("index.exe");
+    let _ignored = fs::remove_file(&output);
+    package_real_fixture_to_output(&fixture_dir, "index.js", &output, cache_root)?;
+
+    let run = Command::new(&output)
+        .current_dir(&fixture_dir)
+        .arg("launch")
+        .output()?;
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "issue #1861 executable failed: {}{}",
+        stdout,
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(stdout.contains("launch"), "missing launch output: {stdout}");
+    assert!(stdout.contains("stop"), "missing stop output: {stdout}");
+
+    fs::remove_file(output)?;
+    Ok(())
+}
+
+fn run_windows_issue_1207(
+    root: &Path,
+    cache_root: &std::ffi::OsStr,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = root.join("test-99-#1207");
+    let drive = mount_subst_drive(&fixture_dir)?;
+    let drive_root = format!("{drive}\\");
+    let input = format!("{drive}\\index.js");
+    let output = format!("{drive}\\index.exe");
+    let alternate_output = fixture_dir.join("index.exe");
+    let _cleanup = SubstDriveGuard {
+        drive: drive.clone(),
+    };
+    let _ignored = fs::remove_file(&alternate_output);
+
+    package_real_fixture_to_output_with_cwd(
+        Path::new(&drive_root),
+        &input,
+        Path::new(&output),
+        cache_root,
+    )?;
+
+    let direct = Command::new(&output).current_dir(&drive_root).output()?;
+    assert_eq!(direct.stdout, b"42\n");
+
+    let reference = Command::new(&output)
+        .current_dir(&drive_root)
+        .env("DEBUG_PKG", "42")
+        .output()?;
+    assert!(
+        String::from_utf8_lossy(&reference.stdout).ends_with("42\n"),
+        "issue #1207 reference output mismatch: {}{}",
+        String::from_utf8_lossy(&reference.stdout),
+        String::from_utf8_lossy(&reference.stderr)
+    );
+
+    let alternate_mounted = Command::new(&alternate_output)
+        .current_dir(&fixture_dir)
+        .env("DEBUG_PKG", "42")
+        .output()?;
+    assert_eq!(alternate_mounted.stdout, reference.stdout);
+
+    drop(_cleanup);
+    let alternate_unmounted = Command::new(&alternate_output)
+        .current_dir(&fixture_dir)
+        .env("DEBUG_PKG", "42")
+        .output()?;
+    assert_eq!(alternate_unmounted.stdout, reference.stdout);
+
+    fs::remove_file(alternate_output)?;
+    Ok(())
+}
+
+fn package_real_fixture_to_output(
+    fixture_dir: &Path,
+    input: &str,
+    output: &Path,
+    cache_root: &std::ffi::OsStr,
+) -> Result<(), Box<dyn std::error::Error>> {
+    package_real_fixture_to_output_with_cwd(fixture_dir, input, output, cache_root)
+}
+
+fn package_real_fixture_to_output_with_cwd(
+    cwd: &Path,
+    input: &str,
+    output: &Path,
+    cache_root: &std::ffi::OsStr,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let package_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
+        .current_dir(cwd)
+        .env("PKG_CACHE_PATH", cache_root)
+        .arg("--target")
+        .arg(real_target())
+        .arg("--output")
+        .arg(output)
+        .arg(input)
+        .output()?;
+    assert!(
+        package_result.status.success(),
+        "pkg CLI failed: {}{}",
+        String::from_utf8_lossy(&package_result.stdout),
+        String::from_utf8_lossy(&package_result.stderr)
+    );
     Ok(())
 }
 
@@ -887,8 +1018,7 @@ fn package_and_run_real_fixture_with_options(
         eprintln!("skipping real runtime smoke: PKG_RUST_REAL_CACHE is not set");
         return Ok(None);
     };
-    let target =
-        std::env::var("PKG_RUST_REAL_TARGET").unwrap_or_else(|_| DEFAULT_REAL_TARGET.to_owned());
+    let target = real_target();
 
     let output = if options.run_from_output_dir || options.prepare_output_dir.is_some() {
         real_output_dir(name).join("test-output")
@@ -1008,6 +1138,39 @@ fn real_output_path(name: &str) -> PathBuf {
 
 fn real_output_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
+}
+
+fn real_target() -> String {
+    std::env::var("PKG_RUST_REAL_TARGET").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            "node18-win-x64".to_owned()
+        } else {
+            DEFAULT_REAL_TARGET.to_owned()
+        }
+    })
+}
+
+fn mount_subst_drive(target: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    for drive in ["H:", "P:", "Q:", "R:"] {
+        let _ignored = Command::new("subst").args([drive, "/D"]).output();
+        let mount = Command::new("subst").arg(drive).arg(target).output()?;
+        if mount.status.success() {
+            return Ok(drive.to_owned());
+        }
+    }
+    Err(format!("could not mount a subst drive for {}", target.display()).into())
+}
+
+struct SubstDriveGuard {
+    drive: String,
+}
+
+impl Drop for SubstDriveGuard {
+    fn drop(&mut self) {
+        let _ignored = Command::new("subst")
+            .args([self.drive.as_str(), "/D"])
+            .output();
+    }
 }
 
 fn copied_fixture(name: &str, source: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
