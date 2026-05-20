@@ -290,6 +290,21 @@ fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
 }
 
 #[test]
+fn expands_recursive_package_config_assets() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-99-#420-copy-from-snapshot");
+    let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
+    let output = walk(
+        marker,
+        fixture_dir.join("copy.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(fixture_dir.join("input/test.json"), StoreKind::Content));
+    Ok(())
+}
+
+#[test]
 fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-config-log");
     let package = PackageJson::parse("{}")

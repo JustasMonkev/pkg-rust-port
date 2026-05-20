@@ -1307,8 +1307,8 @@ fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgErr
         return Ok(Vec::new());
     };
 
-    let pattern_path = base_dir.join(pattern);
     if !pattern.contains('*') {
+        let pattern_path = base_dir.join(pattern);
         return if pattern_path.is_file() {
             Ok(vec![canonicalize_or_self(&pattern_path)])
         } else if pattern_path.is_dir() {
@@ -1318,32 +1318,73 @@ fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgErr
         };
     }
 
-    let Some(directory) = pattern_path.parent() else {
-        return Ok(Vec::new());
-    };
-    let Some(file_pattern) = pattern_path.file_name().and_then(|name| name.to_str()) else {
-        return Ok(Vec::new());
+    let base_dir = canonicalize_or_self(base_dir);
+    let search_root = base_dir.join(static_pattern_prefix(pattern));
+    let mut files = Vec::new();
+    for file in collect_files_recursive(&search_root)? {
+        let Ok(relative) = file.strip_prefix(&base_dir) else {
+            continue;
+        };
+        if path_pattern_matches(pattern, &path_to_slash_string(relative)) {
+            files.push(file);
+        }
+    }
+    Ok(files)
+}
+
+fn static_pattern_prefix(pattern: &str) -> PathBuf {
+    let mut prefix = PathBuf::new();
+    for component in pattern_components(pattern) {
+        if component.contains('*') {
+            break;
+        }
+        prefix.push(component);
+    }
+    prefix
+}
+
+fn path_pattern_matches(pattern: &str, candidate: &str) -> bool {
+    let pattern = pattern_components(pattern);
+    let candidate = pattern_components(candidate);
+    path_components_match(&pattern, &candidate)
+}
+
+fn path_components_match(pattern: &[String], candidate: &[String]) -> bool {
+    let Some((head, tail)) = pattern.split_first() else {
+        return candidate.is_empty();
     };
 
-    let mut files = Vec::new();
-    match fs::read_dir(directory) {
-        Ok(entries) => {
-            for entry in entries {
-                let entry = entry.map_err(|source| io_error(directory, source))?;
-                let path = entry.path();
-                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                    continue;
-                };
-                if path.is_file() && star_pattern_matches(file_pattern, name) {
-                    files.push(canonicalize_or_self(&path));
-                }
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(io_error(directory, error)),
+    if head == "**" {
+        return path_components_match(tail, candidate)
+            || candidate
+                .split_first()
+                .is_some_and(|(_, rest)| path_components_match(pattern, rest));
     }
 
-    Ok(files)
+    candidate
+        .split_first()
+        .is_some_and(|(candidate_head, rest)| {
+            star_pattern_matches(head, candidate_head) && path_components_match(tail, rest)
+        })
+}
+
+fn pattern_components(pattern: &str) -> Vec<String> {
+    pattern
+        .split(['/', '\\'])
+        .filter(|component| !component.is_empty() && *component != ".")
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn path_to_slash_string(path: &Path) -> String {
+    let mut text = String::new();
+    for component in path.components() {
+        if !text.is_empty() {
+            text.push('/');
+        }
+        text.push_str(&component.as_os_str().to_string_lossy());
+    }
+    text
 }
 
 fn normalized_config_pattern(pattern: &str) -> Option<&str> {

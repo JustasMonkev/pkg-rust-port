@@ -283,6 +283,51 @@ fn mountpoint_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn
 }
 
 #[test]
+fn issue_regression_fixtures_run_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+
+    let copy_fixture = root.join("test-99-#420-copy-from-snapshot");
+    let Some(copy_from_snapshot) = package_and_run_real_fixture_with_options(
+        "copy-from-snapshot",
+        &copy_fixture,
+        ".",
+        RealFixtureOptions {
+            run_from_output_dir: true,
+            prepare_output_dir: Some(create_output_subdir),
+            ..RealFixtureOptions::success()
+        },
+    )?
+    else {
+        return Ok(());
+    };
+    let copied_payload = fs::read_to_string(copy_fixture.join("input/test.json"))?;
+    assert_eq!(
+        String::from_utf8_lossy(&copy_from_snapshot.run.stdout),
+        format!("{copied_payload}\n{copied_payload}\n{copied_payload}\n")
+    );
+
+    let Some(with_file_types) = package_and_run_real_fixture(
+        "with-file-types-root",
+        &root.join("test-99-#938-withfiletypes"),
+        ".",
+    )?
+    else {
+        return Ok(());
+    };
+    assert_eq!(String::from_utf8_lossy(&with_file_types.run.stdout), "ok\n");
+
+    package_and_compare_fixture(
+        "with-file-types-files",
+        &root.join("test-99-#1130"),
+        "read.js",
+        ".",
+    )?;
+
+    Ok(())
+}
+
+#[test]
 fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
@@ -890,5 +935,13 @@ fn copy_plugins_d_ext(
         fixture_dir.join("plugins-D-ext/test-y-require-D.js"),
         target.join("test-y-require-D.js"),
     )?;
+    Ok(())
+}
+
+fn create_output_subdir(
+    _fixture_dir: &Path,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(output_dir.join("output"))?;
     Ok(())
 }

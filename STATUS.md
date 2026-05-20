@@ -811,3 +811,11 @@ Shipped: added gated real-runtime smoke coverage for `test-50-mountpoints`, `tes
 Next: continue issue-regression runtime coverage, especially snapshot file-copy and withFileTypes fixtures, then make the real-cache smoke portable enough for CI.
 
 Decisions made: keep this as a harness/parity-test slice because the embedded JS prelude already owns mountpoint behavior; no Rust runtime logic needed to change before executable-level proof.
+
+## 2026-05-20 - Issue-regression runtime coverage shipped
+
+Shipped: added gated real-runtime smoke coverage for `test-99-#420-copy-from-snapshot`, `test-99-#938-withfiletypes`, and `test-99-#1130`. Fixed package-config glob expansion so recursive `**` asset/script patterns such as `input/**/*` include nested files in the VFS, and added walker parity coverage for the copied snapshot asset.
+
+Next: continue issue-regression runtime coverage across the remaining `test-99-*` fixtures, then make the real-cache smoke portable enough for CI.
+
+Decisions made: implement recursive glob matching in the Rust walker instead of special-casing the runtime smoke, because the failing executable path proved `pkg.assets` data was absent from the packed snapshot.

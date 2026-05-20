@@ -20,6 +20,8 @@
   runtime smoke coverage for None/GZip/Brotli payloads.
 - Added gated real-runtime smoke coverage for mountpoint and mountpoint
   regression fixtures.
+- Added recursive `**` package-config glob expansion and gated real-runtime
+  smoke coverage for snapshot-copy and `withFileTypes` issue regressions.
 - Added an opt-in real runtime smoke for the original JS API happy-path demo.
 
 ### Behavior Changes
