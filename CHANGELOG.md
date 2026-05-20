@@ -57,7 +57,7 @@
   success before packaging.
 - Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
   `connect`, `connect@2.3.9`, `rc`, `socket.io-client@1.7.0`, and `moment`
-  fixtures.
+  fixtures, plus pinned `uglify-js@2.7.5`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,

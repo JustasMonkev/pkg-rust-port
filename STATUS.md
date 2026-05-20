@@ -987,3 +987,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the original `test-7
 Next: continue the same public npm expansion with other non-native dictionary consumers, then handle deploy-file/native packages under separate environment assumptions.
 
 Decisions made: keep `moment` unpinned like the original JS harness because its locale packaging contract is stable and the test is specifically intended to follow the current public package.
+
+## 2026-05-20 - Uglify public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/uglify-js@2.7.5` fixture. This covers Uglify's custom loader path that reads bundled parser/minifier sources from dictionary-provided asset globs.
+
+Next: continue expanding deterministic non-native public npm fixtures, then split deploy-file and native-package cases into environment-specific gates.
+
+Decisions made: use the pinned legacy fixture rather than latest `uglify-js` first because the original test asserts the 2.x `parse` and `minify(..., { fromString: true })` API shape.
