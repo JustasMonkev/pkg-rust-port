@@ -175,6 +175,19 @@ fn global_object_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn promisify_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-promisify");
+    package_and_compare_fixture(
+        "promisify",
+        &fixture_dir,
+        "test-x-index.js",
+        "test-x-index.js",
+    )
+}
+
+#[test]
 fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =

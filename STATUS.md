@@ -649,3 +649,13 @@ Next: continue package-directory runtime fixtures and then return to environment
 Decisions made: keep this as a package-directory smoke because the fixture's runtime behavior depends on package config script activation rather than direct static detection alone.
 
 Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
+
+## 2026-05-20 - Promisify runtime smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-promisify`, comparing produced executable stdout against the Node oracle for promisified `child_process.exec`, `fs.exists`, and `fs.read` behavior.
+
+Next: continue package/runtime fixtures with environment-specific behavior, then return to compression and larger public package groups.
+
+Decisions made: keep the oracle comparison at stdout level because the fixture already normalizes behavior through printed JSON and boolean results.
+
+Blockers worked around: no real cache is configured in this shell, so the test compiles and skips real packaging until `PKG_RUST_REAL_CACHE` is supplied.
