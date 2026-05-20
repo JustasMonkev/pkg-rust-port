@@ -1217,3 +1217,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: choose `pgpass` because it exercises a package-specific helper script without native dependencies, custom CLI output, or pinned-version drift.
+
+## 2026-05-20 - Pg-types public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/pg-types` fixture. The fixture checks package import behavior plus a module path probe and depends on the dictionary-provided `lib/arrayParser.js` script entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `pg-types` before the pinned `pg-types@1.0.0` fixture because it exercises the same dictionary entry without adding pinned-version drift to this slice.

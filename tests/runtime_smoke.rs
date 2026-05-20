@@ -654,6 +654,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "pgpass.js",
             package_input: "pgpass.js",
         },
+        PublicNpmFixture {
+            name: "npm-pg-types",
+            fixture_subdir: "pg-types",
+            package_spec: "pg-types",
+            node_input: "pg-types.js",
+            package_input: "pg-types.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
