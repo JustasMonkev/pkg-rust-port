@@ -39,6 +39,9 @@
   `socket.io`, `v8flags`, and `xlsx`.
 - Added typed Rust dictionary metadata for mixed script/asset plus patch modules
   `exceljs`, `sails`, `steam-resources`, and `umd`.
+- Completed typed Rust metadata coverage for the remaining behavior-bearing
+  simple dictionary modules, including `aws-sdk`, `connect`, `grpc`, `pg`,
+  `socket.io-client`, `tesseract.js`, and `webdriverio`.
 
 ### Behavior Changes
 

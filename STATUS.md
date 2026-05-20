@@ -883,3 +883,11 @@ Shipped: ported the remaining small mixed dictionary modules that combine config
 Next: run a dictionary coverage audit against every `dictionary/*.js` module to separate explicit no-op entries from remaining behavior-bearing dictionaries with dependencies, assets, scripts, deploy files, or patches.
 
 Decisions made: keep these four as hand-written typed data because each has a distinct patch shape. A generator would hide reviewable behavior at this stage of the port.
+
+## 2026-05-20 - Dictionary coverage audit shipped
+
+Shipped: audited every `dictionary/*.js` module, ported the remaining behavior-bearing simple metadata entries, and expanded dictionary parity coverage for scripts, assets, and mixed script/asset modules.
+
+Next: move dictionary status from broad coverage to consumer-path validation: exercise representative packages whose Rust dictionary metadata affects walker/runtime output, then continue with the remaining native/platform-specific smoke gaps.
+
+Decisions made: `grpc` carries only its asset globs in Rust because the JS walker ignores `pkg.files` inside dictionary `pkg` config; the exported `files: []` field has no observed walker behavior to port.

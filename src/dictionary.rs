@@ -148,6 +148,7 @@ pub enum DictionaryLog {
 #[must_use]
 pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
     match package_name {
+        "aws-sdk" => Some(scripts(["apis/*.json", "lib/services/*.js"])),
         "blessed" => Some(scripts(["lib/widgets/*.js"])),
         "body-parser" => Some(scripts(["lib/types/*.js"])),
         "browserify" => Some(assets(["bin/*.txt"])),
@@ -159,6 +160,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         )),
         "coffee-script" => Some(scripts(["lib/coffee-script/*.js"])),
         "compressjs" => Some(scripts(["lib/*.js"])),
+        "connect" => Some(scripts_assets(["lib/middleware/*.js"], ["lib/public/**/*"])),
         "cross-env" => Some(patches(
             "src/index.js",
             serde_json::json!([{ "do": "erase" }, ""]),
@@ -167,6 +169,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "drivelist" => Some(drivelist()),
         "electron" => Some(electron()),
         "exceljs" => Some(exceljs()),
+        "errorhandler" => Some(assets(["public/**/*"])),
         "errors" => Some(assets(["lib/static/*"])),
         "eslint" => Some(scripts(["lib/rules/*.js", "lib/formatters/*.js"])),
         "exiftool.exe" => Some(exiftool_exe()),
@@ -179,6 +182,8 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "entity = process.pkg.path.resolve("
             ]),
         )),
+        "geoip-lite" => Some(assets(["data/*"])),
+        "github" => Some(assets(["lib/routes.json"])),
         "graceful-fs" => Some(patches(
             "graceful-fs.js",
             serde_json::json!([
@@ -186,6 +191,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "if ((function() {\n  var version = require('./package.json').version;\n  var major = parseInt(version.split('.')[0]);\n  if (major < 4) {\n    module.exports = require('fs');\n    return true;\n  }\n})()) return;\n"
             ]),
         )),
+        "grpc" => Some(assets(["etc/*.pem", "deps/grpc/etc/*.pem"])),
         "googleapis" => Some(scripts(["apis/**/*.js"])),
         "google-closure-compiler" => Some(google_closure_compiler()),
         "google-closure-compiler-java" => Some(google_closure_compiler_java()),
@@ -220,19 +226,28 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "error.stack = message.error.stack;\nif (error.stack.indexOf(\"SyntaxError\") >= 0) {error.stack = \"Pkg: Try to specify your javascript file in 'assets' in config.\\n\" + error.stack;};"
             ]),
         )),
+        "mongoose" => Some(scripts(["lib/drivers/node-mongodb-native/*.js"])),
         "moment" => Some(scripts(["locale/*.js"])),
         "mongodb-core" => Some(mongodb_core()),
         "mongodb" => Some(scripts(["lib/mongodb/**/*.js"])),
+        "mongoskin" => Some(scripts(["lib/**/*.js"])),
+        "nconf" => Some(scripts(["lib/nconf/stores/*.js"])),
         "negotiator" => Some(scripts(["lib/*.js"])),
         "nightmare" => Some(nightmare()),
+        "node-forge" => Some(scripts(["js/*.js", "lib/*.js"])),
         "node-zookeeper-client" => Some(assets(["lib/jute/specification.json"])),
+        "node-pre-gyp" => Some(scripts(["lib/*.js"])),
         "node-notifier" => Some(node_notifier()),
+        "nodegit" => Some(scripts(["dist/**/*.js"])),
         "npm" => Some(scripts(["lib/*.js"])),
+        "npm-registry-client" => Some(scripts(["lib/**/*.js"])),
         "oauth2orize" => Some(scripts(["lib/**/*.js"])),
         "open" | "opn" => Some(open()),
         "phantom" => Some(phantom()),
         "phantomjs-prebuilt" => Some(phantomjs_prebuilt()),
+        "pg" => Some(scripts(["lib/**/*.js"])),
         "pg.js" => Some(scripts(["lib/**/*.js"])),
+        "pg-types" => Some(scripts(["lib/arrayParser.js"])),
         "pgpass" => Some(scripts(["lib/helper.js"])),
         "pm2" => Some(scripts(["lib/ProcessContainerFork.js"])),
         "publicsuffixlist" => Some(publicsuffixlist()),
@@ -249,6 +264,10 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
         "sequelize" => Some(sequelize()),
         "sharp" => Some(sharp()),
         "shelljs" => Some(scripts(["src/*.js"])),
+        "socket.io-client" => Some(scripts_assets(
+            ["lib/**/*.js"],
+            ["socket.io.js", "dist/**/*"],
+        )),
         "socket.io" => Some(patches(
             "lib/index.js",
             serde_json::json!([
@@ -256,12 +275,15 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "require.resolve('socket.io-client/dist/socket.io.js.map', 'must-exclude')"
             ]),
         )),
+        "steam-crypto" => Some(assets(["public.pub"])),
         "steam-resources" => Some(steam_resources()),
         "stylus" => Some(stylus()),
         "svgo" => Some(scripts_assets(
             ["lib/**/*.js", "plugins/*.js"],
             [".svgo.yml"],
         )),
+        "tesseract.js" => Some(scripts(["src/worker-script/node/index.js"])),
+        "tinify" => Some(assets(["lib/data/cacert.pem"])),
         "tiny-worker" => Some(assets(["lib/noop.js"])),
         "umd" => Some(umd()),
         "uglify-js" => Some(assets(["lib/**/*.js", "tools/*.js"])),
@@ -273,7 +295,9 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "execFile(process.execPath, ['--v8-options'], { env: { PKG_EXECPATH: 'PKG_INVOKE_NODEJS' } },"
             ]),
         )),
+        "webdriverio" => Some(scripts(["build/**/*.js"])),
         "winston" => Some(scripts(["lib/winston/transports/*.js"])),
+        "winston-uber" => Some(scripts(["lib/winston/transports/*.js"])),
         "xlsx" => Some(patches(
             "xlsx.js",
             serde_json::json!([

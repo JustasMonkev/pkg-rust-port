@@ -39,6 +39,7 @@ fn dynamic_require_dictionaries_carry_script_globs() -> Result<(), Box<dyn std::
 #[test]
 fn simple_script_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error::Error>> {
     let cases = [
+        ("aws-sdk", json!(["apis/*.json", "lib/services/*.js"])),
         ("blessed", json!(["lib/widgets/*.js"])),
         ("body-parser", json!(["lib/types/*.js"])),
         ("buffermaker", json!(["lib/*.js"])),
@@ -52,16 +53,28 @@ fn simple_script_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error
         ("machinepack-urls", json!(["machines/*.js"])),
         ("moment", json!(["locale/*.js"])),
         ("mongodb", json!(["lib/mongodb/**/*.js"])),
+        ("mongoose", json!(["lib/drivers/node-mongodb-native/*.js"])),
+        ("mongoskin", json!(["lib/**/*.js"])),
+        ("nconf", json!(["lib/nconf/stores/*.js"])),
         ("negotiator", json!(["lib/*.js"])),
+        ("node-forge", json!(["js/*.js", "lib/*.js"])),
+        ("node-pre-gyp", json!(["lib/*.js"])),
+        ("nodegit", json!(["dist/**/*.js"])),
         ("npm", json!(["lib/*.js"])),
+        ("npm-registry-client", json!(["lib/**/*.js"])),
         ("oauth2orize", json!(["lib/**/*.js"])),
+        ("pg", json!(["lib/**/*.js"])),
+        ("pg-types", json!(["lib/arrayParser.js"])),
         ("pg.js", json!(["lib/**/*.js"])),
         ("pgpass", json!(["lib/helper.js"])),
         ("pm2", json!(["lib/ProcessContainerFork.js"])),
         ("reload", json!(["lib/reload-server.js"])),
         ("shelljs", json!(["src/*.js"])),
+        ("tesseract.js", json!(["src/worker-script/node/index.js"])),
         ("usage", json!(["lib/providers/*.js"])),
+        ("webdriverio", json!(["build/**/*.js"])),
         ("winston", json!(["lib/winston/transports/*.js"])),
+        ("winston-uber", json!(["lib/winston/transports/*.js"])),
     ];
 
     for (name, scripts) in cases {
@@ -80,11 +93,17 @@ fn simple_asset_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error:
             "data-preflight",
             json!(["src/view/**/*", "src/js/view/**/*"]),
         ),
+        ("errorhandler", json!(["public/**/*"])),
         ("errors", json!(["lib/static/*"])),
+        ("geoip-lite", json!(["data/*"])),
+        ("github", json!(["lib/routes.json"])),
+        ("grpc", json!(["etc/*.pem", "deps/grpc/etc/*.pem"])),
         (
             "node-zookeeper-client",
             json!(["lib/jute/specification.json"]),
         ),
+        ("steam-crypto", json!(["public.pub"])),
+        ("tinify", json!(["lib/data/cacert.pem"])),
         ("tiny-worker", json!(["lib/noop.js"])),
         ("uglify-js", json!(["lib/**/*.js", "tools/*.js"])),
     ];
@@ -98,12 +117,32 @@ fn simple_asset_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
-fn svgo_dictionary_carries_script_and_asset_globs() -> Result<(), Box<dyn std::error::Error>> {
-    let entry = lookup_dictionary("svgo").ok_or("missing svgo dictionary")?;
-    let config = entry.pkg.ok_or("missing svgo pkg config")?;
+fn simple_script_asset_dictionaries_carry_pkg_globs() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            "connect",
+            json!(["lib/middleware/*.js"]),
+            json!(["lib/public/**/*"]),
+        ),
+        (
+            "socket.io-client",
+            json!(["lib/**/*.js"]),
+            json!(["socket.io.js", "dist/**/*"]),
+        ),
+        (
+            "svgo",
+            json!(["lib/**/*.js", "plugins/*.js"]),
+            json!([".svgo.yml"]),
+        ),
+    ];
 
-    assert_eq!(config.scripts, json!(["lib/**/*.js", "plugins/*.js"]));
-    assert_eq!(config.assets, json!([".svgo.yml"]));
+    for (name, scripts, assets) in cases {
+        let entry = lookup_dictionary(name).ok_or("missing script/asset dictionary")?;
+        let config = entry.pkg.ok_or("missing script/asset pkg config")?;
+
+        assert_eq!(config.scripts, scripts);
+        assert_eq!(config.assets, assets);
+    }
     Ok(())
 }
 
