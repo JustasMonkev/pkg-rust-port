@@ -58,6 +58,31 @@ fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
 }
 
 #[test]
+fn filesystem_runtime_layer_2_runs_when_real_cache_is_configured()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer-2");
+    let expected = Command::new("node")
+        .current_dir(&fixture_dir)
+        .arg("test-x-index.js")
+        .output()?;
+    assert!(
+        expected.status.success(),
+        "node oracle failed: {}{}",
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    let Some(run_result) =
+        package_and_run_real_fixture("fs-runtime-layer-2", &fixture_dir, "test-x-index.js")?
+    else {
+        return Ok(());
+    };
+    assert_stdout_lines_match_with_range_normalization(&expected.stdout, &run_result.stdout)?;
+    Ok(())
+}
+
+#[test]
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
@@ -309,6 +334,46 @@ fn package_and_compare_fixture(
     };
     assert_eq!(run_result.stdout, expected.stdout);
     Ok(())
+}
+
+fn assert_stdout_lines_match_with_range_normalization(
+    expected: &[u8],
+    actual: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let expected = String::from_utf8_lossy(expected);
+    let actual = String::from_utf8_lossy(actual);
+    let expected_lines = expected.split('\n').collect::<Vec<_>>();
+    let actual_lines = actual.split('\n').collect::<Vec<_>>();
+
+    for (index, expected_line) in expected_lines.iter().enumerate() {
+        let actual_line = actual_lines
+            .get(index)
+            .ok_or_else(|| format!("actual stdout ended before line {index}: {actual}"))?;
+        let expected_line = normalize_out_of_range_line(expected_line, Some(actual_line));
+        let actual_line = normalize_out_of_range_line(actual_line, expected_line.as_deref());
+        assert_eq!(
+            expected_line.as_deref().unwrap_or(expected_lines[index]),
+            actual_line.as_deref().unwrap_or(actual_lines[index]),
+            "stdout mismatch at line {index}"
+        );
+    }
+    Ok(())
+}
+
+fn normalize_out_of_range_line(line: &str, other_line: Option<&str>) -> Option<String> {
+    if !line.contains("is out of range")
+        || !other_line.is_some_and(|other| other.contains("is out of range"))
+    {
+        return None;
+    }
+
+    let start = line.find(" It must be ")?;
+    let end = line[start..].find(". ")? + start + 2;
+    let mut normalized = String::new();
+    normalized.push_str(&line[..start]);
+    normalized.push(' ');
+    normalized.push_str(&line[end..]);
+    Some(normalized)
 }
 
 fn package_and_run_real_fixture(

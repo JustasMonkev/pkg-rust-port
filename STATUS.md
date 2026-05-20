@@ -549,3 +549,13 @@ Next: cover the more version-sensitive `test-50-fs-runtime-layer-2` fixture with
 Decisions made: split layer 3 from layer 2 because layer 3 has a fixed stdout contract, while layer 2 needs Node-version-specific normalization around out-of-range errors.
 
 Blockers worked around: none.
+
+## 2026-05-20 - Filesystem async runtime layer smoke locked
+
+Shipped: added gated real-runtime smoke coverage for `test-50-fs-runtime-layer-2`. The Rust smoke test compares packaged executable output with the Node oracle and applies the same out-of-range error wording normalization as the JS fixture.
+
+Next: continue broader runtime fixture expansion across small `test-50` slices, then revisit larger compression and npm fixture groups.
+
+Decisions made: keep the normalization local to the runtime smoke suite because it is only an oracle comparison detail; the executable output itself remains unmodified.
+
+Blockers worked around: none.
