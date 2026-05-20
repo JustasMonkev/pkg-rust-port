@@ -46,6 +46,8 @@
   asset globs affect packaged records and still obey `--no-dict`.
 - Added walker-level parity coverage proving dictionary-provided patches are
   registered and applied before dependency blobs are parsed.
+- Added Windows branch parity for the original common path helpers and fixed
+  Windows snapshot-boundary handling for `inside_snapshot`/`strip_snapshot`.
 
 ### Behavior Changes
 

@@ -907,3 +907,11 @@ Shipped: added a walker parity fixture for a synthetic `rc` dependency proving d
 Next: dictionary deploy-file and log activation already have walker coverage, so continue with the remaining runtime smoke gaps and any high-value npm fixture consumer proofs.
 
 Decisions made: use `rc` as the representative dictionary patch because its replacement is small, deterministic, and already present as typed static metadata.
+
+## 2026-05-20 - Windows common helper parity shipped
+
+Shipped: ported the Windows branch of the original `test-48-common` assertions into Rust parity tests for normalization, snapshot detection, snapshot stripping, snapshotification, uplevel removal, and denominator substitution. Fixed Windows snapshot-boundary handling so lowercase drive paths such as `c:\snapshot` are detected and sibling names such as `c:\snapshoter` are not stripped.
+
+Next: continue Windows-specific issue regression coverage for `test-99-#1207` and `test-99-#1861` with host-gated runtime smoke, then return to native npm fixture gaps.
+
+Decisions made: keep these as target-platform string tests rather than `#[cfg(windows)]` tests so non-Windows CI can still verify the path logic needed by Windows targets.

@@ -65,16 +65,8 @@ pub fn inside_snapshot(input: &str, style: PathStyle) -> bool {
     match style {
         PathStyle::Posix => input.starts_with("/snapshot/") || input == "/snapshot",
         PathStyle::Windows => {
-            let slice = input.get(1..12);
-            matches!(
-                slice,
-                Some(":\\snapshot\\")
-                    | Some(":/snapshot\\")
-                    | Some(":\\snapshot/")
-                    | Some(":/snapshot/")
-                    | Some(":\\snapshot")
-                    | Some(":/snapshot")
-            )
+            let file = normalize_path_text(input, style);
+            windows_snapshot_rest(&file).is_some()
         }
     }
 }
@@ -286,15 +278,22 @@ fn strip_windows_snapshot(original: &str, normalized: &str) -> String {
     let bytes = normalized.as_bytes();
     let drive = bytes.first().copied().map(char::from).unwrap_or('C');
 
-    if normalized.len() >= 11 && normalized.get(1..11) == Some(":\\snapshot") {
-        if normalized.len() == 11 {
+    if let Some(rest) = windows_snapshot_rest(normalized) {
+        if rest.is_empty() {
             return format!("{drive}:\\**\\");
         }
-        if let Some(rest) = normalized.get(11..) {
-            return format!("{drive}:\\**{rest}");
-        }
+        return format!("{drive}:\\**\\{rest}");
     }
     original.to_owned()
+}
+
+fn windows_snapshot_rest(normalized: &str) -> Option<&str> {
+    let tail = normalized.get(2..)?;
+    if tail == "\\snapshot" {
+        Some("")
+    } else {
+        tail.strip_prefix("\\snapshot\\")
+    }
 }
 
 fn snapshotify_windows(input: &str) -> String {
