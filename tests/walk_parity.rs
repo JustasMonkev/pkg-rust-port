@@ -310,6 +310,38 @@ fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
 }
 
 #[test]
+fn deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let package = PackageJson::parse(
+        r#"{"pkg":{"deployFiles":[["bin/tool","tools/tool","binary"],"data/readme.txt"]}}"#,
+    )
+    .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
+    let output = walk(
+        Marker::with_package_path(package, fixture_dir.join("package.json")),
+        fixture_dir.join("test-x-index.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let warnings = output
+        .warnings
+        .iter()
+        .map(rendered_warning)
+        .collect::<Vec<_>>();
+
+    assert!(warnings.iter().any(|warning| {
+        warning.contains("Cannot include binary")
+            && warning.contains("bin/tool")
+            && warning.contains("path-to-executable/tools/tool")
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning.contains("Cannot include file")
+            && warning.contains("data/readme.txt")
+            && warning.contains("path-to-executable/data/readme.txt")
+    }));
+    Ok(())
+}
+
+#[test]
 fn records_may_exclude_and_malformed_diagnostics_in_js_order() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-may-exclude-must-exclude");
     let output = walk(

@@ -145,6 +145,9 @@ pub struct PkgConfig {
     /// File patches.
     #[serde(default)]
     pub patches: Map<String, Value>,
+    /// Files that cannot be embedded and must be deployed with the executable.
+    #[serde(default)]
+    pub deploy_files: Value,
     /// Extra dictionary entries.
     #[serde(default)]
     pub dictionary: Map<String, Value>,

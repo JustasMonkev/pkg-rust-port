@@ -590,6 +590,16 @@ Decisions made: keep this slice on stdout-compatible fixtures and leave `test-50
 
 Blockers worked around: none.
 
+## 2026-05-20 - Deploy-file warnings shipped
+
+Shipped: parsed `pkg.deployFiles` and emitted typed walker warnings for external files that cannot be embedded in the executable, including custom deploy target paths and file kinds.
+
+Next: continue npm fixture parity around dictionary deploy-file metadata and eventual deploy-file copying in higher-level fixture harnesses.
+
+Decisions made: keep deploy files as warnings at the walker boundary, matching upstream's behavior that these files must be distributed beside the executable rather than bundled into the VFS.
+
+Blockers worked around: this slice does not copy deploy files; npm fixture harness parity remains separate from package production.
+
 ## 2026-05-20 - Force-build target planning shipped
 
 Shipped: carried CLI `--build` into each planned target and taught the pkg-fetch cache provider to require a built cache artifact for force-build targets instead of using fetched/downloaded binaries.

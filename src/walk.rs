@@ -365,6 +365,15 @@ pub enum PackageWarning {
         /// Package metadata file that activated the dictionary entry.
         package_json: PathBuf,
     },
+    /// A package requested an external deploy file.
+    DeployFile {
+        /// Deploy file kind, for example `file` or `directory`.
+        file_type: String,
+        /// Source path that must be distributed separately.
+        source: PathBuf,
+        /// Target path relative to the executable directory.
+        target: PathBuf,
+    },
     /// A dynamic `require` or `require.resolve` could not be resolved at
     /// compile time.
     CannotResolve {
@@ -415,6 +424,15 @@ impl PackageWarning {
                 "Add {{ paths: [ __dirname ] }} to stylus options to resolve imports in '{}'",
                 package_json.display()
             ),
+            Self::DeployFile {
+                file_type,
+                source,
+                target,
+            } => format!(
+                "Cannot include {file_type} {} into executable. The {file_type} must be distributed with executable as path-to-executable/{}",
+                source.display(),
+                target.display()
+            ),
             Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
             Self::MalformedRequirement { alias, .. } => {
                 format!("Malformed requirement for '{alias}'")
@@ -437,7 +455,9 @@ impl PackageWarning {
     #[must_use]
     pub fn is_debug(&self) -> bool {
         match self {
-            Self::MissingMainEntry { .. } | Self::StylusResolveImports { .. } => false,
+            Self::MissingMainEntry { .. }
+            | Self::StylusResolveImports { .. }
+            | Self::DeployFile { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
         }
@@ -497,6 +517,12 @@ enum PatchOp {
     Erase(String),
     Prepend(String),
     Append(String),
+}
+
+struct DeployFile {
+    source: String,
+    target: String,
+    file_type: String,
 }
 
 struct WalkerState {
@@ -617,6 +643,7 @@ impl WalkerState {
         };
 
         self.register_patches(marker, base_dir);
+        self.append_deploy_file_warnings(marker, base_dir);
 
         for dependency in dependencies {
             // DECISION: JS treats dependency-derived aliases as warnings, not
@@ -659,6 +686,20 @@ impl WalkerState {
             };
             let path = canonicalize_or_self(&base_dir.join(relative_path));
             self.patches.insert(path, ops);
+        }
+    }
+
+    fn append_deploy_file_warnings(&mut self, marker: &Marker, base_dir: &Path) {
+        let Some(pkg_config) = marker.package.pkg.as_ref() else {
+            return;
+        };
+
+        for deploy_file in deploy_files(&pkg_config.deploy_files) {
+            self.output.warnings.push(PackageWarning::DeployFile {
+                file_type: deploy_file.file_type,
+                source: base_dir.join(deploy_file.source),
+                target: PathBuf::from(deploy_file.target),
+            });
         }
     }
 
@@ -1084,6 +1125,43 @@ fn custom_dictionaries_from_marker(marker: &Marker) -> BTreeMap<String, Dictiona
 
 fn should_retag_blob_as_content(path: &Path) -> bool {
     !is_javascript_file(path)
+}
+
+fn deploy_files(value: &Value) -> Vec<DeployFile> {
+    let Value::Array(items) = value else {
+        return Vec::new();
+    };
+
+    items.iter().filter_map(deploy_file).collect()
+}
+
+fn deploy_file(value: &Value) -> Option<DeployFile> {
+    match value {
+        Value::String(path) => Some(DeployFile {
+            source: path.clone(),
+            target: path.clone(),
+            file_type: "file".to_owned(),
+        }),
+        Value::Array(items) => {
+            let source = items.first().and_then(Value::as_str)?.to_owned();
+            let target = items
+                .get(1)
+                .and_then(Value::as_str)
+                .unwrap_or(&source)
+                .to_owned();
+            let file_type = items
+                .get(2)
+                .and_then(Value::as_str)
+                .unwrap_or("file")
+                .to_owned();
+            Some(DeployFile {
+                source,
+                target,
+                file_type,
+            })
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => None,
+    }
 }
 
 fn is_public_package(package: &PackageJson) -> bool {
