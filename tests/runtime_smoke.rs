@@ -500,6 +500,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "body-parser.js",
             package_input: "body-parser.js",
         },
+        PublicNpmFixture {
+            name: "npm-body-parser-1-10-2",
+            fixture_subdir: "body-parser",
+            package_spec: "body-parser@1.10.2",
+            node_input: "body-parser@1.10.2.js",
+            package_input: "body-parser@1.10.2.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }

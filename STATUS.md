@@ -1011,3 +1011,11 @@ Shipped: extended the opt-in public npm dictionary smoke to the original `test-7
 Next: continue expanding deterministic non-native public npm fixtures, adding pinned legacy variants only after the current package path stays green.
 
 Decisions made: start with the unpinned current `body-parser` fixture because the original JS harness treats that as the primary consumer-path check and the middleware API remains CommonJS-compatible.
+
+## 2026-05-20 - Body-parser legacy public npm smoke shipped
+
+Shipped: extended the opt-in public npm dictionary smoke to the pinned original `test-79-npm/body-parser@1.10.2` fixture. The fixture reuses the current middleware check while installing the older package shape, keeping coverage on the dictionary-provided `lib/types/*.js` parser glob across legacy metadata.
+
+Next: continue expanding deterministic non-native public npm fixtures, then separately size deploy-file and native-package gates where external files or platform installers are required.
+
+Decisions made: keep the pinned variant in the same public npm gate because it needs only registry access and the real-runtime cache, not native install scripts or deploy-file distribution checks.
