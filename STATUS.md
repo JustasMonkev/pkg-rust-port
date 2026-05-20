@@ -1357,3 +1357,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic non-native dictionary fixture.
 
 Decisions made: add current `uglify-js` alongside the existing pinned `uglify-js@2.7.5` smoke because the direct public npm install has a clean `ok` Node oracle and exercises the same recursive asset dictionary against the latest package shape without native dependencies or external services.
+
+## 2026-05-21 - Browserify last-line public npm smoke
+
+Shipped: taught the opt-in public npm smoke harness to mirror the JS `test-79-npm` `take: 'last-line'` metadata for explicitly listed fixtures, then added the current `test-79-npm/browserify` fixture. The fixture invokes Browserify's CLI help path and depends on the dictionary-provided `bin/*.txt` asset entry.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with the fixture installed from public npm.
+
+Next: continue with another deterministic non-native dictionary fixture.
+
+Decisions made: choose current `browserify` because the direct public npm install matches the original JS harness semantics: it prints CLI help followed by a final `ok` line. Keep last-line handling explicit in the Rust smoke harness instead of loosening every public fixture's raw-output comparison.

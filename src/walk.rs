@@ -832,6 +832,14 @@ impl WalkerState {
         if is_dot_node(file) && !self.patches.contains_key(file) {
             return Ok(());
         }
+        if self
+            .output
+            .records
+            .get(file)
+            .is_some_and(|record| record.blob && record.body.is_some())
+        {
+            return Ok(());
+        }
 
         let mut body = fs::read(file).map_err(|source| io_error(file, source))?;
         if let Some(patch) = self.patches.get(file) {
@@ -1630,9 +1638,25 @@ fn inside_root(root: &Path, path: &Path) -> bool {
 
 fn is_node_builtin(alias: &str) -> bool {
     let alias = alias.strip_prefix("node:").unwrap_or(alias);
-    let root = alias.split('/').next().unwrap_or(alias);
+    if matches!(
+        alias,
+        "assert/strict"
+            | "dns/promises"
+            | "fs/promises"
+            | "readline/promises"
+            | "stream/consumers"
+            | "stream/promises"
+            | "stream/web"
+            | "timers/promises"
+    ) {
+        return true;
+    }
+    if alias.contains('/') {
+        return false;
+    }
+
     matches!(
-        root,
+        alias,
         "assert"
             | "async_hooks"
             | "buffer"

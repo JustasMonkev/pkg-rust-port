@@ -170,6 +170,46 @@ fn public_package_wildcard_discloses_dependency_source() -> Result<(), PkgError>
 }
 
 #[test]
+fn builtin_like_package_subpaths_are_resolved_like_js() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = PathBuf::from("/private/tmp").join(format!(
+        "pkg-rust-walk-builtin-subpath-{}",
+        std::process::id()
+    ));
+    let dependency_dir = fixture_dir.join("node_modules/dep");
+    let process_dir = fixture_dir.join("node_modules/process");
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    fs::create_dir_all(&dependency_dir)?;
+    fs::create_dir_all(&process_dir)?;
+    fs::write(fixture_dir.join("app.js"), "require('dep');\n")?;
+    fs::write(
+        dependency_dir.join("package.json"),
+        r#"{"name":"dep","main":"index.js"}"#,
+    )?;
+    fs::write(
+        dependency_dir.join("index.js"),
+        "module.exports = require.resolve('process/browser.js');\n",
+    )?;
+    fs::write(
+        process_dir.join("package.json"),
+        r#"{"name":"process","main":"index.js"}"#,
+    )?;
+    fs::write(process_dir.join("browser.js"), "module.exports = {};\n")?;
+
+    let entrypoint = fixture_dir.join("app.js");
+    let output = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(process_dir.join("browser.js"), StoreKind::Blob));
+
+    fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn public_license_discloses_entrypoint_source() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("../test/test-50-extensions");
     let entrypoint = fixture_dir.join("test-x-index.js");

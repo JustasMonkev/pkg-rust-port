@@ -57,10 +57,10 @@
   success before packaging.
 - Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
   `connect`, `connect@2.3.9`, `rc`, `socket.io-client@1.7.0`, and `moment`
-  fixtures, plus `uglify-js`, pinned `uglify-js@2.7.5`, the `logform`
-  formatter loader, `body-parser`, pinned `body-parser@1.10.2`, and pinned
-  `log4js@0.5.8` / `log4js@0.6.34` / `log4js@1.1.1`, `negotiator`, and
-  pinned `negotiator@0.4.9`, plus `machinepack-urls`, pinned
+  fixtures, plus `uglify-js`, pinned `uglify-js@2.7.5`, `browserify`, the
+  `logform` formatter loader, `body-parser`, pinned `body-parser@1.10.2`, and
+  pinned `log4js@0.5.8` / `log4js@0.6.34` / `log4js@1.1.1`, `negotiator`,
+  and pinned `negotiator@0.4.9`, plus `machinepack-urls`, pinned
   `machinepack-urls@5.0.0`, `shelljs`, pinned `shelljs@0.7.6` /
   `shelljs@0.6.0` / `shelljs@0.1.4`, `graceful-fs`, pinned
   `graceful-fs@3.0.8`, `buffermaker`, `compressjs`, `errors`,

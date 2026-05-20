@@ -76,6 +76,52 @@ fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
     Ok(())
 }
 
+#[test]
+fn blob_and_content_records_keep_shebang_stripped_body() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = PathBuf::from("/private/tmp").join(format!(
+        "pkg-rust-pack-shebang-public-{}",
+        std::process::id()
+    ));
+    let package_dir = fixture_dir.join("node_modules/dep");
+    let bin_dir = package_dir.join("bin");
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    fs::create_dir_all(&bin_dir)?;
+    fs::write(fixture_dir.join("app.js"), "require('dep/bin/cmd.js');\n")?;
+    fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"dep","main":"bin/cmd.js"}"#,
+    )?;
+    fs::write(
+        bin_dir.join("cmd.js"),
+        "#!/usr/bin/env node\nmodule.exports = 42;\n",
+    )?;
+
+    let entrypoint = fixture_dir.join("app.js");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_public_packages(["dep"]),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, true)?;
+    let blob = packed
+        .stripes
+        .iter()
+        .find(|stripe| {
+            stripe.snap == "/node_modules/dep/bin/cmd.js" && stripe.store == StoreKind::Blob
+        })
+        .and_then(|stripe| stripe.buffer.as_ref())
+        .ok_or_else(|| PkgError::Pack("test blob stripe missing".to_owned()))?;
+
+    assert_eq!(blob, b"module.exports = 42;\n");
+
+    fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn carries_walker_symlinks_into_packed_output() -> Result<(), Box<dyn std::error::Error>> {

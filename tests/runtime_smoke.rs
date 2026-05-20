@@ -515,6 +515,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "body-parser@1.10.2.js",
         },
         PublicNpmFixture {
+            name: "npm-browserify",
+            fixture_subdir: "browserify",
+            package_spec: "browserify",
+            node_input: "browserify.js",
+            package_input: "browserify.js",
+        },
+        PublicNpmFixture {
             name: "npm-log4js-0-5-8",
             fixture_subdir: "log4js",
             package_spec: "log4js@0.5.8",
@@ -830,6 +837,12 @@ struct PublicNpmFixture<'a> {
     package_input: &'a str,
 }
 
+#[derive(Clone, Copy)]
+enum PublicNpmOutputMode {
+    ExactStdout,
+    LastStdoutLine,
+}
+
 fn run_public_npm_fixture(
     root: &Path,
     fixture: PublicNpmFixture<'_>,
@@ -839,9 +852,11 @@ fn run_public_npm_fixture(
     install_public_npm_package(&fixture_dir, fixture.package_spec)?;
 
     let expected = run_node_oracle(&fixture_dir, fixture.node_input)?;
+    let output_mode = public_npm_output_mode(fixture.name);
+    let expected_stdout = public_npm_harness_stdout(&expected.stdout, output_mode);
+    let success_marker = public_npm_success_marker(output_mode);
     assert_eq!(
-        String::from_utf8_lossy(&expected.stdout),
-        "ok\n",
+        expected_stdout, success_marker,
         "{} node oracle did not match the JS harness success marker",
         fixture.name
     );
@@ -852,14 +867,51 @@ fn run_public_npm_fixture(
         fs::remove_dir_all(fixture_dir)?;
         return Ok(());
     };
-    assert_eq!(package_run.run.stdout, expected.stdout);
     assert_eq!(
-        normalize_node_warning_stderr(&package_run.run.stderr),
-        normalize_node_warning_stderr(&expected.stderr)
+        public_npm_harness_stdout(&package_run.run.stdout, output_mode),
+        expected_stdout
     );
+    if matches!(output_mode, PublicNpmOutputMode::ExactStdout) {
+        assert_eq!(
+            normalize_node_warning_stderr(&package_run.run.stderr),
+            normalize_node_warning_stderr(&expected.stderr)
+        );
+    }
 
     fs::remove_dir_all(fixture_dir)?;
     Ok(())
+}
+
+fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
+    match name {
+        "npm-browserify" => PublicNpmOutputMode::LastStdoutLine,
+        _ => PublicNpmOutputMode::ExactStdout,
+    }
+}
+
+fn public_npm_success_marker(mode: PublicNpmOutputMode) -> &'static str {
+    match mode {
+        PublicNpmOutputMode::ExactStdout => "ok\n",
+        PublicNpmOutputMode::LastStdoutLine => "ok",
+    }
+}
+
+fn public_npm_harness_stdout(stdout: &[u8], mode: PublicNpmOutputMode) -> String {
+    let text = String::from_utf8_lossy(stdout);
+    match mode {
+        PublicNpmOutputMode::ExactStdout => text.into_owned(),
+        PublicNpmOutputMode::LastStdoutLine => {
+            let lines = text.split('\n').collect::<Vec<_>>();
+            let start = lines.len().saturating_sub(2);
+            let mut last_line = lines[start..].join("\n");
+            if last_line.ends_with("\r\n") {
+                last_line.truncate(last_line.len() - 2);
+            } else if last_line.ends_with('\n') {
+                last_line.pop();
+            }
+            last_line
+        }
+    }
 }
 
 #[test]
@@ -870,6 +922,15 @@ fn node_warning_stderr_normalization_keeps_warning_content() {
     assert_eq!(
         normalize_node_warning_stderr(packaged),
         normalize_node_warning_stderr(node)
+    );
+}
+
+#[test]
+fn public_npm_last_line_mode_matches_js_harness_metadata() {
+    let stdout = b"Usage: browserify [entry files] {OPTIONS}\nSpecify a parameter.\nok\n";
+    assert_eq!(
+        public_npm_harness_stdout(stdout, PublicNpmOutputMode::LastStdoutLine),
+        "ok"
     );
 }
 

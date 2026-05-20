@@ -119,8 +119,9 @@ PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
 
 The same gate also covers selected public `test-79-npm` package fixtures whose
 success depends on dictionary metadata, such as `connect`, `rc`, `moment`, and
-`uglify-js`, plus pinned legacy package shapes such as `uglify-js@2.7.5` and
-`body-parser@1.10.2`, appender-loader packages such as `log4js@0.5.8` /
+`uglify-js`, last-line metadata fixtures such as `browserify`, plus pinned
+legacy package shapes such as `uglify-js@2.7.5` and `body-parser@1.10.2`,
+appender-loader packages such as `log4js@0.5.8` /
 `log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator` /
 `negotiator@0.4.9` and `machinepack-urls` / `machinepack-urls@5.0.0`,
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
