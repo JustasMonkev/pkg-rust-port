@@ -183,6 +183,7 @@ pub fn build_package_with_provider(
                 compression: plan.compression,
                 style: planned.path_style,
                 bakery: bakery_from_bakes(&plan.bakes),
+                bakes: &plan.bakes,
                 fabricator_path,
                 native_addons,
             },

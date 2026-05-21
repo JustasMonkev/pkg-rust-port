@@ -118,7 +118,7 @@ pub fn produce_manifest(
 ) -> Result<ProducerManifest, PkgError> {
     let native_addons = NativeAddonOptions::default();
     let (manifest, _payload) =
-        build_manifest_and_payload(packed, compression, style, None, &native_addons)?;
+        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
     Ok(manifest)
 }
 
@@ -171,7 +171,7 @@ pub fn produce_executable_image(
 ) -> Result<ProducedExecutable, PkgError> {
     let native_addons = NativeAddonOptions::default();
     let (manifest, payload) =
-        build_manifest_and_payload(packed, compression, style, None, &native_addons)?;
+        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
     let payload_size = payload.len() as u64;
@@ -270,6 +270,7 @@ pub fn write_executable_image(
             compression,
             style,
             bakery,
+            bakes: &[],
             fabricator_path: None,
             native_addons: NativeAddonOptions::default(),
         },
@@ -280,6 +281,7 @@ pub(crate) struct ProducerBuildOptions<'a> {
     pub(crate) compression: PayloadCompression,
     pub(crate) style: PathStyle,
     pub(crate) bakery: Vec<u8>,
+    pub(crate) bakes: &'a [String],
     pub(crate) fabricator_path: Option<&'a Path>,
     pub(crate) native_addons: NativeAddonOptions,
 }
@@ -306,6 +308,7 @@ pub(crate) fn write_executable_image_with_fabricator(
         options.compression,
         options.style,
         options.fabricator_path,
+        options.bakes,
         &options.native_addons,
     )?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
@@ -358,6 +361,7 @@ fn build_manifest_and_payload(
     compression: PayloadCompression,
     style: PathStyle,
     fabricator_path: Option<&Path>,
+    bakes: &[String],
     native_addons: &NativeAddonOptions,
 ) -> Result<(ProducerManifest, Vec<u8>), PkgError> {
     let mut offset = 0_u64;
@@ -376,7 +380,8 @@ fn build_manifest_and_payload(
             let request = match fabricator_path {
                 Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
                 None => FabricateRequest::new(&snap, &stripe_bytes),
-            };
+            }
+            .with_bakes(bakes);
             fabricate(&mut fabricator_pool, request)?
         } else {
             stripe_bytes
@@ -909,11 +914,15 @@ mod tests {
         fs::create_dir_all(&temp_dir)?;
         let fabricator = temp_dir.join("fake-node");
         let handler = temp_dir.join("handler.js");
+        let args_log = temp_dir.join("fabricator-args.log");
         fs::write(
             &handler,
-            r#"
+            format!(
+                r#"
+const fs = require('fs');
+fs.writeFileSync({args_log:?}, process.argv.slice(2).join('\n'));
 let stdin = Buffer.alloc(0);
-process.stdin.on('data', (chunk) => {
+process.stdin.on('data', (chunk) => {{
   stdin = Buffer.concat([stdin, chunk]);
   if (stdin.length < 4) return;
   const snapLength = stdin.readInt32LE(0);
@@ -925,9 +934,11 @@ process.stdin.on('data', (chunk) => {
   header.writeInt32LE(payload.length, 0);
   process.stdout.write(header);
   process.stdout.write(payload);
-});
+}});
 process.stdin.resume();
 "#,
+                args_log = args_log.display().to_string()
+            ),
         )?;
         fs::write(
             &fabricator,
@@ -937,6 +948,7 @@ process.stdin.resume();
         permissions.set_mode(0o755);
         fs::set_permissions(&fabricator, permissions)?;
 
+        let bakes = vec!["--prof".to_owned(), "--max-old-space-size=64".to_owned()];
         let produced = write_executable_image_with_fabricator(
             temp_dir.join("out"),
             binary_with_placeholders(),
@@ -955,6 +967,7 @@ process.stdin.resume();
                 compression: PayloadCompression::None,
                 style: PathStyle::Posix,
                 bakery: Vec::new(),
+                bakes: &bakes,
                 fabricator_path: Some(&fabricator),
                 native_addons: NativeAddonOptions::default(),
             },
@@ -975,6 +988,9 @@ process.stdin.resume();
                 .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
             b"TARGET_BYTECODE"
         );
+        let args = fs::read_to_string(args_log)?;
+        assert!(args.contains("--max-old-space-size=64"));
+        assert!(!args.contains("--prof"));
 
         fs::remove_dir_all(temp_dir)?;
         Ok(())
@@ -1151,6 +1167,7 @@ process.stdin.resume();
                 compression: PayloadCompression::None,
                 style: PathStyle::Posix,
                 bakery: Vec::new(),
+                bakes: &[],
                 fabricator_path: None,
                 native_addons,
             },

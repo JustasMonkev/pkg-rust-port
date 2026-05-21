@@ -1567,3 +1567,13 @@ Verified: focused tests pass for `cargo test fabricate` and `cargo test produce:
 Next: carry bake flags from the package plan into bytecode fabrication, then continue closing ESM bytecode/content semantics before retrying the blocked public npm fixtures.
 
 Decisions made: keep fabricator requests synchronous and sequential for this slice. Current producer callers compile blob stripes serially, so `BufReader` plus framed writes/reads gives long-lived child reuse without introducing async orchestration yet.
+
+## 2026-05-21 - Fabricator bake propagation slice
+
+Shipped: carried package-plan bake flags from `build_package_with_provider` into producer bytecode fabrication. The producer now passes those flags through `FabricateRequest::with_bakes`, so the reusable fabricator pool key and child spawn arguments reflect bytecode-affecting bake options while preserving bakery placeholder injection separately.
+
+Verified: focused coverage passes for `cargo test produce::tests::explicit_fabricator_path_is_used_for_blob_payload`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: continue closing ESM bytecode/content semantics before retrying the blocked public npm fixtures.
+
+Decisions made: keep `ProducerBuildOptions` as the internal bridge for both serialized bakery bytes and raw bake flags. The two forms serve different consumers: executable runtime placeholders need NUL-delimited bytes, while fabricator child spawning needs filtered argument strings.
