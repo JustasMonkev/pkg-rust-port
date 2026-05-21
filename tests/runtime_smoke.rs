@@ -867,6 +867,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "ms.js",
             package_input: "ms.js",
         },
+        PublicNpmFixture {
+            name: "npm-underscore",
+            fixture_subdir: "underscore",
+            package_spec: "underscore",
+            node_input: "underscore.js",
+            package_input: "underscore.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1072,6 +1079,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "ms",
             node_input: "ms.js",
             package_input: "ms.js",
+        }),
+        "underscore" | "npm-underscore" => Some(PublicNpmFixture {
+            name: "npm-underscore",
+            fixture_subdir: "underscore",
+            package_spec: "underscore",
+            node_input: "underscore.js",
+            package_input: "underscore.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
