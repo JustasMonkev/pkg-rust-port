@@ -1627,3 +1627,13 @@ Verified: focused offline coverage passes with `cargo test --locked --test runti
 Next: use the probe before promoting new current public npm fixtures, especially packages with modern ESM or version-sensitive runtime behavior.
 
 Decisions made: keep this as a diagnostic gate rather than bulk-switching accepted fixtures. The probe is activated by `PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=<name>` plus the existing npm-install and real-cache gates, so routine test runs stay offline and unchanged.
+
+## 2026-05-21 - Mime-types public npm smoke
+
+Shipped: extended the opt-in public npm smoke to the current `test-79-npm/mime-types` fixture. The fixture validates the package's CommonJS lookup API by checking `mime-types.lookup('html')`.
+
+Verified: target-node oracle probing passes for `mime-types` with `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=mime-types cargo test --locked --test runtime_smoke public_npm_target_node_oracle_probe_runs_when_enabled -- --nocapture`; the promoted packaged executable path passes with `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --locked --test runtime_smoke public_npm_dictionary_fixtures_run_when_install_is_enabled -- --nocapture`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: continue target-oracle-checking deterministic public npm fixtures before promotion, and keep deploy-file/native packages behind their separate gates.
+
+Decisions made: choose `mime-types` as the next public npm fixture because it is a small deterministic CommonJS lookup package with no fixture meta, native install, service, or stderr expectations.

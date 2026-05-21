@@ -853,6 +853,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "tiny-worker.js",
             package_input: "tiny-worker.js",
         },
+        PublicNpmFixture {
+            name: "npm-mime-types",
+            fixture_subdir: "mime-types",
+            package_spec: "mime-types",
+            node_input: "mime-types.js",
+            package_input: "mime-types.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1044,6 +1051,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "cookie",
             node_input: "cookie.js",
             package_input: "cookie.js",
+        }),
+        "mime-types" | "npm-mime-types" => Some(PublicNpmFixture {
+            name: "npm-mime-types",
+            fixture_subdir: "mime-types",
+            package_spec: "mime-types",
+            node_input: "mime-types.js",
+            package_input: "mime-types.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
