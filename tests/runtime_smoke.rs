@@ -881,6 +881,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "json-stringify-safe.js",
             package_input: "json-stringify-safe.js",
         },
+        PublicNpmFixture {
+            name: "npm-json-stringify-safe-4-0-0",
+            fixture_subdir: "json-stringify-safe",
+            package_spec: "json-stringify-safe@4.0.0",
+            node_input: "json-stringify-safe@4.0.0.js",
+            package_input: "json-stringify-safe@4.0.0.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1100,6 +1107,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "json-stringify-safe",
             node_input: "json-stringify-safe.js",
             package_input: "json-stringify-safe.js",
+        }),
+        "json-stringify-safe@4.0.0" | "npm-json-stringify-safe-4-0-0" => Some(PublicNpmFixture {
+            name: "npm-json-stringify-safe-4-0-0",
+            fixture_subdir: "json-stringify-safe",
+            package_spec: "json-stringify-safe@4.0.0",
+            node_input: "json-stringify-safe@4.0.0.js",
+            package_input: "json-stringify-safe@4.0.0.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
