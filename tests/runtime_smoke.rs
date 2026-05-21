@@ -760,6 +760,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "pg-query-stream.js",
         },
         PublicNpmFixture {
+            name: "npm-throng",
+            fixture_subdir: "throng",
+            package_spec: "throng",
+            node_input: "throng.js",
+            package_input: "throng.js",
+        },
+        PublicNpmFixture {
             name: "npm-mongodb",
             fixture_subdir: "mongodb",
             package_spec: "mongodb",

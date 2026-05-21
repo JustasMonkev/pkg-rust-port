@@ -69,7 +69,8 @@
   `node-forge`, `node-xlsx`, `node-zookeeper-client`, `npm-registry-client`,
   `mongodb`, `mongodb-core`, `oauth2orize`, `pg`, `pg-cursor`,
   `pg-query-stream`, `pgpass`, `pg-types`, pinned `pg-types@1.0.0`,
-  `publicsuffixlist`, and `steam-crypto`, plus `tinify` and `tiny-worker`.
+  `publicsuffixlist`, and `steam-crypto`, plus `throng`, `tinify`, and
+  `tiny-worker`.
 - Matched JS walker handling for missing literal requires inside dependency
   packages: they now emit debug diagnostics instead of aborting packaging.
 - Treated `*.config.json` CLI inputs as package-style configuration inputs,

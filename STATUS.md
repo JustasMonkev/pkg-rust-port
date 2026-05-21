@@ -1467,3 +1467,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: choose current `node-xlsx` because the direct public npm oracle installs cleanly and prints exactly `ok`, with no native dependencies, companion packages, local services, or stderr drift.
+
+## 2026-05-21 - Throng public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/throng` fixture. The fixture starts Throng workers and checks that worker id assignment reaches the expected worker callback.
+
+Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-scripts throng` in a temp copy of `test/test-79-npm/throng/throng.js`, then `node throng.js`) prints exactly `ok`; `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `throng` installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: choose current `throng` because the direct public npm oracle installs cleanly and prints exactly `ok`, covering a worker-process fixture without native dependencies, companion packages, local services, or stderr drift.
