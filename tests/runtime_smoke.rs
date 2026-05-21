@@ -860,6 +860,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "mime-types.js",
             package_input: "mime-types.js",
         },
+        PublicNpmFixture {
+            name: "npm-ms",
+            fixture_subdir: "ms",
+            package_spec: "ms",
+            node_input: "ms.js",
+            package_input: "ms.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1058,6 +1065,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "mime-types",
             node_input: "mime-types.js",
             package_input: "mime-types.js",
+        }),
+        "ms" | "npm-ms" => Some(PublicNpmFixture {
+            name: "npm-ms",
+            fixture_subdir: "ms",
+            package_spec: "ms",
+            node_input: "ms.js",
+            package_input: "ms.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
