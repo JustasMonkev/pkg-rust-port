@@ -874,6 +874,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "underscore.js",
             package_input: "underscore.js",
         },
+        PublicNpmFixture {
+            name: "npm-json-stringify-safe",
+            fixture_subdir: "json-stringify-safe",
+            package_spec: "json-stringify-safe",
+            node_input: "json-stringify-safe.js",
+            package_input: "json-stringify-safe.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1086,6 +1093,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "underscore",
             node_input: "underscore.js",
             package_input: "underscore.js",
+        }),
+        "json-stringify-safe" | "npm-json-stringify-safe" => Some(PublicNpmFixture {
+            name: "npm-json-stringify-safe",
+            fixture_subdir: "json-stringify-safe",
+            package_spec: "json-stringify-safe",
+            node_input: "json-stringify-safe.js",
+            package_input: "json-stringify-safe.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
