@@ -364,6 +364,7 @@ fn build_manifest_and_payload(
     let mut payload = Vec::new();
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
     let mut path_dictionary = PathDictionary::default();
+    let mut fabricator_pool = FabricatorPool::new();
 
     for stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
@@ -372,12 +373,11 @@ fn build_manifest_and_payload(
             // DECISION: prefer target-specific bytecode when the provider
             // exposes a runnable target binary path; fall back to host `node`
             // for deterministic in-memory test providers.
-            let mut pool = FabricatorPool::new();
             let request = match fabricator_path {
                 Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
                 None => FabricateRequest::new(&snap, &stripe_bytes),
             };
-            fabricate(&mut pool, request)?
+            fabricate(&mut fabricator_pool, request)?
         } else {
             stripe_bytes
         };
@@ -908,9 +908,30 @@ mod tests {
         let _ignored = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir)?;
         let fabricator = temp_dir.join("fake-node");
+        let handler = temp_dir.join("handler.js");
+        fs::write(
+            &handler,
+            r#"
+let stdin = Buffer.alloc(0);
+process.stdin.on('data', (chunk) => {
+  stdin = Buffer.concat([stdin, chunk]);
+  if (stdin.length < 4) return;
+  const snapLength = stdin.readInt32LE(0);
+  if (stdin.length < 4 + snapLength + 4) return;
+  const bodyLength = stdin.readInt32LE(4 + snapLength);
+  if (stdin.length < 4 + snapLength + 4 + bodyLength) return;
+  const payload = Buffer.from('TARGET_BYTECODE');
+  const header = Buffer.alloc(4);
+  header.writeInt32LE(payload.length, 0);
+  process.stdout.write(header);
+  process.stdout.write(payload);
+});
+process.stdin.resume();
+"#,
+        )?;
         fs::write(
             &fabricator,
-            "#!/bin/sh\ncat >/dev/null\nprintf TARGET_BYTECODE\n",
+            format!("#!/bin/sh\nexec node '{}' \"$@\"\n", handler.display()),
         )?;
         let mut permissions = fs::metadata(&fabricator)?.permissions();
         permissions.set_mode(0o755);

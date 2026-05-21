@@ -1557,3 +1557,13 @@ Verified: focused tests pass for `cargo test fabricate` and `cargo test produce:
 Next: continue evolving `FabricatorPool` toward the long-lived target-binary pool described in the migration map.
 
 Decisions made: keep the extraction behavior-preserving. The pool type is explicit and public now, but it does not yet retain child processes; that is a later parity/performance slice.
+
+## 2026-05-21 - Reusable fabricator pool slice
+
+Shipped: evolved `FabricatorPool` into a reusable process pool keyed by executable path and bytecode-affecting bake flags. Rust now speaks the JavaScript fabricator's framed stdin/stdout protocol, filters inert bake flags before spawning, removes failed children from the pool, and preserves the JS `fabricateTwice` behavior of retrying only after a first failure. Producer payload construction now reuses one pool across blob stripes in a package build.
+
+Verified: focused tests pass for `cargo test fabricate` and `cargo test produce::tests::explicit_fabricator_path_is_used_for_blob_payload`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: carry bake flags from the package plan into bytecode fabrication, then continue closing ESM bytecode/content semantics before retrying the blocked public npm fixtures.
+
+Decisions made: keep fabricator requests synchronous and sequential for this slice. Current producer callers compile blob stripes serially, so `BufReader` plus framed writes/reads gives long-lived child reuse without introducing async orchestration yet.
