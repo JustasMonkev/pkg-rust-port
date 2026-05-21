@@ -1587,3 +1587,13 @@ Verified: focused coverage passes for `cargo test produce::tests::failed_blob_fa
 Next: retry the previously blocked public npm fixture path and then continue closing runtime gaps that remain after packaging no longer aborts on failed bytecode fabrication.
 
 Decisions made: keep this as producer parity, not a walker reclassification. The JS producer logs a warning and marks the blob stripe skipped on fabrication errors; the Rust port does not yet have a producer warning channel, so this slice preserves the build/manifest behavior first.
+
+## 2026-05-21 - Connect-mongodb ESM retry classified
+
+Investigated: retried the previously rejected current `test-79-npm/connect-mongodb` public npm path after the fabrication-failure skip slice. A temp copy installed `connect-mongodb` from public npm, the host Node oracle (`node v25.6.0`) exited successfully with the expected BSON native fallback noise and final `ok`, and the Rust CLI packaged it successfully with `PKG_CACHE_PATH=/private/tmp/pkg-rust-real-cache` and target `node18-macos-x64`.
+
+Verified: running the produced executable now fails at runtime in the target Node `v18.15.0` binary on `/snapshot/.../node_modules/mime/dist/src/index.js` with `SyntaxError: Cannot use import statement outside a module`. Running the same target binary as Node with `PKG_EXECPATH=PKG_INVOKE_NODEJS ... -e "require('/private/tmp/.../node_modules/mime')"` fails with Node's native `ERR_REQUIRE_ESM`, confirming that current `connect@1.9.2 -> mime@4.1.0` depends on behavior available to the host Node oracle but not the selected Node 18 package target.
+
+Next: do not add current `connect-mongodb` to the public smoke gate for the Node 18 target. Continue with fixtures whose direct oracle is valid under the target Node version, or add explicit target-version oracle checks before promoting modern public npm fixtures.
+
+Decisions made: treat this as public-registry drift across Node versions rather than a Rust packaging/runtime bug. The packaging failure class is fixed; the remaining `connect-mongodb` failure is a target-runtime ESM incompatibility.
