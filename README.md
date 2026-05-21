@@ -127,7 +127,7 @@ packages such as `log4js@0.5.8` /
 `log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator` /
 `negotiator@0.4.9` and `machinepack-urls` / `machinepack-urls@5.0.0`,
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
-`shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, pinned `bson@0.2.22` /
+`shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, `bytes`, pinned `bson@0.2.22` /
 `bson@0.4.0`, `compressjs`, `later`, `lodash`, `mongodb`, `mongodb-core`,
 `nconf`, `node-forge`, `node-xlsx`, `npm-registry-client`, `oauth2orize`, `pg`,
 `pg-cursor`, `pg-query-stream`, `pgpass`, and `pg-types` / `pg-types@1.0.0`, dictionary

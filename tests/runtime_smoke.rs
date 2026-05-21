@@ -648,6 +648,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "buffermaker.js",
         },
         PublicNpmFixture {
+            name: "npm-bytes",
+            fixture_subdir: "bytes",
+            package_spec: "bytes",
+            node_input: "bytes.js",
+            package_input: "bytes.js",
+        },
+        PublicNpmFixture {
             name: "npm-bson-0-2-22",
             fixture_subdir: "bson",
             package_spec: "bson@0.2.22",
