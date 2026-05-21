@@ -1617,3 +1617,13 @@ Verified: focused coverage passes for `cargo test produce::tests::failed_blob_fa
 Next: continue expanding runtime parity and fixture promotion with target-version drift explicitly classified before adding current public npm fixtures.
 
 Decisions made: keep the existing public producer APIs source-compatible. The new diagnostics wrapper is crate-private and used by package orchestration, while lower-level producer callers can still ignore warnings when they only need executable bytes.
+
+## 2026-05-21 - Target-node public npm oracle probe
+
+Shipped: added a separate opt-in public npm oracle probe that runs fixture scripts through the selected cached pkg-fetch target binary using `PKG_EXECPATH=PKG_INVOKE_NODEJS`. The accepted public npm smoke list still uses its historical host-Node oracle, but new current-registry candidates can now be checked against the target runtime before promotion.
+
+Verified: focused offline coverage passes with `cargo test --locked --test runtime_smoke public_npm_ -- --nocapture`; end-to-end target-node oracle probing passes for `cookie` with `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=cookie cargo test --locked --test runtime_smoke public_npm_target_node_oracle_probe_runs_when_enabled -- --nocapture`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: use the probe before promoting new current public npm fixtures, especially packages with modern ESM or version-sensitive runtime behavior.
+
+Decisions made: keep this as a diagnostic gate rather than bulk-switching accepted fixtures. The probe is activated by `PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=<name>` plus the existing npm-install and real-cache gates, so routine test runs stay offline and unchanged.

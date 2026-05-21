@@ -6,7 +6,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use pkg_rust::{PkgFetchCache, TargetBinaryProvider, TargetDefaults, parse_targets};
+
 const DEFAULT_REAL_TARGET: &str = "node18-macos-x64";
+const TARGET_NODE_ORACLE_WRAPPER: &str = "const input = process.env.PKG_RUST_ORACLE_INPUT; process.argv = [process.execPath, input]; require(input);";
 
 #[test]
 fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
@@ -857,6 +860,54 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
 }
 
 #[test]
+fn public_npm_target_node_oracle_probe_runs_when_enabled() -> Result<(), Box<dyn std::error::Error>>
+{
+    let Some(probe_name) = std::env::var("PKG_RUST_TARGET_ORACLE_PUBLIC_NPM")
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        eprintln!(
+            "skipping public npm target-node oracle probe: PKG_RUST_TARGET_ORACLE_PUBLIC_NPM is not set"
+        );
+        return Ok(());
+    };
+    if !npm_fixture_installs_enabled() {
+        eprintln!(
+            "skipping public npm target-node oracle probe: PKG_RUST_INSTALL_NPM_FIXTURES is not enabled"
+        );
+        return Ok(());
+    }
+    let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
+        eprintln!("skipping public npm target-node oracle probe: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    };
+    let fixture = public_npm_probe_fixture(&probe_name)
+        .ok_or_else(|| format!("unknown public npm target-node oracle probe: {probe_name}"))?;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-79-npm");
+    let source = root.join(fixture.fixture_subdir);
+    let fixture_dir = copied_fixture(&format!("{}-target-oracle-work", fixture.name), &source)?;
+    install_public_npm_packages(
+        &fixture_dir,
+        fixture.package_spec,
+        public_npm_extra_package_specs(fixture.name),
+    )?;
+
+    let expected = run_target_node_oracle(&cache_root, &fixture_dir, fixture.node_input)?;
+    let output_mode = public_npm_output_mode(fixture.name);
+    assert_eq!(
+        public_npm_harness_stdout(&expected.stdout, output_mode),
+        public_npm_success_marker(output_mode),
+        "{} target-node oracle did not match the JS harness success marker: {}{}",
+        fixture.name,
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn native_npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>>
 {
     if !native_npm_fixture_installs_enabled() {
@@ -927,6 +978,7 @@ fn run_native_npm_issue_1191(root: &Path) -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 struct PublicNpmFixture<'a> {
     name: &'a str,
     fixture_subdir: &'a str,
@@ -984,11 +1036,55 @@ fn run_public_npm_fixture(
     Ok(())
 }
 
+fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
+    match name {
+        "cookie" | "npm-cookie" => Some(PublicNpmFixture {
+            name: "npm-cookie",
+            fixture_subdir: "cookie",
+            package_spec: "cookie",
+            node_input: "cookie.js",
+            package_input: "cookie.js",
+        }),
+        "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
+            name: "npm-connect-mongodb",
+            fixture_subdir: "connect-mongodb",
+            package_spec: "connect-mongodb",
+            node_input: "connect-mongodb.js",
+            package_input: "connect-mongodb.js",
+        }),
+        "reload" | "npm-reload" => Some(PublicNpmFixture {
+            name: "npm-reload",
+            fixture_subdir: "reload",
+            package_spec: "reload",
+            node_input: "reload.js",
+            package_input: "reload.js",
+        }),
+        "reload@2.1.0" | "npm-reload-2-1-0" => Some(PublicNpmFixture {
+            name: "npm-reload-2-1-0",
+            fixture_subdir: "reload",
+            package_spec: "reload@2.1.0",
+            node_input: "reload@2.1.0.js",
+            package_input: "reload@2.1.0.js",
+        }),
+        "shelljs" | "npm-shelljs" => Some(PublicNpmFixture {
+            name: "npm-shelljs",
+            fixture_subdir: "shelljs",
+            package_spec: "shelljs",
+            node_input: "shelljs.js",
+            package_input: "shelljs.js",
+        }),
+        _ => None,
+    }
+}
+
 fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
     match name {
-        "npm-browserify" | "npm-bson-0-2-22" | "npm-bson-0-4-0" => {
-            PublicNpmOutputMode::LastStdoutLine
-        }
+        "npm-browserify"
+        | "npm-bson-0-2-22"
+        | "npm-bson-0-4-0"
+        | "npm-connect-mongodb"
+        | "npm-reload"
+        | "npm-reload-2-1-0" => PublicNpmOutputMode::LastStdoutLine,
         _ => PublicNpmOutputMode::ExactStdout,
     }
 }
@@ -1143,6 +1239,46 @@ fn run_node_oracle(
         String::from_utf8_lossy(&expected.stderr)
     );
     Ok(expected)
+}
+
+fn run_target_node_oracle(
+    cache_root: &std::ffi::OsStr,
+    fixture_dir: &Path,
+    input: &str,
+) -> Result<std::process::Output, Box<dyn std::error::Error>> {
+    let target_node = target_node_binary(cache_root)?;
+    let input_path = fixture_dir.join(input);
+    let expected = Command::new(&target_node)
+        .current_dir(fixture_dir)
+        .env("PKG_EXECPATH", "PKG_INVOKE_NODEJS")
+        .env("PKG_RUST_ORACLE_INPUT", &input_path)
+        .arg("-e")
+        .arg(TARGET_NODE_ORACLE_WRAPPER)
+        .output()?;
+    assert!(
+        expected.status.success(),
+        "target-node oracle failed in {} with {}: {}{}",
+        fixture_dir.display(),
+        target_node.display(),
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+    Ok(expected)
+}
+
+fn target_node_binary(cache_root: &std::ffi::OsStr) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let defaults = TargetDefaults::host("node18");
+    let mut parsed = parse_targets(&real_target(), &defaults)?;
+    let target = parsed
+        .targets
+        .pop()
+        .ok_or_else(|| "real target parser returned no targets".to_owned())?;
+    let cache = PkgFetchCache::new(PathBuf::from(cache_root));
+    let binary = cache.binary_artifact_for(&target)?;
+    let path = binary
+        .path()
+        .ok_or_else(|| format!("target binary for {target} did not expose a cache path"))?;
+    Ok(path.to_path_buf())
 }
 
 fn run_windows_issue_1861(

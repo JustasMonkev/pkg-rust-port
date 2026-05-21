@@ -153,6 +153,18 @@ PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture
 ```
 
+Before promoting a modern public npm fixture, probe its plain-Node oracle with
+the selected pkg-fetch target binary. This catches host-vs-target Node drift,
+such as current packages that pass on the host Node but fail on the Node 18
+runtime used by the packaged executable:
+
+```sh
+PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
+PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=cookie \
+  cargo test --test runtime_smoke -- public_npm_target_node_oracle_probe_runs_when_enabled --nocapture
+```
+
 Native npm issue fixtures are behind a separate gate because they run package
 install scripts and must first establish a working plain Node oracle:
 
