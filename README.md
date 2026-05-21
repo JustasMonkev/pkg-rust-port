@@ -129,8 +129,8 @@ packages such as `log4js@0.5.8` /
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, pinned `bson@0.2.22` /
 `bson@0.4.0`, `compressjs`, `later`, `mongodb`, `mongodb-core`, `nconf`,
-`node-forge`, `npm-registry-client`, `oauth2orize`, `pg`, `pg-cursor`,
-`pg-query-stream`, `pgpass`, and `pg-types` / `pg-types@1.0.0`, dictionary
+`node-forge`, `node-xlsx`, `npm-registry-client`, `oauth2orize`, `pg`,
+`pg-cursor`, `pg-query-stream`, `pgpass`, and `pg-types` / `pg-types@1.0.0`, dictionary
 asset packages such as `errors`, `geoip-lite`, `node-zookeeper-client`, and
 `steam-crypto` / `tinify` / `tiny-worker`, dictionary
 asset/dependency-pruning packages such as

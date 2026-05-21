@@ -1457,3 +1457,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: choose current `hoek` because the direct public npm oracle installs cleanly and prints exactly `ok`, with no native dependencies, companion packages, local services, or stderr drift.
+
+## 2026-05-21 - Node-xlsx public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/node-xlsx` fixture. The fixture parses bundled `.xls` and `.ods` files and builds an XLSX buffer, exercising spreadsheet data-file reads through the package's `xlsx` dependency.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `node-xlsx` installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: choose current `node-xlsx` because the direct public npm oracle installs cleanly and prints exactly `ok`, with no native dependencies, companion packages, local services, or stderr drift.

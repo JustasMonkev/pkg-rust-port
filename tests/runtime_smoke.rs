@@ -683,6 +683,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "node-forge.js",
         },
         PublicNpmFixture {
+            name: "npm-node-xlsx",
+            fixture_subdir: "node-xlsx",
+            package_spec: "node-xlsx",
+            node_input: "node-xlsx.js",
+            package_input: "node-xlsx.js",
+        },
+        PublicNpmFixture {
             name: "npm-publicsuffixlist",
             fixture_subdir: "publicsuffixlist",
             package_spec: "publicsuffixlist",
