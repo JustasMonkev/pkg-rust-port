@@ -144,6 +144,7 @@ asset packages such as `errors`, `geoip-lite`, `node-zookeeper-client`, and
 `steam-crypto` / `throng` / `tinify` / `tiny-worker`, dictionary
 lookup/utility packages such as `mime-types`, `ms`, and `underscore`, dictionary
 stderr-comparing packages such as `json-stringify-safe` / `json-stringify-safe@4.0.0`, dictionary
+dependency utility packages such as `debug`, dictionary
 asset/dependency-pruning packages such as
 `publicsuffixlist`, patch packages such as `graceful-fs` /
 `graceful-fs@3.0.8`, and loader-heavy packages such as `logform` and
