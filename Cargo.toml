@@ -38,6 +38,10 @@ path = "src/lib.rs"
 name = "pkg"
 path = "src/main.rs"
 
+[[bench]]
+name = "packaging"
+harness = false
+
 [lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"

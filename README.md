@@ -91,6 +91,15 @@ cargo build --release --locked
 The release profile strips symbols. On this machine, a warm-cache release
 rebuild completed in `0.13s` with `target/release/pkg` already stripped.
 
+Benchmarks:
+
+```sh
+cargo bench --bench packaging
+```
+
+The Criterion benchmark target currently tracks the `test-50-require-resolve`
+walk/refine/pack pipeline and gzip producer-manifest construction.
+
 To run the real runtime smoke after seeding a cache:
 
 ```sh

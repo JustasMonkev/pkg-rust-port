@@ -8,6 +8,6 @@ Items parked until JS parity is complete.
   binary and available signing tools.
 - Expand remaining real native npm fixture coverage now that cached prebuild
   selection and `prebuild-install` invocation are wired.
-- Add criterion benchmarks for packaging throughput and warm-cache release build
-  timing before optimizing.
+- Expand Criterion benchmarks beyond the initial packaging pipeline scaffold,
+  including warm-cache release build timing, before optimizing.
 - Retire the JS oracle only after every mapped JS fixture has a Rust parity test.

@@ -1527,3 +1527,13 @@ Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-s
 Next: continue with another deterministic public npm fixture after checking its direct Node oracle.
 
 Decisions made: choose current `verror` because it is deterministic and dependency-only, with no native dependencies, companion packages, local services, or stderr drift.
+
+## 2026-05-21 - Criterion packaging benchmark scaffold
+
+Shipped: added the first Criterion bench target, `cargo bench --bench packaging`, covering the `test-50-require-resolve` walk/refine/pack pipeline and gzip producer-manifest construction. Documented the command in the README and narrowed the post-port benchmark TODO to the remaining expansion and warm-cache release timing work.
+
+Verified: `cargo bench --bench packaging --no-run` compiles the bench target; `cargo bench --bench packaging` runs both benchmarks successfully with local baselines of about `824 µs` for walk/refine/pack and `228 ms` for gzip producer-manifest construction; standard Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --all-targets --all-features`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features`, `cargo test --doc --all-features`, and `RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps --all-features`).
+
+Next: continue expanding parity coverage, and later tune Criterion sample settings or add warm-cache release timing once the benchmark surface grows.
+
+Decisions made: keep the initial benchmark deterministic and cache-free by using existing fixture data and in-memory producer manifest construction instead of invoking target-binary fetches or writing release artifacts.
