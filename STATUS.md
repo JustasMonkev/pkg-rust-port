@@ -1417,3 +1417,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: choose current `pg-query-stream` because the direct public npm oracle installs `pg-query-stream pg` cleanly and prints exactly `ok`, exercising a second companion-package fixture without adding a new harness concept.
+
+## 2026-05-21 - Express-with-jade companion-package public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/express-with-jade` fixture using an explicit `jade` companion package and the fixture's package-style config input. The fixture serves a rendered Jade view through Express and depends on `pkg.assets` preserving `views/*.jade`.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `express`, `jade`, and the package-style config input installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: choose current `express` with `jade` only after the direct public npm oracle succeeded with local-network permission and printed exactly `ok`. The non-escalated oracle fails in the sandbox because binding a local server returns `EPERM`, so the public smoke gate must run with the same local-network allowance used for other localhost fixtures.

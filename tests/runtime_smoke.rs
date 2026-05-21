@@ -515,6 +515,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "body-parser@1.10.2.js",
         },
         PublicNpmFixture {
+            name: "npm-express-with-jade",
+            fixture_subdir: "express-with-jade",
+            package_spec: "express",
+            node_input: "express.js",
+            package_input: "express.config.json",
+        },
+        PublicNpmFixture {
             name: "npm-browserify",
             fixture_subdir: "browserify",
             package_spec: "browserify",
@@ -925,6 +932,7 @@ fn public_npm_output_mode(name: &str) -> PublicNpmOutputMode {
 
 fn public_npm_extra_package_specs(name: &str) -> &'static [&'static str] {
     match name {
+        "npm-express-with-jade" => &["jade"],
         "npm-pg-cursor" | "npm-pg-query-stream" => &["pg"],
         _ => &[],
     }
@@ -977,6 +985,10 @@ fn public_npm_last_line_mode_matches_js_harness_metadata() {
 
 #[test]
 fn public_npm_extra_packages_match_js_harness_metadata() {
+    assert_eq!(
+        public_npm_extra_package_specs("npm-express-with-jade"),
+        ["jade"]
+    );
     assert_eq!(public_npm_extra_package_specs("npm-pg-cursor"), ["pg"]);
     assert_eq!(
         public_npm_extra_package_specs("npm-pg-query-stream"),
