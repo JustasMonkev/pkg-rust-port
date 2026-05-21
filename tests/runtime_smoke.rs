@@ -515,6 +515,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "semver.js",
         },
         PublicNpmFixture {
+            name: "npm-verror",
+            fixture_subdir: "verror",
+            package_spec: "verror",
+            node_input: "verror.js",
+            package_input: "verror.js",
+        },
+        PublicNpmFixture {
             name: "npm-uglify-js-2-7-5",
             fixture_subdir: "uglify-js",
             package_spec: "uglify-js@2.7.5",

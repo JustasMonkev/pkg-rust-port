@@ -57,8 +57,8 @@
   success before packaging.
 - Added opt-in public `test-79-npm` smoke coverage for dictionary-driven
   `connect`, `connect@2.3.9`, `rc`, `socket.io-client@1.7.0`, and `moment`
-  fixtures, plus `any-promise`, `cookie`, `hoek`, `semver`, `uglify-js`,
-  pinned `uglify-js@2.7.5`,
+  fixtures, plus `any-promise`, `cookie`, `hoek`, `semver`, `verror`,
+  `uglify-js`, pinned `uglify-js@2.7.5`,
   `browserify`, the `logform` formatter loader, `body-parser`, pinned
   `body-parser@1.10.2`, `express` with `jade`, and pinned `log4js@0.5.8` /
   `log4js@0.6.34` / `log4js@1.1.1`, `negotiator`, and pinned

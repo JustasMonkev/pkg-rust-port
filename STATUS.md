@@ -1517,3 +1517,13 @@ Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-s
 Next: continue with another deterministic public npm fixture after checking its direct Node oracle.
 
 Decisions made: choose current `semver` because it is deterministic and dependency-only, with no native dependencies, companion packages, local services, or stderr drift.
+
+## 2026-05-21 - VError public npm smoke
+
+Shipped: extended the opt-in public npm smoke to the current `test-79-npm/verror` fixture. The fixture validates the package's CommonJS export shape through the top-level constructor function.
+
+Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-scripts verror` in a temp copy of `test/test-79-npm/verror/verror.js`, then `node verror.js`) prints exactly `ok`; `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `verror` installed from public npm.
+
+Next: continue with another deterministic public npm fixture after checking its direct Node oracle.
+
+Decisions made: choose current `verror` because it is deterministic and dependency-only, with no native dependencies, companion packages, local services, or stderr drift.
