@@ -459,6 +459,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "connect@2.3.9.js",
         },
         PublicNpmFixture {
+            name: "npm-cookie",
+            fixture_subdir: "cookie",
+            package_spec: "cookie",
+            node_input: "cookie.js",
+            package_input: "cookie.js",
+        },
+        PublicNpmFixture {
             name: "npm-rc",
             fixture_subdir: "rc",
             package_spec: "rc",

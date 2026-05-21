@@ -125,7 +125,7 @@ success depends on dictionary metadata, such as `connect`, `rc`, `moment`, and
 template-rendering packages such as `express` with `jade`, appender-loader
 packages such as `log4js@0.5.8` /
 `log4js@0.6.34` / `log4js@1.1.1`, parser modules such as `negotiator` /
-`negotiator@0.4.9` and `machinepack-urls` / `machinepack-urls@5.0.0`,
+`negotiator@0.4.9`, `cookie`, and `machinepack-urls` / `machinepack-urls@5.0.0`,
 dictionary script packages such as `shelljs` / `shelljs@0.7.6` /
 `shelljs@0.6.0` / `shelljs@0.1.4`, `buffermaker`, `bytes`, pinned `bson@0.2.22` /
 `bson@0.4.0`, `compressjs`, `later`, `lodash`, `mongodb`, `mongodb-core`,
