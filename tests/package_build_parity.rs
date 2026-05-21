@@ -1,8 +1,8 @@
 //! Parity tests for package build orchestration.
 
 use pkg_rust::{
-    NodeTarget, PkgError, TargetBinary, TargetBinaryProvider, build_package_with_provider,
-    plan_package,
+    NodeTarget, PackageWarning, PkgError, TargetBinary, TargetBinaryProvider,
+    build_package_with_provider, plan_package,
 };
 
 struct StubBinary;
@@ -20,6 +20,22 @@ struct StubBinaryWithPath {
 impl TargetBinaryProvider for StubBinaryWithPath {
     fn binary_for(&self, _target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
         Ok(binary_with_placeholders())
+    }
+
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        self.binary_for(target)
+            .map(TargetBinary::from_bytes)
+            .map(|binary| binary.with_path(self.path.clone()))
+    }
+}
+
+struct ExecutableStubBinaryWithPath {
+    path: std::path::PathBuf,
+}
+
+impl TargetBinaryProvider for ExecutableStubBinaryWithPath {
+    fn binary_for(&self, _target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        Ok(executable_binary_with_placeholders())
     }
 
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
@@ -97,6 +113,60 @@ fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error:
         .parent()
         .and_then(std::path::Path::parent)
         .ok_or_else(|| PkgError::Cli("temporary output root is missing".to_owned()))?;
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn bytecode_fabrication_failures_are_reported_as_warnings() -> Result<(), Box<dyn std::error::Error>>
+{
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-bytecode-warning-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root)?;
+    let app = root.join("app.js");
+    std::fs::write(&app, b"module.exports = 42;\n")?;
+    let fabricator = root.join("failing-node");
+    std::fs::write(&fabricator, "#!/bin/sh\nexit 7\n")?;
+    let mut permissions = std::fs::metadata(&fabricator)?.permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&fabricator, permissions)?;
+
+    let output = root.join("out");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let app_text = app
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary app path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--public",
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        app_text,
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &ExecutableStubBinaryWithPath { path: fabricator },
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    assert!(build.warnings.iter().any(|warning| {
+        matches!(
+            warning,
+            PackageWarning::BytecodeFabricationFailed { snap, .. }
+                if snap.ends_with("/app.js")
+        )
+    }));
+
     std::fs::remove_dir_all(root)?;
     Ok(())
 }
@@ -389,6 +459,12 @@ fn binary_with_placeholders() -> Vec<u8> {
     binary.extend_from_slice(b"// PAYLOAD_SIZE //");
     binary.extend_from_slice(b"// PRELUDE_POSITION //");
     binary.extend_from_slice(b"// PRELUDE_SIZE //");
+    binary
+}
+
+fn executable_binary_with_placeholders() -> Vec<u8> {
+    let mut binary = Vec::from(&b"#!/bin/sh\n"[..]);
+    binary.extend_from_slice(&binary_with_placeholders());
     binary
 }
 

@@ -1607,3 +1607,13 @@ Verified: with network access, the bulk public npm smoke then fails on the exist
 Next: keep the existing public smoke harness on its historical host-Node oracle for already accepted fixtures. Use a target-Node oracle as a pre-promotion investigation step for new current-registry fixture candidates, especially when the dependency tree includes modern ESM or APIs with Node-version-dependent behavior.
 
 Decisions made: do not bulk-switch the accepted public smoke gate in this slice. That would turn a broad fixture-curation problem into a code change and invalidate already documented smoke coverage for reasons unrelated to the Rust packager.
+
+## 2026-05-21 - Bytecode skip warning slice
+
+Shipped: added a `BytecodeFabricationFailed` warning and plumbed producer diagnostics into `PackageBuild.warnings`. Failed blob bytecode stripes still skip like the JavaScript producer, but the skipped file is now observable through the same warning channel that CLI rendering already uses.
+
+Verified: focused coverage passes for `cargo test produce::tests::failed_blob_fabrication_skips_blob_and_keeps_content` and `cargo test --test package_build_parity bytecode_fabrication_failures_are_reported_as_warnings`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: continue expanding runtime parity and fixture promotion with target-version drift explicitly classified before adding current public npm fixtures.
+
+Decisions made: keep the existing public producer APIs source-compatible. The new diagnostics wrapper is crate-private and used by package orchestration, while lower-level producer callers can still ignore warnings when they only need executable bytes.

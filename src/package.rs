@@ -8,7 +8,7 @@ use crate::macho::{patch_macho_executable_file, sign_macho_executable};
 use crate::pack::pack;
 use crate::produce::{
     NativeAddonOptions, ProducedExecutable, ProducerBuildOptions,
-    write_executable_image_with_fabricator,
+    write_executable_image_with_fabricator_diagnostics,
 };
 use crate::refine::refine_walked_with_snapshot_base;
 use crate::target::{Arch, NodeTarget, Platform};
@@ -174,7 +174,7 @@ pub fn build_package_with_provider(
         );
         let packed = pack(refined, plan.bytecode)?;
         prepare_output_path(&planned.output)?;
-        let image = write_executable_image_with_fabricator(
+        let produced = write_executable_image_with_fabricator_diagnostics(
             &planned.output,
             binary_bytes,
             packed,
@@ -188,6 +188,8 @@ pub fn build_package_with_provider(
                 native_addons,
             },
         )?;
+        let image = produced.executable;
+        warnings.extend(produced.warnings);
         if planned.target.platform != Platform::Win {
             if plan.signature && planned.target.platform == Platform::Macos {
                 patch_macho_executable_file(&planned.output)?;

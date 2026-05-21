@@ -9,6 +9,7 @@ use crate::compress::Compression as PayloadCompression;
 use crate::error::PkgError;
 use crate::fabricate::{FabricateRequest, FabricatorPool, fabricate};
 use crate::pack::{PackedOutput, Stripe};
+use crate::walk::PackageWarning;
 
 const PAYLOAD_POSITION_PLACEHOLDER: &str = "// PAYLOAD_POSITION //";
 const PAYLOAD_SIZE_PLACEHOLDER: &str = "// PAYLOAD_SIZE //";
@@ -117,7 +118,7 @@ pub fn produce_manifest(
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
     let native_addons = NativeAddonOptions::default();
-    let (manifest, _payload) =
+    let (manifest, _payload, _warnings) =
         build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
     Ok(manifest)
 }
@@ -170,7 +171,7 @@ pub fn produce_executable_image(
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
     let native_addons = NativeAddonOptions::default();
-    let (manifest, payload) =
+    let (manifest, payload, _warnings) =
         build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
     let payload_position = binary.len() as u64;
@@ -295,6 +296,11 @@ pub(crate) struct NativeAddonOptions {
     pub(crate) prebuild_install: Option<PathBuf>,
 }
 
+pub(crate) struct ProducedExecutableWithWarnings {
+    pub(crate) executable: ProducedExecutable,
+    pub(crate) warnings: Vec<PackageWarning>,
+}
+
 pub(crate) fn write_executable_image_with_fabricator(
     output: impl AsRef<Path>,
     binary: Vec<u8>,
@@ -302,8 +308,25 @@ pub(crate) fn write_executable_image_with_fabricator(
     prelude_template: &str,
     options: ProducerBuildOptions<'_>,
 ) -> Result<ProducedExecutable, PkgError> {
+    write_executable_image_with_fabricator_diagnostics(
+        output,
+        binary,
+        packed,
+        prelude_template,
+        options,
+    )
+    .map(|produced| produced.executable)
+}
+
+pub(crate) fn write_executable_image_with_fabricator_diagnostics(
+    output: impl AsRef<Path>,
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    options: ProducerBuildOptions<'_>,
+) -> Result<ProducedExecutableWithWarnings, PkgError> {
     let output = output.as_ref();
-    let (manifest, payload) = build_manifest_and_payload(
+    let (manifest, payload, warnings) = build_manifest_and_payload(
         packed,
         options.compression,
         options.style,
@@ -353,7 +376,10 @@ pub(crate) fn write_executable_image_with_fabricator(
         path: output.display().to_string(),
         source,
     })?;
-    Ok(produced)
+    Ok(ProducedExecutableWithWarnings {
+        executable: produced,
+        warnings,
+    })
 }
 
 fn build_manifest_and_payload(
@@ -363,12 +389,13 @@ fn build_manifest_and_payload(
     fabricator_path: Option<&Path>,
     bakes: &[String],
     native_addons: &NativeAddonOptions,
-) -> Result<(ProducerManifest, Vec<u8>), PkgError> {
+) -> Result<(ProducerManifest, Vec<u8>, Vec<PackageWarning>), PkgError> {
     let mut offset = 0_u64;
     let mut payload = Vec::new();
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
     let mut path_dictionary = PathDictionary::default();
     let mut fabricator_pool = FabricatorPool::new();
+    let mut warnings = Vec::new();
 
     for stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
@@ -384,7 +411,13 @@ fn build_manifest_and_payload(
             .with_bakes(bakes);
             match fabricate(&mut fabricator_pool, request) {
                 Ok(bytes) => bytes,
-                Err(_error) => continue,
+                Err(error) => {
+                    warnings.push(PackageWarning::BytecodeFabricationFailed {
+                        snap,
+                        message: error.to_string(),
+                    });
+                    continue;
+                }
             }
         } else {
             stripe_bytes
@@ -422,6 +455,7 @@ fn build_manifest_and_payload(
             compression,
         },
         payload,
+        warnings,
     ))
 }
 
@@ -1015,7 +1049,7 @@ process.stdin.resume();
         permissions.set_mode(0o755);
         fs::set_permissions(&fabricator, permissions)?;
 
-        let produced = write_executable_image_with_fabricator(
+        let produced = write_executable_image_with_fabricator_diagnostics(
             temp_dir.join("out"),
             binary_with_placeholders(),
             PackedOutput {
@@ -1046,6 +1080,21 @@ process.stdin.resume();
                 native_addons: NativeAddonOptions::default(),
             },
         )?;
+        assert_eq!(produced.warnings.len(), 1);
+        let warning = produced
+            .warnings
+            .first()
+            .ok_or_else(|| PkgError::Pack("bytecode warning was missing".to_owned()))?;
+        assert!(matches!(
+            warning,
+            PackageWarning::BytecodeFabricationFailed { snap, .. } if snap == "/snapshot/esm.js"
+        ));
+        assert!(
+            warning
+                .to_cli_message()
+                .contains("Failed to make bytecode for /snapshot/esm.js")
+        );
+        let produced = produced.executable;
 
         let stores = produced
             .manifest

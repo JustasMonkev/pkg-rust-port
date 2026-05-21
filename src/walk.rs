@@ -381,6 +381,13 @@ pub enum PackageWarning {
         /// Signing failure details.
         message: String,
     },
+    /// A blob stripe could not be compiled to bytecode and was skipped.
+    BytecodeFabricationFailed {
+        /// Snapshot path for the blob stripe.
+        snap: String,
+        /// Fabricator failure details.
+        message: String,
+    },
     /// A dynamic `require` or `require.resolve` could not be resolved at
     /// compile time.
     CannotResolve {
@@ -444,6 +451,9 @@ impl PackageWarning {
                 "Unable to sign the macOS executable '{}'. Due to the mandatory code signing requirement, before the executable is distributed to end users, it must be signed. Otherwise, it will be immediately killed by kernel on launch. An ad-hoc signature is sufficient. Signing failure: {message}",
                 output.display()
             ),
+            Self::BytecodeFabricationFailed { snap, message } => {
+                format!("Failed to make bytecode for {snap}: {message}")
+            }
             Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
             Self::MalformedRequirement { alias, .. } => {
                 format!("Malformed requirement for '{alias}'")
@@ -469,7 +479,8 @@ impl PackageWarning {
             Self::MissingMainEntry { .. }
             | Self::StylusResolveImports { .. }
             | Self::DeployFile { .. }
-            | Self::MacosSignature { .. } => false,
+            | Self::MacosSignature { .. }
+            | Self::BytecodeFabricationFailed { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
         }
