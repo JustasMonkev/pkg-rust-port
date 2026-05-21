@@ -1597,3 +1597,13 @@ Verified: running the produced executable now fails at runtime in the target Nod
 Next: do not add current `connect-mongodb` to the public smoke gate for the Node 18 target. Continue with fixtures whose direct oracle is valid under the target Node version, or add explicit target-version oracle checks before promoting modern public npm fixtures.
 
 Decisions made: treat this as public-registry drift across Node versions rather than a Rust packaging/runtime bug. The packaging failure class is fixed; the remaining `connect-mongodb` failure is a target-runtime ESM incompatibility.
+
+## 2026-05-21 - Target-node public oracle bulk switch rejected
+
+Investigated: tried switching the existing opt-in public npm smoke harness from host `node` to the selected cached target Node binary by invoking the pkg-fetch binary with `PKG_EXECPATH=PKG_INVOKE_NODEJS`. The direct script-path invocation fails inside the patched binary before user code, but an `-e` wrapper that sets `process.argv` and loads the fixture entrypoint can execute target-version checks.
+
+Verified: with network access, the bulk public npm smoke then fails on the existing current `shelljs` fixture under target Node `v18.15.0`: `shell.exec(..., { silent: true })` returns an object whose `stdout` and legacy `output` values are both undefined, while the host Node `v25.6.0` oracle prints `ok`. This proves `connect-mongodb` is not the only host-vs-target drift case in the current public fixture list.
+
+Next: keep the existing public smoke harness on its historical host-Node oracle for already accepted fixtures. Use a target-Node oracle as a pre-promotion investigation step for new current-registry fixture candidates, especially when the dependency tree includes modern ESM or APIs with Node-version-dependent behavior.
+
+Decisions made: do not bulk-switch the accepted public smoke gate in this slice. That would turn a broad fixture-curation problem into a code change and invalidate already documented smoke coverage for reasons unrelated to the Rust packager.
