@@ -494,6 +494,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "hoek.js",
         },
         PublicNpmFixture {
+            name: "npm-lodash",
+            fixture_subdir: "lodash",
+            package_spec: "lodash",
+            node_input: "lodash.js",
+            package_input: "lodash.js",
+        },
+        PublicNpmFixture {
             name: "npm-uglify-js-2-7-5",
             fixture_subdir: "uglify-js",
             package_spec: "uglify-js@2.7.5",

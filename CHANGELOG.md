@@ -65,9 +65,9 @@
   `machinepack-urls@5.0.0`, `shelljs`, pinned `shelljs@0.7.6` /
   `shelljs@0.6.0` / `shelljs@0.1.4`, `graceful-fs`, pinned
   `graceful-fs@3.0.8`, `buffermaker`, pinned `bson@0.2.22` /
-  `bson@0.4.0`, `compressjs`, `errors`, `geoip-lite`, `later`, `nconf`,
-  `node-forge`, `node-xlsx`, `node-zookeeper-client`, `npm-registry-client`,
-  `mongodb`, `mongodb-core`, `oauth2orize`, `pg`, `pg-cursor`,
+  `bson@0.4.0`, `compressjs`, `errors`, `geoip-lite`, `later`, `lodash`,
+  `nconf`, `node-forge`, `node-xlsx`, `node-zookeeper-client`,
+  `npm-registry-client`, `mongodb`, `mongodb-core`, `oauth2orize`, `pg`, `pg-cursor`,
   `pg-query-stream`, `pgpass`, `pg-types`, pinned `pg-types@1.0.0`,
   `publicsuffixlist`, and `steam-crypto`, plus `throng`, `tinify`, and
   `tiny-worker`.

@@ -1477,3 +1477,13 @@ Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-s
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: choose current `throng` because the direct public npm oracle installs cleanly and prints exactly `ok`, covering a worker-process fixture without native dependencies, companion packages, local services, or stderr drift.
+
+## 2026-05-21 - Lodash public npm smoke
+
+Shipped: extended the opt-in public npm smoke to the current `test-79-npm/lodash` fixture. The fixture verifies that the public package's CommonJS entrypoint still exports the expected callable function.
+
+Verified: direct public npm oracle (`npm install --no-audit --no-fund --ignore-scripts lodash` in a temp copy of `test/test-79-npm/lodash/lodash.js`, then `node lodash.js`) prints exactly `ok`; `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `lodash` installed from public npm.
+
+Next: continue with another deterministic public npm fixture after checking its direct Node oracle.
+
+Decisions made: choose current `lodash` because it is a deterministic, dependency-only public package fixture with no native dependencies, companion packages, local services, or stderr drift.
