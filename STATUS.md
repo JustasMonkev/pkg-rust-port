@@ -1427,3 +1427,13 @@ Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-
 Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
 
 Decisions made: choose current `express` with `jade` only after the direct public npm oracle succeeded with local-network permission and printed exactly `ok`. The non-escalated oracle fails in the sandbox because binding a local server returns `EPERM`, so the public smoke gate must run with the same local-network allowance used for other localhost fixtures.
+
+## 2026-05-21 - Rechoir public npm smoke rejected
+
+Investigated: attempted to extend the opt-in public npm dictionary smoke to the current `test-79-npm/rechoir` fixture using explicit `coffee-script` and `interpret` companion packages and the fixture's package-style config input.
+
+Verified: the direct public npm Node oracle installs `rechoir coffee-script interpret` cleanly and prints `ok`, but the escalated Rust public npm smoke fails because the packaged Node 18 runtime emits a `Buffer()` deprecation warning from `coffee-script@1.12.7` while the host Node 25 oracle stderr is empty.
+
+Next: continue with another deterministic dictionary fixture, or revisit public-smoke stderr policy against the JS harness's stdout-only default comparison as a separate harness slice.
+
+Decisions made: do not add current `rechoir` under the current public smoke gate. Treat this as packaged-runtime stderr drift rather than a clean fixture candidate.
