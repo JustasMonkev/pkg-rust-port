@@ -1547,3 +1547,13 @@ Verified: `.github/workflows/ci.yml` parses as YAML; `rustup toolchain install -
 Next: let GitHub Actions exercise the new Rust job on the next push/PR and continue expanding parity coverage.
 
 Decisions made: keep the Rust job separate from the legacy JS matrix so failures are attributable to the port, and compile the benchmark in CI with `cargo bench --bench packaging --no-run` instead of running measurements on shared GitHub runners.
+
+## 2026-05-21 - Fabricator module extraction
+
+Shipped: extracted bytecode fabrication from `produce.rs` into the migration-mapped `src/fabricate.rs` module. Added typed `FabricatorPool` and `FabricateRequest` seams plus `fabricate`, `fabricate_twice`, and `shutdown_fabricators` exports while preserving the current one-process-per-blob behavior used by the producer.
+
+Verified: focused tests pass for `cargo test fabricate` and `cargo test produce::tests::explicit_fabricator_path_is_used_for_blob_payload`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: continue evolving `FabricatorPool` toward the long-lived target-binary pool described in the migration map.
+
+Decisions made: keep the extraction behavior-preserving. The pool type is explicit and public now, but it does not yet retain child processes; that is a later parity/performance slice.

@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod fabricate;
 mod fetch;
 mod fsx;
 mod macho;
@@ -53,6 +54,9 @@ pub use crate::dictionary::{
     apply_dictionary_entry, lookup_dictionary,
 };
 pub use crate::error::PkgError;
+pub use crate::fabricate::{
+    FabricateRequest, FabricatorPool, fabricate, fabricate_twice, shutdown_fabricators,
+};
 pub use crate::fetch::{BinaryKind, PkgFetchCache};
 pub use crate::fsx::plus_x;
 pub use crate::macho::{patch_macho_executable, sign_macho_executable};
