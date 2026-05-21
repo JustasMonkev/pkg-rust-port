@@ -1437,3 +1437,13 @@ Verified: the direct public npm Node oracle installs `rechoir coffee-script inte
 Next: continue with another deterministic dictionary fixture, or revisit public-smoke stderr policy against the JS harness's stdout-only default comparison as a separate harness slice.
 
 Decisions made: do not add current `rechoir` under the current public smoke gate. Treat this as packaged-runtime stderr drift rather than a clean fixture candidate.
+
+## 2026-05-21 - Any-promise public npm smoke
+
+Shipped: extended the opt-in public npm dictionary smoke to the current `test-79-npm/any-promise` fixture. The fixture checks the package's Promise provider resolution path and covers a JS metadata case that is allowed on modern Node module versions.
+
+Verified: `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture` passes with `any-promise` installed from public npm.
+
+Next: continue with another deterministic dictionary fixture that uses JS harness metadata not yet represented in Rust.
+
+Decisions made: choose current `any-promise` because the direct public npm oracle installs cleanly and prints exactly `ok`, with no native dependencies, companion packages, local services, or stderr drift.

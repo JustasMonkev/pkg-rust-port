@@ -480,6 +480,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "moment.js",
         },
         PublicNpmFixture {
+            name: "npm-any-promise",
+            fixture_subdir: "any-promise",
+            package_spec: "any-promise",
+            node_input: "any-promise.js",
+            package_input: "any-promise.js",
+        },
+        PublicNpmFixture {
             name: "npm-uglify-js-2-7-5",
             fixture_subdir: "uglify-js",
             package_spec: "uglify-js@2.7.5",
