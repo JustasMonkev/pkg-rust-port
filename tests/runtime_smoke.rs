@@ -902,6 +902,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "extsprintf.js",
             package_input: "extsprintf.js",
         },
+        PublicNpmFixture {
+            name: "npm-diff",
+            fixture_subdir: "diff",
+            package_spec: "diff",
+            node_input: "diff.js",
+            package_input: "diff.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1142,6 +1149,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "extsprintf",
             node_input: "extsprintf.js",
             package_input: "extsprintf.js",
+        }),
+        "diff" | "npm-diff" => Some(PublicNpmFixture {
+            name: "npm-diff",
+            fixture_subdir: "diff",
+            package_spec: "diff",
+            node_input: "diff.js",
+            package_input: "diff.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",

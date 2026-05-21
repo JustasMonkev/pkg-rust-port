@@ -1697,3 +1697,13 @@ Verified: target-node oracle probing passes for `extsprintf` with `PKG_RUST_INST
 Next: continue target-oracle-checking deterministic public npm fixtures before promotion, and keep deploy-file/native packages behind their separate gates.
 
 Decisions made: choose `extsprintf` because it is deterministic, has no fixture meta/native/service requirements, and extends dependency utility coverage with another small CommonJS package.
+
+## 2026-05-21 - Diff public npm smoke
+
+Shipped: extended the opt-in public npm smoke to the current `test-79-npm/diff` fixture. The fixture validates `diff.diffChars` output instead of only checking the package export shape.
+
+Verified: target-node oracle probing passes for `diff` with `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=diff cargo test --locked --test runtime_smoke public_npm_target_node_oracle_probe_runs_when_enabled -- --nocapture`. The promoted packaged smoke also passes with `PKG_RUST_INSTALL_NPM_FIXTURES=1 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache cargo test --locked --test runtime_smoke public_npm_dictionary_fixtures_run_when_install_is_enabled -- --nocapture`. The standard locked suite passes with `cargo test --locked --manifest-path rust-port/Cargo.toml`.
+
+Next: continue target-oracle-checking deterministic public npm fixtures before promotion, and keep deploy-file/native packages behind their separate gates.
+
+Decisions made: choose `diff` because it is deterministic, has no fixture meta/native/service requirements, and adds a behavior-level public package assertion. Capturing the package.json that supplied `main` is required for packages like current `diff`, where the selected CJS entry sits below a nested `libcjs/package.json`.

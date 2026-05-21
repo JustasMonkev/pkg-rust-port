@@ -12,7 +12,7 @@ use crate::dictionary::{
     DictionaryEntry, DictionaryLog, active_dependencies, apply_dictionary_entry, lookup_dictionary,
 };
 use crate::error::PkgError;
-use crate::resolve::{ResolveOptions, resolve_module};
+use crate::resolve::{ResolveOptions, ResolvedModule, resolve_module_with_metadata};
 
 /// Package metadata carried while the dependency walker expands files.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -922,8 +922,24 @@ impl WalkerState {
         optional: bool,
     ) -> Result<(), PkgError> {
         let options = ResolveOptions::new(basedir);
-        match resolve_module(alias, &options) {
-            Ok(file) => {
+        match resolve_module_with_metadata(alias, &options) {
+            Ok(ResolvedModule {
+                path: file,
+                package_json,
+            }) => {
+                if let Some(package_json) = package_json.as_deref()
+                    && let Some(package_marker) =
+                        package_marker_for_file(package_json, &marker, &self.root)?
+                {
+                    let mut package_marker = package_marker;
+                    package_marker.has_dictionary = self.has_dictionary_entry(&package_marker);
+                    package_marker.public = self.is_public_marker(&package_marker);
+                    self.append(
+                        package_json.to_path_buf(),
+                        StoreKind::Content,
+                        package_marker,
+                    );
+                }
                 if let Some(package_marker) = package_marker_for_file(&file, &marker, &self.root)? {
                     let mut package_marker = package_marker;
                     package_marker.has_dictionary = self.has_dictionary_entry(&package_marker);

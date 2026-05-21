@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pkg_rust::{PkgError, ResolveOptions, resolve_module};
+use pkg_rust::{PkgError, ResolveOptions, resolve_module, resolve_module_with_metadata};
 
 #[test]
 fn resolves_exact_unknown_extension_file() -> Result<(), PkgError> {
@@ -33,6 +33,37 @@ fn resolves_directory_package_json_main() -> Result<(), PkgError> {
     let resolved = resolve_module("../beta", &options)?;
 
     assert!(resolved.ends_with(Path::new("test-50-package-json-6c/beta/beta.js")));
+    Ok(())
+}
+
+#[test]
+fn reports_package_json_that_supplies_main_for_nested_package_file()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = temp_root("nested-package-main")?;
+    let package_dir = fixture_dir.join("node_modules/exports-main");
+    let cjs_dir = package_dir.join("libcjs");
+    std::fs::create_dir_all(&cjs_dir)?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"exports-main","main":"./libcjs/index.js","exports":{".":"./libcjs/index.js"}}"#,
+    )?;
+    std::fs::write(cjs_dir.join("package.json"), r#"{"type":"commonjs"}"#)?;
+    std::fs::write(cjs_dir.join("index.js"), "module.exports = 42;")?;
+
+    let options = ResolveOptions::new(&fixture_dir);
+    let resolved = resolve_module_with_metadata("exports-main", &options)?;
+
+    assert!(resolved.path.ends_with(Path::new("libcjs/index.js")));
+    assert!(
+        resolved
+            .package_json
+            .as_deref()
+            .is_some_and(|path| path.ends_with(Path::new(
+                "node_modules/exports-main/package.json"
+            )))
+    );
+
+    std::fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }
 

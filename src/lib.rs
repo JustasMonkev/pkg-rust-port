@@ -71,7 +71,9 @@ pub use crate::produce::{
     produce_executable_image, produce_manifest, render_prelude, write_executable_image,
 };
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
-pub use crate::resolve::{ResolveOptions, resolve_module};
+pub use crate::resolve::{
+    ResolveOptions, ResolvedModule, resolve_module, resolve_module_with_metadata,
+};
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
     parse_targets,

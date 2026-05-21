@@ -3,6 +3,15 @@ use std::path::{Path, PathBuf};
 use crate::config::PackageJson;
 use crate::error::PkgError;
 
+/// Resolved module path plus package metadata consumed during resolution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedModule {
+    /// Resolved JavaScript, JSON, native addon, or package file.
+    pub path: PathBuf,
+    /// Package metadata file whose `main` selected the resolved path.
+    pub package_json: Option<PathBuf>,
+}
+
 /// Options for Node-compatible module resolution.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResolveOptions {
@@ -41,6 +50,14 @@ impl ResolveOptions {
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 pub fn resolve_module(request: &str, options: &ResolveOptions) -> Result<PathBuf, PkgError> {
+    resolve_module_with_metadata(request, options).map(|resolved| resolved.path)
+}
+
+/// Resolve a module request and report package metadata used for `main`.
+pub fn resolve_module_with_metadata(
+    request: &str,
+    options: &ResolveOptions,
+) -> Result<ResolvedModule, PkgError> {
     if is_path_request(request) {
         let candidate = if Path::new(request).is_absolute() {
             PathBuf::from(request)
@@ -72,26 +89,32 @@ fn is_path_request(request: &str) -> bool {
         || request.starts_with("..\\")
 }
 
-fn resolve_as_path(candidate: &Path, options: &ResolveOptions) -> Option<PathBuf> {
+fn resolve_as_path(candidate: &Path, options: &ResolveOptions) -> Option<ResolvedModule> {
     resolve_as_file(candidate, options).or_else(|| resolve_as_directory(candidate, options))
 }
 
-fn resolve_as_file(candidate: &Path, options: &ResolveOptions) -> Option<PathBuf> {
+fn resolve_as_file(candidate: &Path, options: &ResolveOptions) -> Option<ResolvedModule> {
     if candidate.is_file() {
-        return normalize(candidate);
+        return normalize(candidate).map(|path| ResolvedModule {
+            path,
+            package_json: None,
+        });
     }
 
     for extension in &options.extensions {
         let with_extension = PathBuf::from(format!("{}{}", candidate.display(), extension));
         if with_extension.is_file() {
-            return normalize(&with_extension);
+            return normalize(&with_extension).map(|path| ResolvedModule {
+                path,
+                package_json: None,
+            });
         }
     }
 
     None
 }
 
-fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<PathBuf> {
+fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<ResolvedModule> {
     if !candidate.is_dir() {
         return None;
     }
@@ -99,8 +122,9 @@ fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<Pa
     let package_path = candidate.join("package.json");
     if package_path.is_file()
         && let Some(main) = package_main(&package_path)
-        && let Some(resolved) = resolve_as_path(&candidate.join(main), options)
+        && let Some(mut resolved) = resolve_as_path(&candidate.join(main), options)
     {
+        resolved.package_json = normalize(&package_path);
         return Some(resolved);
     }
 
@@ -115,7 +139,7 @@ fn package_main(package_path: &Path) -> Option<String> {
         .filter(|main| !main.is_empty())
 }
 
-fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<PathBuf> {
+fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<ResolvedModule> {
     for directory in ancestor_directories(&options.basedir) {
         let candidate = directory.join("node_modules").join(request);
         if let Some(resolved) = resolve_as_path(&candidate, options) {
