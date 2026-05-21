@@ -487,6 +487,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "any-promise.js",
         },
         PublicNpmFixture {
+            name: "npm-hoek",
+            fixture_subdir: "hoek",
+            package_spec: "hoek",
+            node_input: "hoek.js",
+            package_input: "hoek.js",
+        },
+        PublicNpmFixture {
             name: "npm-uglify-js-2-7-5",
             fixture_subdir: "uglify-js",
             package_spec: "uglify-js@2.7.5",
