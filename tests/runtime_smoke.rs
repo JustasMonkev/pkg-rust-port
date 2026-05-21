@@ -508,6 +508,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             package_input: "lodash.js",
         },
         PublicNpmFixture {
+            name: "npm-semver",
+            fixture_subdir: "semver",
+            package_spec: "semver",
+            node_input: "semver.js",
+            package_input: "semver.js",
+        },
+        PublicNpmFixture {
             name: "npm-uglify-js-2-7-5",
             fixture_subdir: "uglify-js",
             package_spec: "uglify-js@2.7.5",
