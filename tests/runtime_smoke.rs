@@ -895,6 +895,13 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
             node_input: "debug.js",
             package_input: "debug.js",
         },
+        PublicNpmFixture {
+            name: "npm-extsprintf",
+            fixture_subdir: "extsprintf",
+            package_spec: "extsprintf",
+            node_input: "extsprintf.js",
+            package_input: "extsprintf.js",
+        },
     ] {
         run_public_npm_fixture(&root, fixture)?;
     }
@@ -1128,6 +1135,13 @@ fn public_npm_probe_fixture(name: &str) -> Option<PublicNpmFixture<'static>> {
             package_spec: "debug",
             node_input: "debug.js",
             package_input: "debug.js",
+        }),
+        "extsprintf" | "npm-extsprintf" => Some(PublicNpmFixture {
+            name: "npm-extsprintf",
+            fixture_subdir: "extsprintf",
+            package_spec: "extsprintf",
+            node_input: "extsprintf.js",
+            package_input: "extsprintf.js",
         }),
         "connect-mongodb" | "npm-connect-mongodb" => Some(PublicNpmFixture {
             name: "npm-connect-mongodb",
