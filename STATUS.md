@@ -1577,3 +1577,13 @@ Verified: focused coverage passes for `cargo test produce::tests::explicit_fabri
 Next: continue closing ESM bytecode/content semantics before retrying the blocked public npm fixtures.
 
 Decisions made: keep `ProducerBuildOptions` as the internal bridge for both serialized bakery bytes and raw bake flags. The two forms serve different consumers: executable runtime placeholders need NUL-delimited bytes, while fabricator child spawning needs filtered argument strings.
+
+## 2026-05-21 - Fabrication failure skip parity slice
+
+Shipped: matched the JavaScript producer behavior when bytecode fabrication fails. Rust now skips the failed blob stripe instead of aborting the package build, so content stripes for the same snapshot can still be recorded and emitted. Added coverage with an ESM-style source body where the fake fabricator exits non-zero and the content payload remains available.
+
+Verified: focused coverage passes for `cargo test produce::tests::failed_blob_fabrication_skips_blob_and_keeps_content`; standard locked Rust gates pass (`cargo fmt --check`, `git diff --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: retry the previously blocked public npm fixture path and then continue closing runtime gaps that remain after packaging no longer aborts on failed bytecode fabrication.
+
+Decisions made: keep this as producer parity, not a walker reclassification. The JS producer logs a warning and marks the blob stripe skipped on fabrication errors; the Rust port does not yet have a producer warning channel, so this slice preserves the build/manifest behavior first.

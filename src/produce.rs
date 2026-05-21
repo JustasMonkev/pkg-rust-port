@@ -382,7 +382,10 @@ fn build_manifest_and_payload(
                 None => FabricateRequest::new(&snap, &stripe_bytes),
             }
             .with_bakes(bakes);
-            fabricate(&mut fabricator_pool, request)?
+            match fabricate(&mut fabricator_pool, request) {
+                Ok(bytes) => bytes,
+                Err(_error) => continue,
+            }
         } else {
             stripe_bytes
         };
@@ -991,6 +994,77 @@ process.stdin.resume();
         let args = fs::read_to_string(args_log)?;
         assert!(args.contains("--max-old-space-size=64"));
         assert!(!args.contains("--prof"));
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_blob_fabrication_skips_blob_and_keeps_content()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-fabricator-failure-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let fabricator = temp_dir.join("failing-node");
+        fs::write(&fabricator, "#!/bin/sh\nexit 7\n")?;
+        let mut permissions = fs::metadata(&fabricator)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fabricator, permissions)?;
+
+        let produced = write_executable_image_with_fabricator(
+            temp_dir.join("out"),
+            binary_with_placeholders(),
+            PackedOutput {
+                entrypoint: "/esm.js".to_owned(),
+                symlinks: BTreeMap::new(),
+                stripes: vec![
+                    Stripe {
+                        snap: "/esm.js".to_owned(),
+                        store: StoreKind::Blob,
+                        file: None,
+                        buffer: Some(b"export default 42;".to_vec()),
+                    },
+                    Stripe {
+                        snap: "/esm.js".to_owned(),
+                        store: StoreKind::Content,
+                        file: None,
+                        buffer: Some(b"export default 42;".to_vec()),
+                    },
+                ],
+            },
+            "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+            ProducerBuildOptions {
+                compression: PayloadCompression::None,
+                style: PathStyle::Posix,
+                bakery: Vec::new(),
+                bakes: &[],
+                fabricator_path: Some(&fabricator),
+                native_addons: NativeAddonOptions::default(),
+            },
+        )?;
+
+        let stores = produced
+            .manifest
+            .vfs
+            .get("/snapshot/esm.js")
+            .ok_or_else(|| PkgError::Pack("content payload pointer was missing".to_owned()))?;
+        assert!(!stores.contains_key(&StoreKind::Blob.as_index()));
+        let pointer = stores
+            .get(&StoreKind::Content.as_index())
+            .ok_or_else(|| PkgError::Pack("content payload pointer was missing".to_owned()))?;
+        let start = produced.payload_position as usize + pointer.offset as usize;
+        let end = start + pointer.size as usize;
+        assert_eq!(
+            produced
+                .bytes
+                .get(start..end)
+                .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
+            b"export default 42;"
+        );
 
         fs::remove_dir_all(temp_dir)?;
         Ok(())
