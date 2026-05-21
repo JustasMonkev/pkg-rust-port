@@ -1537,3 +1537,13 @@ Verified: `cargo bench --bench packaging --no-run` compiles the bench target; `c
 Next: continue expanding parity coverage, and later tune Criterion sample settings or add warm-cache release timing once the benchmark surface grows.
 
 Decisions made: keep the initial benchmark deterministic and cache-free by using existing fixture data and in-memory producer manifest construction instead of invoking target-binary fetches or writing release artifacts.
+
+## 2026-05-21 - Rust port CI gates
+
+Shipped: added a dedicated `rust-port` GitHub Actions job alongside the existing JS matrix. The job installs the pinned Rust 1.85.0 toolchain and runs format, check, clippy, tests, doctests, rustdoc warnings, and the Criterion packaging benchmark compile gate.
+
+Verified: `.github/workflows/ci.yml` parses as YAML; `rustup toolchain install --help` confirms the CI component syntax uses comma-separated `clippy,rustfmt`; local equivalents pass with locked dependencies (`cargo fmt --check`, `cargo check --locked --all-targets --all-features`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets --all-features`, `cargo test --locked --doc --all-features`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`).
+
+Next: let GitHub Actions exercise the new Rust job on the next push/PR and continue expanding parity coverage.
+
+Decisions made: keep the Rust job separate from the legacy JS matrix so failures are attributable to the port, and compile the benchmark in CI with `cargo bench --bench packaging --no-run` instead of running measurements on shared GitHub runners.
