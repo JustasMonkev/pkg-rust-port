@@ -299,6 +299,18 @@ fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult 
 }
 
 #[test]
+fn cli_version_flag_prints_bare_pkg_version_like_js() -> TestResult {
+    // test-78-verify-pkg-version: JS prints the bare pkg version for `-v`.
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for flag in ["--version", "-v"] {
+        let output = run_cli(manifest_dir, [flag])?;
+        assert!(output.status.success(), "pkg {flag} failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "5.8.1\n");
+    }
+    Ok(())
+}
+
+#[test]
 fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
     let fixture =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-invalid-unknown-token");

@@ -65,7 +65,7 @@ pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,
     fabricator_for_target,
 };
-pub use crate::prelude::prelude_template;
+pub use crate::prelude::{PKG_VERSION, prelude_template};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,

@@ -18,12 +18,17 @@ use crate::walk::Marker;
 #[derive(Debug, Parser)]
 #[command(
     name = "pkg",
-    version,
+    version = crate::prelude::PKG_VERSION,
+    disable_version_flag = true,
     about = "Package your Node.js project into an executable"
 )]
 struct Cli {
     #[arg(value_name = "input")]
     input: Option<PathBuf>,
+
+    /// Output the pkg version, matching the JS `-v`/`--version` flag.
+    #[arg(short = 'v', long = "version")]
+    version: bool,
 
     #[arg(short = 't', long = "targets", alias = "target")]
     targets: Option<String>,
@@ -166,7 +171,15 @@ where
     let Some(cli) = parse_cli_or_display(argv)? else {
         return Ok(());
     };
+    if cli.version {
+        // JS pkg prints the bare version (`console.log(version)`).
+        println!("{}", crate::prelude::PKG_VERSION);
+        return Ok(());
+    }
     let debug = cli.debug;
+    // JS pkg logs `pkg@<version>` once arguments are accepted, before option,
+    // target, and input processing.
+    println!("> pkg@{}", crate::prelude::PKG_VERSION);
     let plan = plan_from_cli(cli)?;
     if plan.compression != Compression::None {
         println!("compression:  {}", plan.compression.cli_label());
@@ -222,12 +235,7 @@ where
     let args = std::iter::once(OsString::from("pkg")).chain(argv.into_iter().map(Into::into));
     match Cli::try_parse_from(args) {
         Ok(cli) => Ok(Some(cli)),
-        Err(error)
-            if matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            ) =>
-        {
+        Err(error) if error.kind() == ErrorKind::DisplayHelp => {
             error.print().map_err(|source| PkgError::Io {
                 path: "stdout".to_owned(),
                 source,

@@ -1,4 +1,9 @@
-const ORIGINAL_PACKAGE_VERSION: &str = "5.8.1";
+/// Version of the original pkg release this port mirrors.
+///
+/// The CLI reports this for `--version`, the startup banner prints
+/// `pkg@{PKG_VERSION}`, and the runtime prelude injects it as
+/// `process.versions.pkg`, matching the JavaScript package exactly.
+pub const PKG_VERSION: &str = "5.8.1";
 const BOOTSTRAP_SOURCE: &str = include_str!("../assets/prelude/bootstrap.js");
 const DIAGNOSTIC_SOURCE: &str = include_str!("../assets/prelude/diagnostic.js");
 
@@ -21,7 +26,7 @@ pub fn prelude_template(debug: bool) -> String {
     // the original pkg 5.8.1 release under `assets/prelude/` and embedded as data
     // with `include_str!`, so the crate is self-contained and produces runtime
     // images byte-compatible with the JS prelude.
-    let bootstrap = BOOTSTRAP_SOURCE.replace("%VERSION%", ORIGINAL_PACKAGE_VERSION);
+    let bootstrap = BOOTSTRAP_SOURCE.replace("%VERSION%", PKG_VERSION);
     let diagnostic = if debug { DIAGNOSTIC_SOURCE } else { "" };
     format!(
         "return (function (REQUIRE_COMMON, VIRTUAL_FILESYSTEM, DEFAULT_ENTRYPOINT, SYMLINKS, DICT, DOCOMPRESS) {{\n        {bootstrap}{diagnostic}\n}})(function (exports) {{\n{}\n}},\n%VIRTUAL_FILESYSTEM%\n,\n%DEFAULT_ENTRYPOINT%\n,\n%SYMLINKS%\n,\n%DICT%\n,\n%DOCOMPRESS%\n);",
