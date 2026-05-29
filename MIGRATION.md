@@ -58,8 +58,8 @@ Single crate is the initial target.
 | `lib/refiner.ts` | `src/refine.rs` | Pure record transformation with unit tests first. |
 | `lib/types.ts` | `src/types.rs`, `src/config.rs`, `src/target.rs` | Split broad TS interfaces into focused Rust structs/newtypes. |
 | `lib/walker.ts` | `src/walk.rs` | Queue-based deterministic traversal; preserve FIFO ordering. |
-| `prelude/bootstrap.js` | `assets/prelude/bootstrap.js` via `include_str!` | Runtime JS prelude embedded as data, not vendored source logic. |
-| `prelude/diagnostic.js` | `assets/prelude/diagnostic.js` via `include_str!` | Debug-only injected diagnostic text. |
+| `prelude/bootstrap.js` | `src/prelude_assets.rs` `BOOTSTRAP_SOURCE` const | Runtime JS prelude embedded as a Rust string constant, not a `.js` file. |
+| `prelude/diagnostic.js` | `src/prelude_assets.rs` `DIAGNOSTIC_SOURCE` const | Debug-only injected diagnostic text, embedded as a Rust string constant. |
 | `dictionary/*.js` | `src/dictionary.rs` + generated static data | Convert dictionary shims into typed data at build time or checked-in JSON/RON; do not execute JS at runtime. |
 
 ### Dictionary Modules

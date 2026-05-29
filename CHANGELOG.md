@@ -14,9 +14,10 @@
   by a host-platform fabricator binary that matches the output target's node
   range and architecture (pkg's `fabricatorForTarget`), so cross-platform
   builds no longer depend on running the output target binary or host `node`.
-- Vendored the pkg 5.8.1 runtime prelude (`assets/prelude/`) and the referenced
-  `test/` fixtures so the crate is fully self-contained and builds without the
-  original JS repository alongside it.
+- Embedded the pkg 5.8.1 runtime prelude as Rust string constants
+  (`src/prelude_assets.rs`) and vendored the referenced `test/` fixtures so the
+  crate is fully self-contained, has no `.js` source files, and builds without
+  the original JS repository alongside it.
 - Reported the mirrored pkg version (5.8.1) for `-v`/`--version` and the
   `pkg@5.8.1` startup banner, and injected it as `process.versions.pkg` in the
   runtime prelude, matching the JS package.

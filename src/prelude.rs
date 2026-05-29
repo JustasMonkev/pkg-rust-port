@@ -4,8 +4,7 @@
 /// `pkg@{PKG_VERSION}`, and the runtime prelude injects it as
 /// `process.versions.pkg`, matching the JavaScript package exactly.
 pub const PKG_VERSION: &str = "5.8.1";
-const BOOTSTRAP_SOURCE: &str = include_str!("../assets/prelude/bootstrap.js");
-const DIAGNOSTIC_SOURCE: &str = include_str!("../assets/prelude/diagnostic.js");
+use crate::prelude_assets::{BOOTSTRAP_SOURCE, DIAGNOSTIC_SOURCE};
 
 /// Build the JavaScript producer prelude template.
 ///
@@ -22,10 +21,10 @@ const DIAGNOSTIC_SOURCE: &str = include_str!("../assets/prelude/diagnostic.js");
 /// ```
 #[must_use]
 pub fn prelude_template(debug: bool) -> String {
-    // The runtime bootstrap and diagnostic preludes are vendored verbatim from
-    // the original pkg 5.8.1 release under `assets/prelude/` and embedded as data
-    // with `include_str!`, so the crate is self-contained and produces runtime
-    // images byte-compatible with the JS prelude.
+    // The runtime bootstrap and diagnostic preludes are the verbatim pkg 5.8.1
+    // sources, embedded as Rust string constants in `prelude_assets`, so the
+    // crate is self-contained, has no `.js` files, and produces runtime images
+    // byte-compatible with the JS prelude.
     let bootstrap = BOOTSTRAP_SOURCE.replace("%VERSION%", PKG_VERSION);
     let diagnostic = if debug { DIAGNOSTIC_SOURCE } else { "" };
     format!(

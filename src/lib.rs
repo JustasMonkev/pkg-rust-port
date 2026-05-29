@@ -32,6 +32,7 @@ mod macho;
 mod pack;
 mod package;
 mod prelude;
+mod prelude_assets;
 mod produce;
 mod refine;
 mod resolve;
