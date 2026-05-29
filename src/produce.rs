@@ -938,6 +938,7 @@ fn brotli_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
