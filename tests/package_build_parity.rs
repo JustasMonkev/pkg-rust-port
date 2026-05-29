@@ -120,6 +120,55 @@ fn bytecode_fabricator_target_is_host_platform_for_windows_output()
     Ok(())
 }
 
+// `--build` force-builds only the output base binary; the host fabricator
+// binary is always fetched (never force-built), matching pkg's
+// `fabricatorForTarget`/cache behavior.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn bytecode_fabricator_binary_is_not_force_built() -> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let output = std::env::temp_dir().join(format!("pkg-rust-fab-nobuild-{}", std::process::id()));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--build",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let recorded = provider.requested.borrow();
+    let host = Platform::host().to_string();
+    // The Windows output base binary honors --build.
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Win && t.arch == Arch::X64 && t.force_build),
+        "expected a force-built Windows output request, got {recorded:?}"
+    );
+    // The host fabricator binary is fetched, not force-built.
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform.to_string() == host && t.arch == Arch::X64 && !t.force_build),
+        "expected a non-force-built host fabricator request, got {recorded:?}"
+    );
+
+    let _ignored = std::fs::remove_file(&output);
+    Ok(())
+}
+
 // On a Windows host, building a Linux output: the fabricator request uses the
 // Windows host platform (the mirror of the non-Windows case).
 #[cfg(target_os = "windows")]

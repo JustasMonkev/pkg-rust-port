@@ -324,7 +324,11 @@ pub fn fabricator_for_target(target: &NodeTarget) -> NodeTarget {
         node_range: target.node_range.clone(),
         platform,
         arch: target.arch,
-        force_build: target.force_build,
+        // The fabricator binary is always fetched, never force-built: pkg's
+        // `fabricatorForTarget` returns no `forceBuild`, and its cache lookup
+        // for the fabricator does not carry it. Only the output base binary
+        // honors `--build`.
+        force_build: false,
     }
 }
 
