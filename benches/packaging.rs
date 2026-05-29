@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use criterion::{Criterion, criterion_group, criterion_main};
 use pkg_rust::{
     Compression, Marker, PackageJson, PackedOutput, PathStyle, PkgError, WalkerParams, pack,
-    produce_manifest, refine_walked, walk,
+    prelude_template, produce_manifest, refine_walked, render_prelude, walk,
 };
 use std::hint::black_box;
 
@@ -51,14 +51,44 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
         });
     });
 
-    criterion.bench_function("produce_manifest_gzip_require_resolve_fixture", |bencher| {
+    // Compare payload production across every compression algorithm so
+    // regressions in compression accounting or encoder throughput are visible.
+    for (label, compression) in [
+        ("none", Compression::None),
+        ("gzip", Compression::Gzip),
+        ("brotli", Compression::Brotli),
+    ] {
+        let name = format!("produce_manifest_{label}_require_resolve_fixture");
+        criterion.bench_function(&name, |bencher| {
+            bencher.iter(|| {
+                let result = produce_manifest(
+                    black_box(packed.clone()),
+                    black_box(compression),
+                    black_box(PathStyle::Posix),
+                );
+                black_box(require(result, "failed to run producer manifest benchmark"))
+            });
+        });
+    }
+
+    // Render the runtime prelude from a real manifest -- this is on the hot path
+    // of every executable image write.
+    let manifest = require(
+        produce_manifest(packed.clone(), Compression::Gzip, PathStyle::Posix),
+        "failed to build benchmark manifest",
+    );
+    let template = prelude_template(false);
+    criterion.bench_function("render_prelude_require_resolve_fixture", |bencher| {
         bencher.iter(|| {
-            let result = produce_manifest(
-                black_box(packed.clone()),
-                black_box(Compression::Gzip),
-                black_box(PathStyle::Posix),
-            );
-            black_box(require(result, "failed to run producer manifest benchmark"))
+            let result = render_prelude(black_box(&template), black_box(&manifest));
+            black_box(require(result, "failed to run prelude render benchmark"))
+        });
+    });
+
+    criterion.bench_function("prelude_template_debug_vs_release", |bencher| {
+        bencher.iter(|| {
+            black_box(prelude_template(black_box(false)));
+            black_box(prelude_template(black_box(true)));
         });
     });
 }
