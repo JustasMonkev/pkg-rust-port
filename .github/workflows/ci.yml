@@ -16,9 +16,6 @@ jobs:
         toolchain:
           - stable
           - 1.85.0
-    defaults:
-      run:
-        working-directory: rust-port
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -26,8 +23,6 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
       - run: cargo check --all-targets --all-features
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo fmt --check
@@ -40,11 +35,8 @@ jobs:
   real-runtime-smoke:
     name: Real runtime smoke
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust-port
     env:
-      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/rust-port/.pkg-rust-real-cache
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/.pkg-rust-real-cache
       PKG_RUST_REAL_TARGET: node18-linux-x64
     steps:
       - uses: actions/checkout@v4
@@ -52,22 +44,17 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
       - uses: actions/cache@v4
         with:
-          path: rust-port/.pkg-rust-real-cache
+          path: .pkg-rust-real-cache
           key: pkg-fetch-v3.5-node18-linux-x64
       - run: cargo test --test runtime_smoke -- --nocapture
 
   windows-issue-smoke:
     name: Windows issue smoke
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: rust-port
     env:
-      PKG_RUST_REAL_CACHE: ${{ github.workspace }}\rust-port\.pkg-rust-real-cache
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}\.pkg-rust-real-cache
       PKG_RUST_REAL_TARGET: node18-win-x64
     steps:
       - uses: actions/checkout@v4
@@ -75,10 +62,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
       - uses: actions/cache@v4
         with:
-          path: rust-port/.pkg-rust-real-cache
+          path: .pkg-rust-real-cache
           key: pkg-fetch-v3.5-node18-win-x64
       - run: cargo test --test runtime_smoke windows_issue_regression_fixtures_run_when_real_cache_is_configured -- --nocapture
