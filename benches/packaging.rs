@@ -26,6 +26,22 @@ fn packed_fixture(fixture_dir: &Path, entrypoint: &Path) -> Result<PackedOutput,
     pack(refined, true)
 }
 
+/// Pack with bytecode disabled and the top-level source disclosed, so the
+/// stripes are content (not blob). The producer then never spawns `node`, which
+/// isolates the Rust-side assembly + compression cost.
+fn packed_content_fixture(fixture_dir: &Path, entrypoint: &Path) -> Result<PackedOutput, PkgError> {
+    let walked = walk(
+        empty_marker()?,
+        entrypoint,
+        None,
+        WalkerParams::new()
+            .with_root(fixture_dir)
+            .with_public_toplevel(true),
+    )?;
+    let refined = refine_walked(walked, entrypoint, PathStyle::Posix);
+    pack(refined, false)
+}
+
 fn require<T>(result: Result<T, PkgError>, context: &str) -> T {
     match result {
         Ok(value) => value,
@@ -71,6 +87,39 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
                         black_box(PathStyle::Posix),
                     );
                     black_box(require(result, "failed to run producer manifest benchmark"))
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+
+    // Fabrication-free payload assembly: bytecode disabled means content stripes
+    // only, so the producer never spawns `node`. These isolate the Rust-side
+    // assembly + compression cost (the blob benches above are dominated by the
+    // external Node bytecode process).
+    let packed_content = require(
+        packed_content_fixture(&fixture_dir, &entrypoint),
+        "failed to build content-only benchmark fixture",
+    );
+    for (label, compression) in [
+        ("none", Compression::None),
+        ("gzip", Compression::Gzip),
+        ("brotli", Compression::Brotli),
+    ] {
+        let name = format!("produce_manifest_{label}_content_only_require_resolve_fixture");
+        criterion.bench_function(&name, |bencher| {
+            bencher.iter_batched(
+                || packed_content.clone(),
+                |input| {
+                    let result = produce_manifest(
+                        black_box(input),
+                        black_box(compression),
+                        black_box(PathStyle::Posix),
+                    );
+                    black_box(require(
+                        result,
+                        "failed to run content-only manifest benchmark",
+                    ))
                 },
                 criterion::BatchSize::SmallInput,
             );

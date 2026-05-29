@@ -390,25 +390,33 @@ fn build_manifest_and_payload(
     bakes: &[String],
     native_addons: &NativeAddonOptions,
 ) -> Result<(ProducerManifest, Vec<u8>, Vec<PackageWarning>), PkgError> {
-    let mut offset = 0_u64;
-    let mut payload = Vec::new();
+    // Reserve roughly the uncompressed size up front so the contiguous payload
+    // grows in one allocation instead of repeatedly as stripes are appended.
+    let payload_capacity = packed
+        .stripes
+        .iter()
+        .filter_map(|stripe| stripe.buffer.as_ref().map(Vec::len))
+        .sum();
+    let mut payload = Vec::with_capacity(payload_capacity);
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
     let mut path_dictionary = PathDictionary::default();
     let mut fabricator_pool = FabricatorPool::new();
     let mut warnings = Vec::new();
 
-    for stripe in packed.stripes {
+    for mut stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
-        let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
-        let payload_bytes = if stripe.store == StoreKind::Blob {
+        let store = stripe.store;
+        // Move the stripe buffer out instead of cloning it.
+        let raw = take_stripe_bytes(&mut stripe, native_addons)?;
+        let bytes = if store == StoreKind::Blob {
             // The package builder resolves a host-platform fabricator binary
             // (matching the target node range and arch) and passes its path
             // here. When no runnable fabricator path is available -- only the
             // deterministic in-memory test providers -- fabrication falls back
             // to host `node`.
             let request = match fabricator_path {
-                Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
-                None => FabricateRequest::new(&snap, &stripe_bytes),
+                Some(path) => FabricateRequest::new(&snap, &raw).with_executable(path),
+                None => FabricateRequest::new(&snap, &raw),
             }
             .with_bakes(bakes);
             match fabricate(&mut fabricator_pool, request) {
@@ -422,17 +430,19 @@ fn build_manifest_and_payload(
                 }
             }
         } else {
-            stripe_bytes
+            raw
         };
-        let payload_bytes = compress_payload(&payload_bytes, compression)?;
-        let size = payload_bytes.len() as u64;
+        // Compress (or copy) each stripe straight into the contiguous payload so
+        // no per-stripe intermediate buffer is allocated.
+        let offset = payload.len() as u64;
+        append_payload(&mut payload, &bytes, compression)?;
+        let size = payload.len() as u64 - offset;
         let vfs_key = path_dictionary.make_key(compression, &snap);
         vfs.entry(vfs_key)
             .or_default()
-            .insert(stripe.store.as_index(), PayloadPointer { offset, size });
-        offset += size;
-        payload.extend_from_slice(&payload_bytes);
+            .insert(store.as_index(), PayloadPointer { offset, size });
     }
+    let payload_size = payload.len() as u64;
 
     let symlinks = packed
         .symlinks
@@ -453,7 +463,7 @@ fn build_manifest_and_payload(
             symlinks,
             vfs,
             path_dictionary: path_dictionary.entries,
-            payload_size: offset,
+            payload_size,
             compression,
         },
         payload,
@@ -734,9 +744,12 @@ fn base36(mut value: usize) -> String {
     output.iter().rev().collect()
 }
 
-fn stripe_bytes(stripe: &Stripe, native_addons: &NativeAddonOptions) -> Result<Vec<u8>, PkgError> {
-    if let Some(buffer) = stripe.buffer.as_ref() {
-        return Ok(buffer.clone());
+fn take_stripe_bytes(
+    stripe: &mut Stripe,
+    native_addons: &NativeAddonOptions,
+) -> Result<Vec<u8>, PkgError> {
+    if let Some(buffer) = stripe.buffer.take() {
+        return Ok(buffer);
     }
 
     let Some(file) = stripe.file.as_ref() else {
@@ -906,34 +919,42 @@ fn restore_native_backup(backup: &Path, node_file: &Path) -> Result<(), PkgError
     })
 }
 
-fn compress_payload(payload: &[u8], compression: PayloadCompression) -> Result<Vec<u8>, PkgError> {
+/// Append a stripe's bytes to `payload`, compressing in place so no per-stripe
+/// intermediate buffer is allocated. The produced bytes are identical to
+/// compressing into a fresh buffer and copying it in.
+fn append_payload(
+    payload: &mut Vec<u8>,
+    bytes: &[u8],
+    compression: PayloadCompression,
+) -> Result<(), PkgError> {
     match compression {
-        PayloadCompression::None => Ok(payload.to_vec()),
-        PayloadCompression::Gzip => gzip_payload(payload),
-        PayloadCompression::Brotli => brotli_payload(payload),
+        PayloadCompression::None => {
+            payload.extend_from_slice(bytes);
+            Ok(())
+        }
+        PayloadCompression::Gzip => {
+            let mut encoder =
+                flate2::write::GzEncoder::new(payload, flate2::Compression::default());
+            encoder
+                .write_all(bytes)
+                .map_err(|error| PkgError::Pack(format!("gzip write failed: {error}")))?;
+            encoder
+                .finish()
+                .map_err(|error| PkgError::Pack(format!("gzip finish failed: {error}")))?;
+            Ok(())
+        }
+        PayloadCompression::Brotli => {
+            // DECISION: Node's `createBrotliCompress()` uses zlib's default Brotli
+            // parameters. The Rust port uses the standard max-quality/window
+            // defaults exposed by the `brotli` crate until fixture parity
+            // requires tuning.
+            let mut reader = brotli::CompressorReader::new(bytes, 4096, 11, 22);
+            reader
+                .read_to_end(payload)
+                .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
+            Ok(())
+        }
     }
-}
-
-fn gzip_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
-    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    encoder
-        .write_all(payload)
-        .map_err(|error| PkgError::Pack(format!("gzip write failed: {error}")))?;
-    encoder
-        .finish()
-        .map_err(|error| PkgError::Pack(format!("gzip finish failed: {error}")))
-}
-
-fn brotli_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
-    // DECISION: Node's `createBrotliCompress()` uses zlib's default Brotli
-    // parameters. The Rust port uses the standard max-quality/window defaults
-    // exposed by the `brotli` crate until fixture parity requires tuning.
-    let mut reader = brotli::CompressorReader::new(payload, 4096, 11, 22);
-    let mut output = Vec::new();
-    reader
-        .read_to_end(&mut output)
-        .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
-    Ok(output)
 }
 
 #[cfg(test)]
