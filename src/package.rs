@@ -385,8 +385,13 @@ fn prepare_fabricator_binary(path: &Path, platform: Platform) -> Result<PathBuf,
 }
 
 fn signed_fabricator_path(path: &Path) -> PathBuf {
+    // Use a per-process, per-call suffix so concurrent builds sharing a cache do
+    // not sign or remove the same `-signed` file out from under each other.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nonce = COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut signed = path.as_os_str().to_os_string();
-    signed.push("-signed");
+    signed.push(format!("-signed-{}-{nonce}", std::process::id()));
     PathBuf::from(signed)
 }
 
@@ -436,9 +441,7 @@ fn prebuild_install_path() -> Option<PathBuf> {
 }
 
 fn source_tree_prebuild_install() -> Option<PathBuf> {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest_dir
-        .parent()?
+    let candidate = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("node_modules")
         .join(".bin")
         .join(executable_name("prebuild-install"));

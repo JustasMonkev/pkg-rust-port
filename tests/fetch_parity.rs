@@ -21,6 +21,7 @@ fn cache_binary_name_matches_pkg_fetch_matrix() -> Result<(), Box<dyn std::error
         ("node14", "14.21.3"),
         ("node16", "16.19.1"),
         ("node18", "18.15.0"),
+        ("node19", "19.8.1"),
     ];
     let combos = [
         ("alpine", "x64"),

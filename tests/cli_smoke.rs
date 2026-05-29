@@ -330,10 +330,11 @@ fn cli_help_matches_js_help_text() -> TestResult {
 fn cli_version_flag_prints_bare_pkg_version_like_js() -> TestResult {
     // test-78-verify-pkg-version: JS prints the bare pkg version for `-v`.
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected = format!("{}\n", pkg_rust::PKG_VERSION);
     for flag in ["--version", "-v"] {
         let output = run_cli(manifest_dir, [flag])?;
         assert!(output.status.success(), "pkg {flag} failed");
-        assert_eq!(String::from_utf8_lossy(&output.stdout), "5.8.1\n");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
     }
     Ok(())
 }

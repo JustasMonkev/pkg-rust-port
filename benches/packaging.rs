@@ -60,14 +60,20 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
     ] {
         let name = format!("produce_manifest_{label}_require_resolve_fixture");
         criterion.bench_function(&name, |bencher| {
-            bencher.iter(|| {
-                let result = produce_manifest(
-                    black_box(packed.clone()),
-                    black_box(compression),
-                    black_box(PathStyle::Posix),
-                );
-                black_box(require(result, "failed to run producer manifest benchmark"))
-            });
+            // Clone the packed input in the (untimed) setup so the measurement
+            // reflects production cost only, not the clone.
+            bencher.iter_batched(
+                || packed.clone(),
+                |input| {
+                    let result = produce_manifest(
+                        black_box(input),
+                        black_box(compression),
+                        black_box(PathStyle::Posix),
+                    );
+                    black_box(require(result, "failed to run producer manifest benchmark"))
+                },
+                criterion::BatchSize::SmallInput,
+            );
         });
     }
 
@@ -85,11 +91,12 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
         });
     });
 
-    criterion.bench_function("prelude_template_debug_vs_release", |bencher| {
-        bencher.iter(|| {
-            black_box(prelude_template(black_box(false)));
-            black_box(prelude_template(black_box(true)));
-        });
+    criterion.bench_function("prelude_template_release", |bencher| {
+        bencher.iter(|| black_box(prelude_template(black_box(false))));
+    });
+
+    criterion.bench_function("prelude_template_debug", |bencher| {
+        bencher.iter(|| black_box(prelude_template(black_box(true))));
     });
 }
 

@@ -3,6 +3,20 @@
 //! These are the original pkg 5.8.1 runtime prelude sources. They execute
 //! inside the packaged Node binary at runtime, so they remain JavaScript, but
 //! they are embedded here as Rust string data rather than separate `.js` files.
+//!
+//! # Provenance
+//!
+//! - Upstream: <https://github.com/vercel/pkg> tag `5.8.1`
+//! - `BOOTSTRAP_SOURCE` = `prelude/bootstrap.js`
+//!   SHA-256 `2996524fa0711d61874bc273ab8bd1739623d303858099f7ec67de8d145216c9`
+//! - `DIAGNOSTIC_SOURCE` = `prelude/diagnostic.js`
+//!   SHA-256 `e1bea496f7140aaf2909ff10b5af8519c5467f62b1af264475a4b1493dfb98f8`
+//!
+//! The constants are verbatim copies (verified byte-identical to the hashes
+//! above) except that `%VERSION%` in the bootstrap is substituted at render
+//! time. To regenerate, fetch the two files at the tag above and re-embed them
+//! as raw string constants. Both sources are plain ASCII (no hidden or
+//! bidirectional Unicode).
 
 /// pkg 5.8.1 `prelude/bootstrap.js`, still containing the `%VERSION%` token.
 pub(crate) const BOOTSTRAP_SOURCE: &str = r####"/* eslint-disable import/no-unresolved */

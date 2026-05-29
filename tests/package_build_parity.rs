@@ -66,59 +66,184 @@ impl TargetBinaryProvider for RecordingProvider {
     }
 }
 
-#[test]
-fn bytecode_fabricator_target_uses_host_platform_not_output_platform()
--> Result<(), Box<dyn std::error::Error>> {
-    use pkg_rust::{Arch, Platform};
-
-    let output =
-        std::env::temp_dir().join(format!("pkg-rust-fabricator-target-{}", std::process::id()));
+fn recorded_targets_for(target: &str) -> Result<Vec<NodeTarget>, Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-fabricator-target-{}-{}",
+        std::process::id(),
+        target.replace(['-', ',', ' '], "_")
+    ));
     let output_text = output
         .to_str()
         .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
-    // Build a Windows target. Bytecode is on by default, so the fabricator
-    // target must be the host platform with the Windows target's node range and
-    // arch -- never the Windows platform, which cannot run on the build host.
     let plan = plan_package([
         "--target",
-        "node18-win-x64",
+        target,
         "--output",
         output_text,
         "test/test-50-api/test-x-index.js",
     ])?;
-
     let provider = RecordingProvider::new();
     build_package_with_provider(
         &plan,
         &provider,
         "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
     )?;
-
-    let requested = provider.requested.borrow();
-    let host_platform = Platform::host().to_string();
-    // The output target binary is fetched for the Windows platform.
-    assert!(
-        requested
-            .iter()
-            .any(|target| target.platform == Platform::Win && target.arch == Arch::X64),
-        "expected a Windows output binary request, got {requested:?}"
-    );
-    // The fabricator binary is fetched for the host platform, same node range
-    // and arch, and is never the Windows platform.
-    assert!(
-        requested.iter().any(|target| {
-            target.platform.to_string() == host_platform
-                && target.arch == Arch::X64
-                && target.node_range == "node18"
-        }),
-        "expected a host-platform ({host_platform}) fabricator request, got {requested:?}"
-    );
-    assert_ne!(
-        host_platform, "win",
-        "this assertion only proves the fix on non-Windows hosts"
-    );
-
     let _ignored = std::fs::remove_file(&output);
+    let recorded = provider.requested.borrow().clone();
+    Ok(recorded)
+}
+
+// On a non-Windows host, building a Windows output: bytecode must be fabricated
+// by a host-platform binary (the Windows output binary cannot run here), so the
+// fabricator request uses the host platform, never Windows.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn bytecode_fabricator_target_is_host_platform_for_windows_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let recorded = recorded_targets_for("node18-win-x64")?;
+    let host = Platform::host().to_string();
+    assert_ne!(host, "win", "this test must run on a non-Windows host");
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Win && t.arch == Arch::X64),
+        "expected a Windows output binary request, got {recorded:?}"
+    );
+    assert!(
+        recorded.iter().any(|t| t.platform.to_string() == host
+            && t.arch == Arch::X64
+            && t.node_range == "node18"),
+        "expected a host-platform ({host}) fabricator request, got {recorded:?}"
+    );
+    Ok(())
+}
+
+// On a Windows host, building a Linux output: the fabricator request uses the
+// Windows host platform (the mirror of the non-Windows case).
+#[cfg(target_os = "windows")]
+#[test]
+fn bytecode_fabricator_target_is_windows_host_for_linux_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let recorded = recorded_targets_for("node18-linux-x64")?;
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Linux && t.arch == Arch::X64),
+        "expected a Linux output binary request, got {recorded:?}"
+    );
+    assert!(
+        recorded.iter().any(|t| t.platform == Platform::Win
+            && t.arch == Arch::X64
+            && t.node_range == "node18"),
+        "expected a Windows host fabricator request, got {recorded:?}"
+    );
+    Ok(())
+}
+
+// Proves the fetched fabricator binary is actually executed (not merely
+// selected): the provider answers the host fabricator target with a runnable
+// script that records a marker, and the build must invoke it.
+#[cfg(unix)]
+struct ScriptFabricatorProvider {
+    script: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl TargetBinaryProvider for ScriptFabricatorProvider {
+    fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        use pkg_rust::Platform;
+        if target.platform == Platform::Win {
+            Ok(binary_with_placeholders())
+        } else {
+            std::fs::read(&self.script).map_err(|source| PkgError::Io {
+                path: self.script.display().to_string(),
+                source,
+            })
+        }
+    }
+
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        use pkg_rust::Platform;
+        let bytes = self.binary_for(target)?;
+        let binary = TargetBinary::from_bytes(bytes);
+        if target.platform == Platform::Win {
+            // Output base binary: bytes only, no runnable path.
+            Ok(binary)
+        } else {
+            // Host fabricator binary: a runnable script on disk.
+            Ok(binary.with_path(self.script.clone()))
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn bytecode_fabricator_binary_is_actually_executed() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!("pkg-rust-fab-invoke-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root)?;
+    let app = root.join("app.js");
+    std::fs::write(&app, b"module.exports = 42;\n")?;
+    let marker = root.join("fabricator-invoked");
+    let script = root.join("fab-node");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf 'run\\n' >> '{}'\nexit 7\n",
+            marker.display()
+        ),
+    )?;
+    let mut permissions = std::fs::metadata(&script)?.permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&script, permissions)?;
+
+    let output = root.join("out");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let app_text = app
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary app path must be utf-8".to_owned()))?;
+    // Build a Windows output on this Unix host, so the fabricator target is the
+    // Unix host platform, which the provider answers with the runnable script.
+    let plan = plan_package([
+        "--public",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        app_text,
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &ScriptFabricatorProvider {
+            script: script.clone(),
+        },
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    assert!(
+        marker.is_file(),
+        "the fabricator binary was not executed (no marker written)"
+    );
+    assert!(
+        build.warnings.iter().any(|warning| matches!(
+            warning,
+            // Windows targets use backslash snapshot paths, so match either separator.
+            PackageWarning::BytecodeFabricationFailed { snap, .. } if snap.ends_with("app.js")
+        )),
+        "expected a bytecode fabrication warning from the failing fabricator, got {:?}",
+        build.warnings
+    );
+
+    std::fs::remove_dir_all(root)?;
     Ok(())
 }
 
