@@ -15,7 +15,7 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -61,7 +61,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
 
 #[test]
 fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,

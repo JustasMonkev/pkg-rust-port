@@ -87,7 +87,7 @@ impl Marker {
     /// # Example
     ///
     /// ```
-    /// let marker = pkg_rust::Marker::from_package_path("../test/test-46-input-package-json/package.json")?;
+    /// let marker = pkg_rust::Marker::from_package_path("test/test-46-input-package-json/package.json")?;
     /// assert!(marker.package().name.is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -302,8 +302,8 @@ impl FileRecord {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// let record = output.record("../test/test-50-require-resolve/test-z-require-code-1.js");
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// let record = output.record("test/test-50-require-resolve/test-z-require-code-1.js");
     /// assert!(record.is_some_and(|record| record.has_store(pkg_rust::StoreKind::Blob)));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -496,8 +496,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.record("../test/test-50-require-resolve/test-z-require-code-1.js").is_some());
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.record("test/test-50-require-resolve/test-z-require-code-1.js").is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -516,8 +516,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.contains_store("../test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.contains_store("test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -1121,8 +1121,8 @@ fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<Packag
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
-/// assert!(output.contains_store("../test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
+/// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
+/// assert!(output.contains_store("test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 pub fn walk(

@@ -1,6 +1,6 @@
 const ORIGINAL_PACKAGE_VERSION: &str = "5.8.1";
-const BOOTSTRAP_SOURCE: &str = include_str!("../../prelude/bootstrap.js");
-const DIAGNOSTIC_SOURCE: &str = include_str!("../../prelude/diagnostic.js");
+const BOOTSTRAP_SOURCE: &str = include_str!("../assets/prelude/bootstrap.js");
+const DIAGNOSTIC_SOURCE: &str = include_str!("../assets/prelude/diagnostic.js");
 
 /// Build the JavaScript producer prelude template.
 ///
@@ -17,9 +17,10 @@ const DIAGNOSTIC_SOURCE: &str = include_str!("../../prelude/diagnostic.js");
 /// ```
 #[must_use]
 pub fn prelude_template(debug: bool) -> String {
-    // DECISION: during the migration, read the original runtime bootstrap from
-    // the parent JS repo instead of copying it into rust-port; this preserves
-    // runtime parity without vendoring the JS source inside the Rust crate.
+    // The runtime bootstrap and diagnostic preludes are vendored verbatim from
+    // the original pkg 5.8.1 release under `assets/prelude/` and embedded as data
+    // with `include_str!`, so the crate is self-contained and produces runtime
+    // images byte-compatible with the JS prelude.
     let bootstrap = BOOTSTRAP_SOURCE.replace("%VERSION%", ORIGINAL_PACKAGE_VERSION);
     let diagnostic = if debug { DIAGNOSTIC_SOURCE } else { "" };
     format!(

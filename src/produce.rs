@@ -104,7 +104,7 @@ pub struct PlaceholderValues {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-content.css";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-content.css";
 /// let walked = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(walked, entrypoint, pkg_rust::PathStyle::Posix);
 /// let packed = pkg_rust::pack(refined, true)?;
@@ -141,13 +141,13 @@ pub fn produce_manifest(
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let walked = pkg_rust::walk(
 ///     pkg_rust::Marker::new(package),
-///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     "test/test-50-require-resolve/test-z-require-content.css",
 ///     None,
 ///     pkg_rust::WalkerParams::new(),
 /// )?;
 /// let refined = pkg_rust::refine_walked(
 ///     walked,
-///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     "test/test-50-require-resolve/test-z-require-content.css",
 ///     pkg_rust::PathStyle::Posix,
 /// );
 /// let packed = pkg_rust::pack(refined, true)?;

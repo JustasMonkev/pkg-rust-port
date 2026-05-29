@@ -37,7 +37,7 @@ fn require<T>(result: Result<T, PkgError>, context: &str) -> T {
 }
 
 fn packaging_benchmarks(criterion: &mut Criterion) {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let packed = require(
         packed_fixture(&fixture_dir, &entrypoint),

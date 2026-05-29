@@ -44,7 +44,7 @@ impl ResolveOptions {
 ///
 /// ```
 /// # use std::path::Path;
-/// let options = pkg_rust::ResolveOptions::new("../test/test-50-require-resolve");
+/// let options = pkg_rust::ResolveOptions::new("test/test-50-require-resolve");
 /// let resolved = pkg_rust::resolve_module("./test-z-require-code-1", &options)?;
 /// assert!(resolved.ends_with(Path::new("test-z-require-code-1.js")));
 /// # Ok::<(), pkg_rust::PkgError>(())

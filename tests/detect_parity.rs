@@ -7,7 +7,7 @@ use pkg_rust::{
 
 #[test]
 fn successful_debug_lines_match_ast_parsing_fixture() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-ast-parsing/test-y-data.txt");
+    let source = include_str!("../test/test-50-ast-parsing/test-y-data.txt");
     let expected = source
         .lines()
         .filter_map(|line| line.split_once("/***/ ").map(|(_prefix, suffix)| suffix))
@@ -20,7 +20,7 @@ fn successful_debug_lines_match_ast_parsing_fixture() -> Result<(), PkgError> {
 
 #[test]
 fn non_literal_and_cwd_lines_match_ast_parsing_2_fixture() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-ast-parsing-2/test-x-index.js");
+    let source = include_str!("../test/test-50-ast-parsing-2/test-x-index.js");
     let expected = source
         .lines()
         .filter_map(|line| line.split("/**/").nth(1))
@@ -60,7 +60,7 @@ fn detect_returns_typed_static_derivatives() -> Result<(), PkgError> {
 
 #[test]
 fn detect_accepts_commonjs_top_level_return() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-spawn/test-cluster.js");
+    let source = include_str!("../test/test-50-spawn/test-cluster.js");
     let uses = detect(source)?;
 
     assert!(uses.iter().any(|detected| matches!(
@@ -72,7 +72,7 @@ fn detect_accepts_commonjs_top_level_return() -> Result<(), PkgError> {
 
 #[test]
 fn detect_finds_spawn_child_require_resolve() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-spawn/test-cpfork-a-1.js");
+    let source = include_str!("../test/test-50-spawn/test-cpfork-a-1.js");
     let uses = detect(source)?;
 
     assert!(uses.iter().any(|detected| matches!(

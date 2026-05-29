@@ -27,7 +27,7 @@ pub struct RefinedOutput {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-code-1.js";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-code-1.js";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine(output, entrypoint, pkg_rust::SymlinkMap::new(), pkg_rust::PathStyle::Posix);
 /// assert_eq!(refined.entrypoint, "/test-z-require-code-1.js");
@@ -220,7 +220,7 @@ fn directory_stat(file: &Path) -> FileStat {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-code-1.js";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-code-1.js";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
 /// assert_eq!(refined.entrypoint, "/test-z-require-code-1.js");

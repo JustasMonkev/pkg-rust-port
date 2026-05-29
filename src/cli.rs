@@ -129,7 +129,7 @@ pub struct PackagePlan {
 ///     "linux,win",
 ///     "--output",
 ///     output.to_str().ok_or_else(|| pkg_rust::PkgError::Cli("non-utf8 temp path".to_owned()))?,
-///     "../test/test-46-input-package-json",
+///     "test/test-46-input-package-json",
 /// ])?;
 /// assert_eq!(plan.outputs.len(), 2);
 /// assert!(plan.outputs[1].output.ends_with("pkg-rust-plan-demo-win.exe"));

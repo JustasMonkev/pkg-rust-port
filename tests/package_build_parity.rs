@@ -59,7 +59,7 @@ fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std:
         output_text,
         "--options",
         "trace-warnings",
-        "../test/test-50-require-resolve/test-x-index.js",
+        "test/test-50-require-resolve/test-x-index.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -99,7 +99,7 @@ fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error:
         "linux",
         "--output",
         output_text,
-        "../test/test-50-api/test-x-index.js",
+        "test/test-50-api/test-x-index.js",
     ])?;
 
     build_package_with_provider(
@@ -366,7 +366,7 @@ fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
         "linux",
         "--output",
         output_text,
-        "../test/test-50-package-json-6b/node_modules/alpha/alpha.js",
+        "test/test-50-package-json-6b/node_modules/alpha/alpha.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -398,7 +398,7 @@ fn escaped_dependency_falls_back_to_common_snapshot_denominator()
         "linux",
         "--output",
         output_text,
-        "../test/test-50-native-addon-3/lib/test-x-index.js",
+        "test/test-50-native-addon-3/lib/test-x-index.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -433,7 +433,7 @@ fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Erro
         "linux",
         "--output",
         output_text,
-        "../test/test-50-api/test-x-index.js",
+        "test/test-50-api/test-x-index.js",
     ])?;
 
     let error = build_package_with_provider(

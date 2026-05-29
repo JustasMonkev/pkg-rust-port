@@ -14,7 +14,7 @@ const TARGET_NODE_ORACLE_WRAPPER: &str = "const input = process.env.PKG_RUST_ORA
 #[test]
 fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-api");
+    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-api");
     let Some(run_result) = package_and_run_real_fixture("api", &fixture_dir, "test-x-index.js")?
     else {
         return Ok(());
@@ -27,7 +27,7 @@ fn js_api_happy_path_demo_runs_when_real_cache_is_configured()
 fn require_resolve_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-require-resolve");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-require-resolve");
     package_and_compare_fixture(
         "require-resolve",
         &fixture_dir,
@@ -40,7 +40,7 @@ fn require_resolve_fixture_runs_when_real_cache_is_configured()
 fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-fs-runtime-layer");
     package_and_compare_fixture("fs-runtime", &fixture_dir, "test-x-index.js", ".")
 }
 
@@ -48,7 +48,7 @@ fn filesystem_asset_fixture_runs_when_real_cache_is_configured()
 fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer-3");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-fs-runtime-layer-3");
     let Some(run_result) =
         package_and_run_real_fixture("fs-runtime-layer-3", &fixture_dir, "test-x-index.js")?
     else {
@@ -66,7 +66,7 @@ fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
 fn filesystem_runtime_layer_2_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-fs-runtime-layer-2");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-fs-runtime-layer-2");
     let expected = Command::new("node")
         .current_dir(&fixture_dir)
         .arg("test-x-index.js")
@@ -91,7 +91,7 @@ fn filesystem_runtime_layer_2_runs_when_real_cache_is_configured()
 fn arguments_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-arguments");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-arguments");
     for (name, arg, expected) in [
         ("arguments-number", "42", "42\n"),
         ("arguments-short-flag", "-ft", "-ft\n"),
@@ -110,7 +110,7 @@ fn arguments_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn 
 #[test]
 fn modern_js_runtime_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     for (name, fixture) in [
         ("class-to-string", "test-50-class-to-string"),
         ("object-spread", "test-50-object-spread"),
@@ -130,7 +130,7 @@ fn modern_js_runtime_fixtures_run_when_real_cache_is_configured()
 #[test]
 fn path_and_resolution_runtime_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     for (name, fixture, package_input) in [
         (
             "path-as-buffer",
@@ -154,7 +154,7 @@ fn path_and_resolution_runtime_fixtures_run_when_real_cache_is_configured()
 fn require_edge_cases_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-require-edge-cases");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-require-edge-cases");
     package_and_compare_fixture(
         "require-edge-cases",
         &fixture_dir,
@@ -166,8 +166,8 @@ fn require_edge_cases_fixture_runs_when_real_cache_is_configured()
 #[test]
 fn require_with_config_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-require-with-config");
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-require-with-config");
     package_and_compare_fixture("require-with-config", &fixture_dir, "test-x-index.js", ".")
 }
 
@@ -175,7 +175,7 @@ fn require_with_config_fixture_runs_when_real_cache_is_configured()
 fn global_object_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-global-object");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-global-object");
     package_and_compare_fixture("global-object", &fixture_dir, "test-x-index.js", ".")
 }
 
@@ -183,7 +183,7 @@ fn global_object_fixture_runs_when_real_cache_is_configured()
 fn promisify_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-promisify");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-promisify");
     package_and_compare_fixture(
         "promisify",
         &fixture_dir,
@@ -196,7 +196,7 @@ fn promisify_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn 
 fn compression_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-80-compression");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-80-compression");
     for (name, algorithm, cli_label) in [
         ("compression-none", "None", None),
         ("compression-gzip", "GZip", Some("compression:  GZip")),
@@ -229,7 +229,7 @@ fn compression_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dy
 #[test]
 fn mountpoint_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
 
     let Some(mountpoints) = package_and_run_real_fixture_with_options(
         "mountpoints",
@@ -290,7 +290,7 @@ fn mountpoint_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn
 #[test]
 fn issue_regression_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
 
     let copy_fixture = root.join("test-99-#420-copy-from-snapshot");
     let Some(copy_from_snapshot) = package_and_run_real_fixture_with_options(
@@ -362,7 +362,7 @@ fn windows_issue_regression_fixtures_run_when_real_cache_is_configured()
         return Ok(());
     };
 
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     run_windows_issue_1861(&root, &cache_root)?;
     run_windows_issue_1207(&root, &cache_root)?;
     Ok(())
@@ -379,7 +379,7 @@ fn npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::e
         return Ok(());
     }
 
-    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-99-#1192");
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-99-#1192");
     let fixture_dir = copied_fixture("issue-1192-express-pug-work", &source)?;
     let install = Command::new("npm")
         .current_dir(&fixture_dir)
@@ -445,7 +445,7 @@ fn public_npm_dictionary_fixtures_run_when_install_is_enabled()
         return Ok(());
     }
 
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-79-npm");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-79-npm");
     for fixture in [
         PublicNpmFixture {
             name: "npm-connect",
@@ -939,7 +939,7 @@ fn public_npm_target_node_oracle_probe_runs_when_enabled() -> Result<(), Box<dyn
     };
     let fixture = public_npm_probe_fixture(&probe_name)
         .ok_or_else(|| format!("unknown public npm target-node oracle probe: {probe_name}"))?;
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-79-npm");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-79-npm");
     let source = root.join(fixture.fixture_subdir);
     let fixture_dir = copied_fixture(&format!("{}-target-oracle-work", fixture.name), &source)?;
     install_public_npm_packages(
@@ -975,7 +975,7 @@ fn native_npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn
         return Ok(());
     }
 
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     run_native_npm_issue_1135(&root)?;
     run_native_npm_issue_1191(&root)?;
     Ok(())
@@ -1509,8 +1509,7 @@ fn package_real_fixture_to_output_with_cwd(
 #[test]
 fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-inspect");
+    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-inspect");
     let Some(_run_result) = package_and_run_real_fixture_with_options(
         "inspect",
         &fixture_dir,
@@ -1532,7 +1531,7 @@ fn inspect_fixture_exits_with_node_inspect_code_when_real_cache_is_configured()
 fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-chdir-env-var");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-chdir-env-var");
     let Some(run_result) = package_and_run_real_fixture_with_args_and_package_env(
         "chdir-env-var",
         &fixture_dir,
@@ -1550,7 +1549,7 @@ fn chdir_env_var_fixture_runs_when_real_cache_is_configured()
 #[test]
 fn console_trace_fixture_reports_packaged_stack_paths() -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-console-trace");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-console-trace");
     let Some(run_result) =
         package_and_run_real_fixture("console-trace", &fixture_dir, "test-x-index.js")?
     else {
@@ -1582,8 +1581,8 @@ fn console_trace_fixture_reports_packaged_stack_paths() -> Result<(), Box<dyn st
 #[test]
 fn error_source_position_fixture_reports_original_pointer() -> Result<(), Box<dyn std::error::Error>>
 {
-    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-error-source-position");
+    let fixture_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-error-source-position");
     let Some(run_result) = package_and_run_real_fixture_with_options(
         "error-source-position",
         &fixture_dir,
@@ -1615,7 +1614,7 @@ fn error_source_position_fixture_reports_original_pointer() -> Result<(), Box<dy
 fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>>
 {
     let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-may-exclude");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-may-exclude");
     package_and_compare_fixture(
         "may-exclude",
         &fixture_dir,
@@ -1627,7 +1626,7 @@ fn may_exclude_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dy
 #[test]
 fn not_found_wording_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
 
     let first_fixture = root.join("test-50-not-found-wording");
     let Some(run_result) =
@@ -1658,8 +1657,7 @@ fn not_found_wording_fixtures_run_when_real_cache_is_configured()
 
 #[test]
 fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-spawn");
+    let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-spawn");
     for input in [
         "test-cluster.js",
         "test-cpfork-a-1.js",
@@ -1694,7 +1692,7 @@ fn spawn_fixtures_run_when_real_cache_is_configured() -> Result<(), Box<dyn std:
 #[test]
 fn native_addon_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     for (name, fixture, input) in [
         ("native-addon", "test-50-native-addon", "test-x-index.js"),
         (
@@ -1731,7 +1729,7 @@ fn native_addon_fixtures_run_when_real_cache_is_configured()
 #[test]
 fn package_json_files_fixtures_run_when_real_cache_is_configured()
 -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test");
     for (name, fixture, node_input, package_input) in [
         (
             "package-json",

@@ -37,7 +37,7 @@ pub struct PackedOutput {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-content.css";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-content.css";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
 /// let packed = pkg_rust::pack(refined, true)?;

@@ -129,7 +129,7 @@ pub struct PackageBuild {
 ///     "linux",
 ///     "--output",
 ///     output_text,
-///     "../test/test-50-require-resolve/test-x-index.js",
+///     "test/test-50-require-resolve/test-x-index.js",
 /// ])?;
 /// let build = pkg_rust::build_package_with_provider(
 ///     &plan,

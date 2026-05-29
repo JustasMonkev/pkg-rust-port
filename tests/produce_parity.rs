@@ -19,7 +19,7 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn builds_uncompressed_vfs_manifest_from_packed_stripes() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -83,7 +83,7 @@ fn snapshotifies_symlinks_in_manifest() -> Result<(), Box<dyn std::error::Error>
 
 #[test]
 fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -112,7 +112,7 @@ fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgE
 
 #[test]
 fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -132,7 +132,7 @@ fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
 
 #[test]
 fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -160,7 +160,7 @@ fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
 
 #[test]
 fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -289,7 +289,7 @@ fn injection_errors_when_placeholder_is_missing() {
 
 #[test]
 fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -330,7 +330,7 @@ fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), Pkg
 
 #[test]
 fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -356,7 +356,7 @@ fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), Pk
 
 #[test]
 fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,

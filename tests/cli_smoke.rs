@@ -17,7 +17,7 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
     let cache_root = temp_root.join("cache");
     let output = temp_root.join("demo-bin");
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let input = "../test/test-50-require-resolve/test-x-index.js";
+    let input = "test/test-50-require-resolve/test-x-index.js";
     let target = parse_targets("node18-macos-arm64", &TargetDefaults::host("node18"))?
         .targets
         .into_iter()
@@ -80,7 +80,7 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-2");
+        .join("test/test-50-invalid-package-json-2");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -127,8 +127,7 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
     let output_text = output_path
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-config-log");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-config-log");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -174,7 +173,7 @@ fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-may-exclude-must-exclude");
+        .join("test/test-50-may-exclude-must-exclude");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -248,8 +247,8 @@ fn cli_reports_missing_input_like_js_invalid_fixture() -> TestResult {
 
 #[test]
 fn cli_reports_missing_package_json_like_js_invalid_fixture() -> TestResult {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json");
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-invalid-package-json");
     let output = run_cli(
         &fixture,
         [
@@ -268,7 +267,7 @@ fn cli_reports_missing_package_json_like_js_invalid_fixture() -> TestResult {
 #[test]
 fn cli_reports_missing_package_bin_like_js_invalid_fixture() -> TestResult {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-bin");
+        .join("test/test-50-invalid-package-json-bin");
     let output = run_cli(
         &fixture,
         [
@@ -290,7 +289,7 @@ fn cli_reports_missing_package_bin_like_js_invalid_fixture() -> TestResult {
 #[test]
 fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-bin-2");
+        .join("test/test-50-invalid-package-json-bin-2");
     let output = run_cli(
         &fixture,
         [
@@ -308,8 +307,8 @@ fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult 
 
 #[test]
 fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-unknown-token");
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-invalid-unknown-token");
     let output = run_cli(
         &fixture,
         [
@@ -327,8 +326,7 @@ fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
 
 #[test]
 fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-80-compression");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-80-compression");
     let output = run_cli(
         &fixture,
         [
