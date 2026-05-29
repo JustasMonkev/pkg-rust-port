@@ -63,6 +63,7 @@ pub use crate::macho::{patch_macho_executable, sign_macho_executable};
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,
+    fabricator_for_target,
 };
 pub use crate::prelude::prelude_template;
 pub use crate::produce::{

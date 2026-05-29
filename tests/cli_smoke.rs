@@ -23,14 +23,7 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
         .into_iter()
         .next()
         .ok_or_else(|| "target parser returned no targets".to_owned())?;
-    let cache = PkgFetchCache::new(&cache_root);
-    let built = cache.binary_path(&target, BinaryKind::Built)?;
-    fs::create_dir_all(
-        built
-            .parent()
-            .ok_or_else(|| "cache binary path has no parent".to_owned())?,
-    )?;
-    fs::write(&built, binary_with_placeholders())?;
+    seed_cached_target(&cache_root, &target)?;
 
     let output_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(manifest_dir)
@@ -369,14 +362,26 @@ fn seed_cached_binary(cache_root: &Path, target: &str) -> Result<(), Box<dyn std
         .into_iter()
         .next()
         .ok_or_else(|| "target parser returned no targets".to_owned())?;
+    seed_cached_target(cache_root, &target)
+}
+
+/// Seed the output target binary and its host-platform fabricator binary so
+/// bytecode packaging stays offline. The fabricator binary holds placeholder
+/// bytes, so fabrication falls back to host `node` like the other stub tests.
+fn seed_cached_target(
+    cache_root: &Path,
+    target: &pkg_rust::NodeTarget,
+) -> Result<(), Box<dyn std::error::Error>> {
     let cache = PkgFetchCache::new(cache_root);
-    let built = cache.binary_path(&target, BinaryKind::Built)?;
-    fs::create_dir_all(
-        built
-            .parent()
-            .ok_or_else(|| "cache binary path has no parent".to_owned())?,
-    )?;
-    fs::write(&built, binary_with_placeholders())?;
+    for seed in [target.clone(), pkg_rust::fabricator_for_target(target)] {
+        let built = cache.binary_path(&seed, BinaryKind::Built)?;
+        fs::create_dir_all(
+            built
+                .parent()
+                .ok_or_else(|| "cache binary path has no parent".to_owned())?,
+        )?;
+        fs::write(&built, binary_with_placeholders())?;
+    }
     Ok(())
 }
 

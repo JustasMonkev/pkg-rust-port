@@ -401,9 +401,11 @@ fn build_manifest_and_payload(
         let snap = snapshotify(&stripe.snap, style);
         let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
         let payload_bytes = if stripe.store == StoreKind::Blob {
-            // DECISION: prefer target-specific bytecode when the provider
-            // exposes a runnable target binary path; fall back to host `node`
-            // for deterministic in-memory test providers.
+            // The package builder resolves a host-platform fabricator binary
+            // (matching the target node range and arch) and passes its path
+            // here. When no runnable fabricator path is available -- only the
+            // deterministic in-memory test providers -- fabrication falls back
+            // to host `node`.
             let request = match fabricator_path {
                 Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
                 None => FabricateRequest::new(&snap, &stripe_bytes),

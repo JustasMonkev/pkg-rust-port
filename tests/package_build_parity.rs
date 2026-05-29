@@ -45,6 +45,115 @@ impl TargetBinaryProvider for ExecutableStubBinaryWithPath {
     }
 }
 
+/// Records every target requested from the provider so a test can verify the
+/// separate fabricator target selection.
+struct RecordingProvider {
+    requested: std::cell::RefCell<Vec<NodeTarget>>,
+}
+
+impl RecordingProvider {
+    fn new() -> Self {
+        Self {
+            requested: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl TargetBinaryProvider for RecordingProvider {
+    fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        self.requested.borrow_mut().push(target.clone());
+        Ok(binary_with_placeholders())
+    }
+}
+
+#[test]
+fn bytecode_fabricator_target_uses_host_platform_not_output_platform()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let output =
+        std::env::temp_dir().join(format!("pkg-rust-fabricator-target-{}", std::process::id()));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    // Build a Windows target. Bytecode is on by default, so the fabricator
+    // target must be the host platform with the Windows target's node range and
+    // arch -- never the Windows platform, which cannot run on the build host.
+    let plan = plan_package([
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let requested = provider.requested.borrow();
+    let host_platform = Platform::host().to_string();
+    // The output target binary is fetched for the Windows platform.
+    assert!(
+        requested
+            .iter()
+            .any(|target| target.platform == Platform::Win && target.arch == Arch::X64),
+        "expected a Windows output binary request, got {requested:?}"
+    );
+    // The fabricator binary is fetched for the host platform, same node range
+    // and arch, and is never the Windows platform.
+    assert!(
+        requested.iter().any(|target| {
+            target.platform.to_string() == host_platform
+                && target.arch == Arch::X64
+                && target.node_range == "node18"
+        }),
+        "expected a host-platform ({host_platform}) fabricator request, got {requested:?}"
+    );
+    assert_ne!(
+        host_platform, "win",
+        "this assertion only proves the fix on non-Windows hosts"
+    );
+
+    let _ignored = std::fs::remove_file(&output);
+    Ok(())
+}
+
+#[test]
+fn no_bytecode_skips_fabricator_binary_fetch() -> Result<(), Box<dyn std::error::Error>> {
+    let output =
+        std::env::temp_dir().join(format!("pkg-rust-fabricator-skip-{}", std::process::id()));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--no-bytecode",
+        "--public",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    // Without bytecode there is no fabricator, so only the output target binary
+    // is requested.
+    assert_eq!(provider.requested.borrow().len(), 1);
+
+    let _ignored = std::fs::remove_file(&output);
+    Ok(())
+}
+
 #[test]
 fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std::error::Error>> {
     let output =
