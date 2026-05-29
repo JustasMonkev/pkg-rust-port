@@ -299,6 +299,34 @@ fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult 
 }
 
 #[test]
+fn cli_help_matches_js_help_text() -> TestResult {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = run_cli(manifest_dir, ["--help"])?;
+    assert!(output.status.success(), "pkg --help failed");
+    let help = String::from_utf8_lossy(&output.stdout);
+
+    // Flag descriptions ported verbatim from JS help.ts.
+    for fragment in [
+        "comma-separated list of targets (see examples)",
+        "package.json or any json file with top-level config",
+        "bake v8 options into executable to run with them on",
+        "don't download prebuilt base binaries, build them",
+        "speed up and disclose the sources of top-level project",
+        "force specified packages to be considered public",
+        "skip bytecode generation and include source files as plain js",
+        "[default=None] compression algorithm = Brotli or GZip",
+    ] {
+        assert!(help.contains(fragment), "help missing {fragment:?}");
+    }
+
+    // Examples section ported from JS help.ts.
+    assert!(help.contains("Examples:"));
+    assert!(help.contains("$ pkg -t node12-linux,node14-linux,node14-win index.js"));
+    assert!(help.contains("$ pkg --compress GZip index.js"));
+    Ok(())
+}
+
+#[test]
 fn cli_version_flag_prints_bare_pkg_version_like_js() -> TestResult {
     // test-78-verify-pkg-version: JS prints the bare pkg version for `-v`.
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
