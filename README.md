@@ -65,10 +65,16 @@ against the embedded SHA-256 table.
 - Mach-O patching and ad-hoc signing are wired for macOS outputs when
   `codesign` or `ldid` is available; fake-binary smoke tests use
   `--no-signature`.
-- Bytecode fabrication can use a real target binary when a runnable cached
-  binary path is available; otherwise tests fall back to host `node`.
-- The JS suite remains the behavioral oracle until every fixture has a Rust
-  equivalent.
+- Bytecode is fabricated by a host-platform fabricator binary that matches the
+  output target's node range and arch (pkg's `fabricatorForTarget`), so
+  cross-platform builds do not run the output target binary; in-memory test
+  providers fall back to host `node`.
+- The `--build` Node-from-source path lives in the separate `pkg-fetch` package
+  and is out of scope: the CLI passes `forceBuild` through and requires a built
+  cache artifact for those targets.
+- The JS suite remains the behavioral oracle only for the opt-in network, npm,
+  and native fixtures; every offline-testable mapped fixture has a Rust parity
+  test.
 - The real runtime smoke is opt-in because it needs a real cached pkg-fetch
   binary and, on Apple silicon, Rosetta for the `node18-macos-x64` target.
 

@@ -6,6 +6,51 @@ use pkg_rust::{
     BinaryKind, PkgError, PkgFetchCache, TargetBinaryProvider, TargetDefaults, parse_targets,
 };
 
+/// test-42-fetch-all (offline analog): the cache binary name follows
+/// pkg-fetch's `{prefix}-v{version}-{platform}-{arch}` convention across the
+/// known platform/arch/node-range matrix, so the same targets the JS fetch
+/// integration enumerates resolve to the correct cache entries.
+#[test]
+fn cache_binary_name_matches_pkg_fetch_matrix() -> Result<(), Box<dyn std::error::Error>> {
+    let cache = PkgFetchCache::new("/tmp/pkg-cache");
+    let defaults = TargetDefaults::host("node18");
+    let versions = [
+        ("node8", "8.17.0"),
+        ("node10", "10.24.1"),
+        ("node12", "12.22.11"),
+        ("node14", "14.21.3"),
+        ("node16", "16.19.1"),
+        ("node18", "18.15.0"),
+    ];
+    let combos = [
+        ("alpine", "x64"),
+        ("alpine", "arm64"),
+        ("linux", "x64"),
+        ("linux", "arm64"),
+        ("linuxstatic", "x64"),
+        ("linuxstatic", "arm64"),
+        ("macos", "x64"),
+        ("macos", "arm64"),
+        ("win", "x64"),
+        ("freebsd", "x64"),
+    ];
+
+    for (node_range, version) in versions {
+        for (platform, arch) in combos {
+            let spec = format!("{node_range}-{platform}-{arch}");
+            let target = parse_targets(&spec, &defaults)?.targets.remove(0);
+            assert_eq!(
+                cache.binary_path(&target, BinaryKind::Fetched)?,
+                std::path::PathBuf::from(format!(
+                    "/tmp/pkg-cache/v3.5/fetched-v{version}-{platform}-{arch}"
+                )),
+                "unexpected cache name for {spec}"
+            );
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn cache_path_matches_pkg_fetch_local_place() -> Result<(), Box<dyn std::error::Error>> {
     let cache = PkgFetchCache::new("/tmp/pkg-cache");

@@ -10,8 +10,18 @@
   fetched binaries.
 - Added producer prelude assembly using the original runtime bootstrap and a
   generated plain-JS common helper.
-- Added bytecode payload fabrication via Node cached data, with target-binary
-  path support when a runnable cached binary is available.
+- Added bytecode payload fabrication via Node cached data. Bytecode is produced
+  by a host-platform fabricator binary that matches the output target's node
+  range and architecture (pkg's `fabricatorForTarget`), so cross-platform
+  builds no longer depend on running the output target binary or host `node`.
+- Vendored the pkg 5.8.1 runtime prelude (`assets/prelude/`) and the referenced
+  `test/` fixtures so the crate is fully self-contained and builds without the
+  original JS repository alongside it.
+- Reported the mirrored pkg version (5.8.1) for `-v`/`--version` and the
+  `pkg@5.8.1` startup banner, and injected it as `process.versions.pkg` in the
+  runtime prelude, matching the JS package.
+- Ported test-77 dictionary/fixture consistency, test-78 version reporting, and
+  a test-42 fetch-naming matrix as offline parity tests.
 - Added native addon prebuild selection and `prebuild-install` invocation for
   missing platform/version `.node` payloads.
 - Added macOS Mach-O payload patching, ad-hoc signing through `codesign`/`ldid`,

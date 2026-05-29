@@ -1707,3 +1707,18 @@ Verified: target-node oracle probing passes for `diff` with `PKG_RUST_INSTALL_NP
 Next: continue target-oracle-checking deterministic public npm fixtures before promotion, and keep deploy-file/native packages behind their separate gates.
 
 Decisions made: choose `diff` because it is deterministic, has no fixture meta/native/service requirements, and adds a behavior-level public package assertion. Capturing the package.json that supplied `main` is required for packages like current `diff`, where the selected CJS entry sits below a nested `libcjs/package.json`.
+
+## 2026-05-29 - Self-contained repo + port completion pass
+
+Shipped: made the extracted standalone repository build and test on its own and closed the remaining behavioral and parity gaps.
+
+- Vendored the pkg 5.8.1 runtime prelude into `assets/prelude/` (embedded with `include_str!`) and the referenced `test/` fixtures into the repository, then repointed every fixture reference. The crate previously read `../../prelude/*.js` and `../test/` from the original JS repo it was developed inside, so it did not even compile after extraction.
+- Replaced the interim host-`node` bytecode fabrication with pkg's `fabricatorForTarget`: bytecode is produced by a host-platform fabricator binary matching the output target's node range and arch (linuxstatic for cross-arch on linux), ad-hoc signed on macOS and made executable elsewhere. The host-`node` path remains only as a seam for in-memory test providers. Exposed `fabricator_for_target` and seeded the fabricator binary in the offline CLI smoke cache.
+- Reported the mirrored pkg version 5.8.1 for `-v`/`--version` (bare, like the JS `console.log(version)`), printed the `pkg@5.8.1` banner, and kept the prelude `process.versions.pkg` injection in sync via a shared public `PKG_VERSION`.
+- Ported the remaining offline-testable mapped suites: test-77 dictionary/fixture consistency (canonical dictionary list vendored as test data), test-78 version reporting, and a test-42 fetch-naming matrix across the platform/arch/node-range grid. Recreated the post-5.8.1 `test-99-#1861` Windows relaunch fixture. Added a real macOS `codesign` smoke gated to macOS. Expanded the Criterion benchmarks.
+
+Verified: full locked gate is green -- `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets`, `cargo test --locked --doc`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`.
+
+Next: the only remaining JS behaviors not exercised in-repo are the `--build` Node-from-source path (which lives in the separate pkg-fetch package, out of scope) and the opt-in network/npm/native fixtures behind their existing env gates.
+
+Decisions made: vendor prelude and fixtures into the repository rather than depend on an adjacent JS checkout, since the port is now a standalone crate. Keep the host-`node` fabrication seam for deterministic in-memory providers while the real provider path always fetches a host-platform fabricator binary.
