@@ -536,6 +536,96 @@ fn copies_deploy_files_next_to_output_executable() -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+// Security regression: a dependency's `pkg.deployFiles` must not be able to
+// write outside the output directory via an absolute path or `..` traversal.
+// A package-json input with a subpath bin makes a sibling node_modules marker
+// reachable, so its deployFiles are processed; the copy sink must contain them.
+#[test]
+fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-deploy-containment-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    let package_dir = root.join("package");
+    let output = root.join("dist").join("demo");
+    let escaped = root.join("escaped.txt");
+    let absolute_victim = root.join("absolute-victim.txt");
+    std::fs::create_dir_all(package_dir.join("src"))?;
+    std::fs::create_dir_all(package_dir.join("node_modules/evil"))?;
+    std::fs::write(
+        package_dir.join("src/index.js"),
+        "'use strict';\nrequire('evil');\nconsole.log('ok');\n",
+    )?;
+    std::fs::write(
+        package_dir.join("node_modules/evil/index.js"),
+        "module.exports = 1;\n",
+    )?;
+    std::fs::write(
+        package_dir.join("node_modules/evil/payload.txt"),
+        "attacker controlled\n",
+    )?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        serde_json::json!({
+            "name": "demo",
+            "bin": "src/index.js",
+            "dependencies": {"evil": "1.0.0"}
+        })
+        .to_string(),
+    )?;
+    let absolute_target = absolute_victim
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary victim path must be utf-8".to_owned()))?;
+    std::fs::write(
+        package_dir.join("node_modules/evil/package.json"),
+        serde_json::json!({
+            "name": "evil",
+            "main": "index.js",
+            "pkg": {
+                "deployFiles": [
+                    ["payload.txt", "safe/payload.txt"],
+                    ["payload.txt", "../escaped.txt"],
+                    ["payload.txt", absolute_target]
+                ]
+            }
+        })
+        .to_string(),
+    )?;
+
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let package_text = package_dir
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary package path must be utf-8".to_owned()))?;
+    let plan = plan_package(["--target", "linux", "--output", output_text, package_text])?;
+
+    build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    // The safe relative target is copied inside the output dir...
+    assert_eq!(
+        std::fs::read_to_string(root.join("dist/safe/payload.txt"))?,
+        "attacker controlled\n"
+    );
+    // ...but the traversal and absolute targets never escape it.
+    assert!(
+        !escaped.exists(),
+        "../ traversal target escaped the output dir"
+    );
+    assert!(
+        !absolute_victim.exists(),
+        "absolute target escaped the output dir"
+    );
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
 #[test]
 fn native_build_uses_cached_platform_addon_when_available() -> Result<(), Box<dyn std::error::Error>>
 {

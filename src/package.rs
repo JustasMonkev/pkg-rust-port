@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::cli::PackagePlan;
 use crate::error::PkgError;
@@ -227,9 +227,38 @@ fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), P
         let PackageWarning::DeployFile { source, target, .. } = warning else {
             continue;
         };
-        copy_deploy_path(source, &output_dir.join(target))?;
+        // Deploy-file targets come from package metadata, which may be
+        // attacker-controlled (for example a dependency's `pkg.deployFiles`).
+        // Contain the target inside the output directory so an absolute path or
+        // `..` traversal cannot write or overwrite files elsewhere.
+        let Some(target) = contained_deploy_target(output_dir, target) else {
+            continue;
+        };
+        copy_deploy_path(source, &target)?;
     }
     Ok(())
+}
+
+/// Resolve a deploy-file target strictly inside `output_dir`.
+///
+/// Returns `None` (skipping the deploy file) when the target is absolute, has a
+/// drive/UNC prefix, or contains a `..` component, so package metadata can never
+/// escape the output directory.
+fn contained_deploy_target(output_dir: &Path, target: &Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in target.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(output_dir.join(relative))
 }
 
 fn copy_deploy_path(source: &Path, target: &Path) -> Result<(), PkgError> {
