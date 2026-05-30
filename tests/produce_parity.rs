@@ -180,7 +180,8 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
 }
 
 #[test]
-fn blob_stripes_are_fabricated_as_bytecode_payload() -> Result<(), PkgError> {
+fn blob_stripes_without_target_fabricator_are_not_written_as_source_payload() -> Result<(), PkgError>
+{
     let source = b"module.exports = 42;".to_vec();
     let packed = pkg_rust::PackedOutput {
         entrypoint: "/app.js".to_owned(),
@@ -200,22 +201,24 @@ fn blob_stripes_are_fabricated_as_bytecode_payload() -> Result<(), PkgError> {
         PathStyle::Posix,
         Vec::new(),
     )?;
-    let pointer = produced
-        .manifest
-        .vfs
-        .get("/snapshot/app.js")
-        .and_then(|stores| stores.get(&StoreKind::Blob.as_index()))
-        .cloned()
-        .ok_or_else(|| PkgError::Pack("blob payload pointer was not written".to_owned()))?;
-    let start = produced.payload_position as usize + pointer.offset as usize;
-    let end = start + pointer.size as usize;
-    let payload = produced
-        .bytes
-        .get(start..end)
-        .ok_or_else(|| PkgError::Pack("blob payload range was outside image".to_owned()))?;
 
-    assert_ne!(payload, source.as_slice());
-    assert!(pointer.size > 0);
+    // Without an absolute target fabricator path, the blob fails closed: it is
+    // neither fabricated through a PATH-resolved `node` nor written as raw
+    // source bytes into the image.
+    assert!(
+        produced
+            .manifest
+            .vfs
+            .get("/snapshot/app.js")
+            .and_then(|stores| stores.get(&StoreKind::Blob.as_index()))
+            .is_none()
+    );
+    assert!(
+        !produced
+            .bytes
+            .windows(source.len())
+            .any(|window| window == source.as_slice())
+    );
     Ok(())
 }
 

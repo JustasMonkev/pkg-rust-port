@@ -401,9 +401,10 @@ fn build_manifest_and_payload(
         let snap = snapshotify(&stripe.snap, style);
         let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
         let payload_bytes = if stripe.store == StoreKind::Blob {
-            // DECISION: prefer target-specific bytecode when the provider
-            // exposes a runnable target binary path; fall back to host `node`
-            // for deterministic in-memory test providers.
+            // DECISION: fabricate bytecode only through the selected target
+            // binary. A request without an absolute executable fails closed in
+            // `fabricate`, so packaging never resolves a `node` shim through
+            // PATH; the failed stripe is recorded as a warning below.
             let request = match fabricator_path {
                 Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
                 None => FabricateRequest::new(&snap, &stripe_bytes),

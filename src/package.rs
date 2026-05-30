@@ -184,7 +184,7 @@ pub fn build_package_with_provider(
                 style: planned.path_style,
                 bakery: bakery_from_bakes(&plan.bakes),
                 bakes: &plan.bakes,
-                fabricator_path,
+                fabricator_path: fabricator_path.as_deref(),
                 native_addons,
             },
         )?;
@@ -294,11 +294,18 @@ fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {
     bakery
 }
 
-fn runnable_fabricator_path<'a>(binary: &[u8], path: Option<&'a Path>) -> Option<&'a Path> {
-    if looks_like_executable(binary) {
-        path
+fn runnable_fabricator_path(binary: &[u8], path: Option<&Path>) -> Option<PathBuf> {
+    if !looks_like_executable(binary) {
+        return None;
+    }
+
+    let path = path?;
+    if path.is_absolute() {
+        Some(path.to_path_buf())
     } else {
-        None
+        // Resolve to an absolute path so fabrication never depends on the
+        // ambient PATH; drop the candidate if it cannot be canonicalized.
+        path.canonicalize().ok()
     }
 }
 
