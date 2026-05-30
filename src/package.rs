@@ -295,11 +295,21 @@ fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {
 }
 
 fn runnable_fabricator_path<'a>(binary: &[u8], path: Option<&'a Path>) -> Option<&'a Path> {
-    if looks_like_executable(binary) {
-        path
-    } else {
-        None
+    runnable_fabricator_path_for_host(binary, path, cfg!(target_os = "macos"))
+}
+
+fn runnable_fabricator_path_for_host<'a>(
+    binary: &[u8],
+    path: Option<&'a Path>,
+    host_requires_macho_fabricator: bool,
+) -> Option<&'a Path> {
+    if !looks_like_executable(binary) {
+        return None;
     }
+    if host_requires_macho_fabricator && !looks_like_macho(binary) {
+        return None;
+    }
+    path
 }
 
 fn native_addon_options(
@@ -408,10 +418,19 @@ fn looks_like_executable(binary: &[u8]) -> bool {
     binary.starts_with(b"#!")
         || binary.starts_with(b"\x7fELF")
         || binary.starts_with(b"MZ")
-        || binary.starts_with(&[0xcf, 0xfa, 0xed, 0xfe])
-        || binary.starts_with(&[0xfe, 0xed, 0xfa, 0xcf])
-        || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbe])
-        || binary.starts_with(&[0xca, 0xfe, 0xba, 0xbf])
+        || looks_like_macho(binary)
+}
+
+fn looks_like_macho(binary: &[u8]) -> bool {
+    matches!(
+        binary.get(..4),
+        Some([0xcf, 0xfa, 0xed, 0xfe])
+            | Some([0xfe, 0xed, 0xfa, 0xcf])
+            | Some([0xce, 0xfa, 0xed, 0xfe])
+            | Some([0xfe, 0xed, 0xfa, 0xce])
+            | Some([0xca, 0xfe, 0xba, 0xbe])
+            | Some([0xca, 0xfe, 0xba, 0xbf])
+    )
 }
 
 fn prepare_output_path(output: &Path) -> Result<(), PkgError> {
@@ -440,5 +459,39 @@ fn prepare_output_path(output: &Path) -> Result<(), PkgError> {
             path: output.display().to_string(),
             source,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{looks_like_executable, looks_like_macho, runnable_fabricator_path_for_host};
+
+    #[test]
+    fn script_fabricators_are_not_selected_when_host_requires_macho() {
+        let path = Path::new("fake-node");
+
+        assert_eq!(
+            runnable_fabricator_path_for_host(b"#!/bin/sh\n", Some(path), false),
+            Some(path)
+        );
+        assert_eq!(
+            runnable_fabricator_path_for_host(b"#!/bin/sh\n", Some(path), true),
+            None
+        );
+    }
+
+    #[test]
+    fn macho_fabricators_are_selected_when_host_requires_macho() {
+        let path = Path::new("node");
+        let macho = [0xcf, 0xfa, 0xed, 0xfe, 0, 0, 0, 0];
+
+        assert!(looks_like_executable(&macho));
+        assert!(looks_like_macho(&macho));
+        assert_eq!(
+            runnable_fabricator_path_for_host(&macho, Some(path), true),
+            Some(path)
+        );
     }
 }

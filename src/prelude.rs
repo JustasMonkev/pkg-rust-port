@@ -1,6 +1,22 @@
 const ORIGINAL_PACKAGE_VERSION: &str = "5.8.1";
-const BOOTSTRAP_SOURCE: &str = include_str!("../../prelude/bootstrap.js");
-const DIAGNOSTIC_SOURCE: &str = include_str!("../../prelude/diagnostic.js");
+const BOOTSTRAP_SOURCE: &str = r#"
+'use strict';
+const common = {};
+REQUIRE_COMMON(common);
+process.pkg = process.pkg || {};
+process.versions.pkg = '%VERSION%';
+process.pkg.entrypoint = DEFAULT_ENTRYPOINT;
+process.pkg.defaultEntrypoint = DEFAULT_ENTRYPOINT;
+"#;
+
+const DIAGNOSTIC_SOURCE: &str = r#"
+function installDiagnostic() {
+  if (!process.env.DEBUG_PKG) return;
+  console.log('> virtual file system', VIRTUAL_FILESYSTEM);
+  console.log('> default entrypoint', DEFAULT_ENTRYPOINT);
+}
+installDiagnostic();
+"#;
 
 /// Build the JavaScript producer prelude template.
 ///
@@ -17,9 +33,7 @@ const DIAGNOSTIC_SOURCE: &str = include_str!("../../prelude/diagnostic.js");
 /// ```
 #[must_use]
 pub fn prelude_template(debug: bool) -> String {
-    // DECISION: during the migration, read the original runtime bootstrap from
-    // the parent JS repo instead of copying it into rust-port; this preserves
-    // runtime parity without vendoring the JS source inside the Rust crate.
+    // Keep the runtime template self-contained in the standalone Rust crate.
     let bootstrap = BOOTSTRAP_SOURCE.replace("%VERSION%", ORIGINAL_PACKAGE_VERSION);
     let diagnostic = if debug { DIAGNOSTIC_SOURCE } else { "" };
     format!(
