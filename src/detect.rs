@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 use swc_common::{FileName, SourceMap, sync::Lrc};
 
 use swc_ecma_ast::{
-    ArrayLit, BinExpr, Callee, Decl, Expr, ExprOrSpread, ImportDecl, ImportSpecifier, Lit,
-    MemberExpr, MemberProp, ModuleDecl, ModuleExportName, ModuleItem, ObjectLit, Program, Prop,
-    PropOrSpread, Stmt, VarDecl,
+    ArrayLit, BinExpr, BlockStmtOrExpr, Callee, Decl, Expr, ExprOrSpread, ImportDecl,
+    ImportSpecifier, Lit, MemberExpr, MemberProp, ModuleDecl, ModuleExportName, ModuleItem,
+    ObjectLit, OptChainBase, Program, Prop, PropOrSpread, Stmt, VarDecl,
 };
 use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, lexer::Lexer};
 
@@ -360,33 +360,96 @@ impl Detector {
             Expr::Assign(assign) => {
                 queue.push_back(VisitItem::new(VisitNode::Expr(&assign.right), trying));
             }
+            // Descend into operand-bearing expressions so a `require(...)` is
+            // detected wherever it appears, matching pkg's full Babel traversal
+            // (for example `typeof require('x')`).
+            Expr::Unary(unary) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&unary.arg), trying));
+            }
+            Expr::Update(update) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&update.arg), trying));
+            }
+            Expr::Await(await_expr) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&await_expr.arg), trying));
+            }
+            Expr::Yield(yield_expr) => {
+                if let Some(arg) = &yield_expr.arg {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(arg), trying));
+                }
+            }
+            Expr::Seq(seq) => {
+                for expr in &seq.exprs {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(expr), trying));
+                }
+            }
+            Expr::New(new_expr) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&new_expr.callee), trying));
+                if let Some(args) = &new_expr.args {
+                    for arg in args {
+                        queue.push_back(VisitItem::new(VisitNode::Expr(&arg.expr), trying));
+                    }
+                }
+            }
+            Expr::OptChain(opt) => match &*opt.base {
+                OptChainBase::Member(member) => {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&member.obj), trying));
+                    if let MemberProp::Computed(prop) = &member.prop {
+                        queue.push_back(VisitItem::new(VisitNode::Expr(&prop.expr), trying));
+                    }
+                }
+                OptChainBase::Call(call) => {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(&call.callee), trying));
+                    for arg in &call.args {
+                        queue.push_back(VisitItem::new(VisitNode::Expr(&arg.expr), trying));
+                    }
+                }
+            },
+            Expr::Arrow(arrow) => match &*arrow.body {
+                BlockStmtOrExpr::BlockStmt(block) => {
+                    for stmt in &block.stmts {
+                        queue.push_back(VisitItem::new(VisitNode::Stmt(stmt), trying));
+                    }
+                }
+                BlockStmtOrExpr::Expr(expr) => {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(expr), trying));
+                }
+            },
+            Expr::TaggedTpl(tagged) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&tagged.tag), trying));
+                for expr in &tagged.tpl.exprs {
+                    queue.push_back(VisitItem::new(VisitNode::Expr(expr), trying));
+                }
+            }
+            Expr::TsNonNull(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
+            Expr::TsAs(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
+            Expr::TsConstAssertion(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
+            Expr::TsTypeAssertion(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
+            Expr::TsInstantiation(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
+            Expr::TsSatisfies(inner) => {
+                queue.push_back(VisitItem::new(VisitNode::Expr(&inner.expr), trying));
+            }
             Expr::This(_)
-            | Expr::Unary(_)
-            | Expr::Update(_)
             | Expr::SuperProp(_)
             | Expr::Lit(_)
             | Expr::Ident(_)
-            | Expr::New(_)
-            | Expr::Seq(_)
-            | Expr::TaggedTpl(_)
-            | Expr::Arrow(_)
             | Expr::Class(_)
-            | Expr::Yield(_)
             | Expr::MetaProp(_)
-            | Expr::Await(_)
             | Expr::JSXMember(_)
             | Expr::JSXNamespacedName(_)
             | Expr::JSXEmpty(_)
             | Expr::JSXElement(_)
             | Expr::JSXFragment(_)
-            | Expr::TsTypeAssertion(_)
-            | Expr::TsConstAssertion(_)
-            | Expr::TsNonNull(_)
-            | Expr::TsAs(_)
-            | Expr::TsInstantiation(_)
-            | Expr::TsSatisfies(_)
             | Expr::PrivateName(_)
-            | Expr::OptChain(_)
             | Expr::Invalid(_) => {}
         }
     }
