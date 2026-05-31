@@ -25,6 +25,32 @@ pub enum BinaryKind {
     Built,
 }
 
+/// Requirement emitted when a target must be supplied by a source-built
+/// pkg-fetch binary.
+///
+/// The Rust port does not build Node.js from source. A force-build target is
+/// complete only when an external pkg-fetch-compatible builder has placed the
+/// expected `built-*` artifact in the cache.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceBuildRequirement {
+    /// Target that requested a built binary.
+    pub target: NodeTarget,
+    /// Exact cache path the external builder must create.
+    pub built_path: PathBuf,
+}
+
+impl SourceBuildRequirement {
+    /// Human-readable explanation suitable for CLI/cache errors.
+    #[must_use]
+    pub fn message(&self) -> String {
+        format!(
+            "source build required for force-build target {}; run pkg-fetch's source build workflow externally and place the built binary at {}",
+            self.target,
+            self.built_path.display()
+        )
+    }
+}
+
 impl BinaryKind {
     fn prefix(self) -> &'static str {
         match self {
@@ -119,6 +145,21 @@ impl PkgFetchCache {
             target.platform,
             target.arch
         )))
+    }
+
+    /// Return the external source-build requirement for `target`.
+    ///
+    /// This makes the `--build` boundary explicit: the Rust port consumes
+    /// pkg-fetch-compatible built cache artifacts, but does not run the
+    /// Node.js source build itself.
+    pub fn source_build_requirement(
+        &self,
+        target: &NodeTarget,
+    ) -> Result<SourceBuildRequirement, PkgError> {
+        Ok(SourceBuildRequirement {
+            target: target.clone(),
+            built_path: self.binary_path(target, BinaryKind::Built)?,
+        })
     }
 
     /// Download the fetched binary for `target` into the pkg-fetch cache.
@@ -226,15 +267,13 @@ impl TargetBinaryProvider for PkgFetchCache {
 
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
         if target.force_build {
-            let built = self.binary_path(target, BinaryKind::Built)?;
-            if built.is_file() {
-                return read_binary(&built)
-                    .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
+            let requirement = self.source_build_requirement(target)?;
+            if requirement.built_path.is_file() {
+                return read_binary(&requirement.built_path).map(|bytes| {
+                    TargetBinary::from_bytes(bytes).with_path(requirement.built_path)
+                });
             }
-            return Err(PkgError::Fetch(format!(
-                "no built binary for force-build target {target}; expected {}",
-                built.display()
-            )));
+            return Err(PkgError::Fetch(requirement.message()));
         }
 
         let fetched = self.binary_path(target, BinaryKind::Fetched)?;

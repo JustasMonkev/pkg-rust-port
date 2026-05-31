@@ -1,0 +1,77 @@
+name: Gated Runtime Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Validation gate to run
+        required: true
+        type: choice
+        options:
+          - source-build-boundary
+          - npm-issues
+          - public-npm
+          - target-oracle
+          - public-npm-promote
+          - native-npm
+      fixture:
+        description: Public npm fixture for target-oracle or public-npm-promote
+        required: false
+        default: cookie
+      target:
+        description: pkg target used by runtime/package gates
+        required: false
+        default: node18-linux-x64
+
+jobs:
+  gated-runtime:
+    name: ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    env:
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/.pkg-rust-real-cache
+      PKG_RUST_REAL_TARGET: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: .pkg-rust-real-cache
+          key: pkg-fetch-v3.5-${{ inputs.target }}
+      - name: Run selected gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.mode }}" in
+            source-build-boundary)
+              cargo test --locked --test fetch_parity force_build -- --nocapture
+              ;;
+            npm-issues)
+              PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+                cargo test --locked --test runtime_smoke -- npm_issue_fixtures_run_when_install_is_enabled --nocapture
+              ;;
+            public-npm)
+              PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+                cargo test --locked --test runtime_smoke -- public_npm_dictionary_fixtures_run_when_install_is_enabled --nocapture
+              ;;
+            target-oracle)
+              PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+              PKG_RUST_TARGET_ORACLE_PUBLIC_NPM="${{ inputs.fixture }}" \
+                cargo test --locked --test runtime_smoke -- public_npm_target_node_oracle_probe_runs_when_enabled --nocapture
+              ;;
+            public-npm-promote)
+              PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+              PKG_RUST_PROMOTE_PUBLIC_NPM="${{ inputs.fixture }}" \
+                cargo test --locked --test runtime_smoke -- public_npm_fixture_promotion_workflow_runs_when_enabled --nocapture
+              ;;
+            native-npm)
+              PKG_RUST_NATIVE_NPM_FIXTURES=1 \
+                cargo test --locked --test runtime_smoke -- native_npm_issue_fixtures_run_when_install_is_enabled --nocapture
+              ;;
+            *)
+              echo "unknown gated validation mode: ${{ inputs.mode }}" >&2
+              exit 2
+              ;;
+          esac

@@ -38,7 +38,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
             && stripe
                 .buffer
                 .as_ref()
-                .is_some_and(|buffer| buffer == br#"["main.js","test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
+                .is_some_and(|buffer| buffer == br#"["test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
     }));
     assert!(packed.stripes.iter().any(|stripe| {
         stripe.snap == "/test-x-index.js"

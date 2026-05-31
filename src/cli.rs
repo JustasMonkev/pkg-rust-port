@@ -343,6 +343,9 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     // for file inputs; ancestor packages would accidentally make repo roots part
     // of unrelated fixture packages. Package files below node_modules keep the
     // first node_modules segment so bare self-requires still resolve at runtime.
+    // Plain file inputs still preserve their entry directory basename under
+    // /snapshot, matching pkg's /snapshot/<dir>/<entry> layout without widening
+    // the walk root to sibling fixture directories.
     let package_dir = if input_package.is_some() {
         input.parent().map(Path::to_path_buf)
     } else {
@@ -357,7 +360,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     let snapshot_base = if let Some(package_dir) = package_dir {
         package_snapshot_base(&package_dir, &root)
     } else {
-        root.clone()
+        file_input_snapshot_base(&root)
     };
     let auto_output = cli.output.is_none();
     let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
@@ -511,6 +514,12 @@ fn package_snapshot_base(package_dir: &Path, root: &Path) -> PathBuf {
 
     package_dir
         .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.to_path_buf())
+}
+
+fn file_input_snapshot_base(root: &Path) -> PathBuf {
+    root.parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| root.to_path_buf())
 }

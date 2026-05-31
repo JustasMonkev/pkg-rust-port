@@ -329,6 +329,42 @@ fn no_bytecode_skips_fabricator_binary_fetch() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
+fn file_input_preserves_entry_directory_without_bundling_siblings()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-file-input-snapshot-{}",
+        std::process::id()
+    ));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--no-bytecode",
+        "--public",
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = String::from_utf8_lossy(&build.outputs[0].image.bytes);
+    assert!(image.contains("\"/snapshot/test-50-api/test-x-index.js\""));
+    assert!(image.contains("\"/snapshot/test-50-api\""));
+    assert!(!image.contains("\"/snapshot/test-x-index.js\""));
+    assert!(!image.contains("\"/snapshot/test-50-api/main.js\""));
+
+    std::fs::remove_file(output)?;
+    Ok(())
+}
+
+#[test]
 fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std::error::Error>> {
     let output =
         std::env::temp_dir().join(format!("pkg-rust-package-build-{}", std::process::id()));
@@ -550,9 +586,14 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
     let package_dir = root.join("package");
     let output = root.join("dist").join("demo");
     let escaped = root.join("escaped.txt");
+    let mixed_escaped = root.join("dist/mixed-escaped.txt");
     let absolute_victim = root.join("absolute-victim.txt");
+    let source_victim = root.join("dist/source-victim.txt");
+    let absolute_source_victim = root.join("dist/absolute-source-victim.txt");
+    let symlink_victim_dir = root.join("symlink-victim");
     std::fs::create_dir_all(package_dir.join("src"))?;
     std::fs::create_dir_all(package_dir.join("node_modules/evil"))?;
+    std::fs::create_dir_all(&symlink_victim_dir)?;
     std::fs::write(
         package_dir.join("src/index.js"),
         "'use strict';\nrequire('evil');\nconsole.log('ok');\n",
@@ -565,6 +606,8 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
         package_dir.join("node_modules/evil/payload.txt"),
         "attacker controlled\n",
     )?;
+    std::fs::write(root.join("outside-source.txt"), "outside source\n")?;
+    std::fs::write(root.join("absolute-source.txt"), "absolute source\n")?;
     std::fs::write(
         package_dir.join("package.json"),
         serde_json::json!({
@@ -577,6 +620,11 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
     let absolute_target = absolute_victim
         .to_str()
         .ok_or_else(|| PkgError::Cli("temporary victim path must be utf-8".to_owned()))?;
+    let absolute_source = root
+        .join("absolute-source.txt")
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary source path must be utf-8".to_owned()))?
+        .to_owned();
     std::fs::write(
         package_dir.join("node_modules/evil/package.json"),
         serde_json::json!({
@@ -586,12 +634,21 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
                 "deployFiles": [
                     ["payload.txt", "safe/payload.txt"],
                     ["payload.txt", "../escaped.txt"],
-                    ["payload.txt", absolute_target]
+                    ["payload.txt", "safe/../mixed-escaped.txt"],
+                    ["payload.txt", absolute_target],
+                    ["../outside-source.txt", "source-victim.txt"],
+                    [absolute_source, "absolute-source-victim.txt"],
+                    ["payload.txt", "symlink/payload.txt"]
                 ]
             }
         })
         .to_string(),
     )?;
+    #[cfg(unix)]
+    {
+        std::fs::create_dir_all(root.join("dist"))?;
+        std::os::unix::fs::symlink(&symlink_victim_dir, root.join("dist/symlink"))?;
+    }
 
     let output_text = output
         .to_str()
@@ -618,8 +675,25 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
         "../ traversal target escaped the output dir"
     );
     assert!(
+        !mixed_escaped.exists(),
+        "mixed ../ traversal target escaped the output dir"
+    );
+    assert!(
         !absolute_victim.exists(),
         "absolute target escaped the output dir"
+    );
+    assert!(
+        !source_victim.exists(),
+        "relative source traversal copied a file from outside the package"
+    );
+    assert!(
+        !absolute_source_victim.exists(),
+        "absolute source copied a file from outside the package"
+    );
+    #[cfg(unix)]
+    assert!(
+        !symlink_victim_dir.join("payload.txt").exists(),
+        "deploy target followed a symlink out of the output dir"
     );
 
     std::fs::remove_dir_all(root)?;

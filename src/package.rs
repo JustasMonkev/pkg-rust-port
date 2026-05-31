@@ -234,6 +234,9 @@ fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), P
         let Some(target) = contained_deploy_target(output_dir, target) else {
             continue;
         };
+        let Some(target) = resolve_safe_deploy_target(output_dir, &target)? else {
+            continue;
+        };
         copy_deploy_path(source, &target)?;
     }
     Ok(())
@@ -259,6 +262,35 @@ fn contained_deploy_target(output_dir: &Path, target: &Path) -> Option<PathBuf> 
     }
 
     Some(output_dir.join(relative))
+}
+
+fn resolve_safe_deploy_target(
+    output_dir: &Path,
+    target: &Path,
+) -> Result<Option<PathBuf>, PkgError> {
+    let Some(parent) = target.parent() else {
+        return Ok(None);
+    };
+    if !parent.as_os_str().is_empty() {
+        fs::create_dir_all(parent).map_err(|source_error| PkgError::Io {
+            path: parent.display().to_string(),
+            source: source_error,
+        })?;
+    }
+
+    let output_dir = fs::canonicalize(output_dir).map_err(|source_error| PkgError::Io {
+        path: output_dir.display().to_string(),
+        source: source_error,
+    })?;
+    let parent = fs::canonicalize(parent).map_err(|source_error| PkgError::Io {
+        path: parent.display().to_string(),
+        source: source_error,
+    })?;
+    if !parent.starts_with(&output_dir) {
+        return Ok(None);
+    }
+
+    Ok(Some(target.to_path_buf()))
 }
 
 fn copy_deploy_path(source: &Path, target: &Path) -> Result<(), PkgError> {

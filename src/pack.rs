@@ -119,7 +119,6 @@ fn push_links(stripes: &mut Vec<Stripe>, snap: &str, record: &FileRecord) -> Res
     }
 
     let mut children = record.children.clone();
-    children.sort();
     children.dedup();
     let buffer = serde_json::to_vec(&children)
         .map_err(|error| PkgError::Pack(format!("links json failed for '{snap}': {error}")))?;

@@ -4,9 +4,10 @@ Rust port of `pkg`, the Node.js project packager. The goal is to preserve the
 original `pkg` CLI shape while replacing the TypeScript implementation with
 typed Rust modules and parity tests against the original JS fixtures.
 
-This port is still in progress. It can already parse targets/configs, walk and
-pack dependency fixtures, fetch pkg-fetch binaries, assemble executable payloads,
-and run the small JS API happy-path demo with a real cached target binary.
+This port covers the offline-testable pkg 5.8.1 behavior with Rust parity tests.
+It parses targets/configs, walks and packs dependency fixtures, fetches
+pkg-fetch binaries, assembles executable payloads, and runs real packaged
+runtime fixtures when a cache is provided.
 
 ## Usage
 
@@ -69,9 +70,10 @@ against the embedded SHA-256 table.
   output target's node range and arch (pkg's `fabricatorForTarget`), so
   cross-platform builds do not run the output target binary; in-memory test
   providers fall back to host `node`.
-- The `--build` Node-from-source path lives in the separate `pkg-fetch` package
-  and is out of scope: the CLI passes `forceBuild` through and requires a built
-  cache artifact for those targets.
+- The `--build` Node-from-source path is an explicit external boundary. The CLI
+  passes `forceBuild` through, `PkgFetchCache::source_build_requirement` reports
+  the exact `built-*` cache artifact required, and the source build itself must
+  be produced by pkg-fetch-compatible tooling.
 - The JS suite remains the behavioral oracle only for the opt-in network, npm,
   and native fixtures; every offline-testable mapped fixture has a Rust parity
   test.
@@ -106,12 +108,48 @@ cargo bench --bench packaging
 The Criterion benchmark target currently tracks the `test-50-require-resolve`
 walk/refine/pack pipeline and gzip producer-manifest construction.
 
+Source-build boundary check:
+
+```sh
+cargo test --locked --test fetch_parity force_build -- --nocapture
+```
+
+That gate proves `--build` never silently falls back to fetched binaries: it only
+accepts a pkg-fetch `built-*` cache artifact and reports the external source
+build requirement when the artifact is absent.
+
 To run the real runtime smoke after seeding a cache:
 
 ```sh
 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test --test runtime_smoke -- --nocapture
 ```
+
+To compare selected fixtures against a real `pkg@5.8.1` oracle, seed
+`PKG_CACHE_PATH` with the same pkg-fetch base binary and point
+`PKG_RUST_REAL_PKG_BIN` at the oracle CLI:
+
+```sh
+mkdir -p /private/tmp/pkg-rust-real-compare/cache/v3.5
+curl -L \
+  https://github.com/vercel/pkg-fetch/releases/download/v3.5/node-v18.15.0-macos-x64 \
+  -o /private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64
+chmod +x /private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64
+npm install pkg@5.8.1 --prefix /private/tmp/pkg-rust-real-compare/oracle --no-audit --no-fund
+npm install pkg-fetch@3.5.2 \
+  --prefix /private/tmp/pkg-rust-real-compare/oracle/node_modules/pkg \
+  --no-audit --no-fund
+
+PKG_RUST_REAL_PKG_COMPARE=1 \
+PKG_RUST_REAL_PKG_BIN=/private/tmp/pkg-rust-real-compare/oracle/node_modules/.bin/pkg \
+PKG_CACHE_PATH=/private/tmp/pkg-rust-real-compare/cache \
+PKG_RUST_REAL_TARGET=node18-macos-x64 \
+  cargo test --test real_pkg_compare -- --nocapture
+```
+
+The nested `pkg-fetch@3.5.2` override is required for this v3.5/Node 18.15.0
+cache. A plain `npm install pkg@5.8.1` currently installs `pkg-fetch@3.4.2`,
+whose Node 18 oracle asks for `v3.4/fetched-v18.5.0-*` instead.
 
 The smoke target defaults to `node18-macos-x64` for this local Apple-silicon
 workspace. Set `PKG_RUST_REAL_TARGET=node18-linux-x64` on Linux runners; the CI
@@ -174,6 +212,17 @@ PKG_RUST_TARGET_ORACLE_PUBLIC_NPM=cookie \
   cargo test --test runtime_smoke -- public_npm_target_node_oracle_probe_runs_when_enabled --nocapture
 ```
 
+To promote one candidate through both checks, run the reusable promotion gate.
+It first runs the target-node oracle, then packages the same fixture with the
+Rust CLI and compares the packaged output against that oracle:
+
+```sh
+PKG_RUST_INSTALL_NPM_FIXTURES=1 \
+PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
+PKG_RUST_PROMOTE_PUBLIC_NPM=cookie \
+  cargo test --test runtime_smoke -- public_npm_fixture_promotion_workflow_runs_when_enabled --nocapture
+```
+
 Native npm issue fixtures are behind a separate gate because they run package
 install scripts and must first establish a working plain Node oracle:
 
@@ -182,3 +231,10 @@ PKG_RUST_NATIVE_NPM_FIXTURES=1 \
 PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test --test runtime_smoke -- native_npm_issue_fixtures_run_when_install_is_enabled --nocapture
 ```
+
+The same gated commands are available from GitHub Actions through the manual
+`Gated Runtime Validation` workflow. Select one of `source-build-boundary`,
+`npm-issues`, `public-npm`, `target-oracle`, `public-npm-promote`, or
+`native-npm`; for the target-oracle and promotion modes, set `fixture` to the
+candidate public npm fixture name. The gate classes and promotion rules are
+summarized in [`docs/gated-validation.md`](docs/gated-validation.md).

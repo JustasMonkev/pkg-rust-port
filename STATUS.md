@@ -1722,3 +1722,21 @@ Verified: full locked gate is green -- `cargo fmt --check`, `cargo clippy --lock
 Next: the only remaining JS behaviors not exercised in-repo are the `--build` Node-from-source path (which lives in the separate pkg-fetch package, out of scope) and the opt-in network/npm/native fixtures behind their existing env gates.
 
 Decisions made: vendor prelude and fixtures into the repository rather than depend on an adjacent JS checkout, since the port is now a standalone crate. Keep the host-`node` fabrication seam for deterministic in-memory providers while the real provider path always fetches a host-platform fabricator binary.
+
+## 2026-05-31 - External gates completed
+
+Shipped: completed the three remaining post-port validation boundaries without expanding this crate into a pkg-fetch source builder. `PkgFetchCache` now exposes `source_build_requirement` so force-build targets have a typed external `built-*` artifact requirement, and force-build misses report that requirement instead of a generic cache miss. Added a reusable public npm promotion gate (`PKG_RUST_PROMOTE_PUBLIC_NPM=<fixture>`) that runs the selected target-node oracle before packaging and comparing the Rust executable output. Added the manual `Gated Runtime Validation` workflow for source-build boundary checks, npm issue fixtures, public npm smoke, target-node probes, one-fixture public npm promotion, and native npm smoke.
+
+Verified: focused source-build boundary coverage passes with `cargo test --locked --test fetch_parity`; focused public npm gate coverage compiles and skips cleanly without env vars with `cargo test --locked --test runtime_smoke public_npm_ -- --nocapture`.
+
+Next: use the manual workflow or local env-gated commands when a real cache, npm network access, and native build tooling are available. The remaining external work is operational validation, not missing Rust port code.
+
+Decisions made: keep Node-from-source building delegated to pkg-fetch-compatible tooling and require the produced built cache artifact. This preserves the Rust port boundary while making the required evidence explicit and automatable.
+
+## 2026-05-31 - Real pkg comparison harness
+
+Shipped: added a gated `real_pkg_compare` integration harness that packages selected fixtures with both real `pkg@5.8.1` and this Rust port using the same pkg-fetch cache, runs both executables, and compares stdout, stderr, and concrete embedded `/snapshot/...` strings. Fixed the real divergences it exposed: plain file inputs now preserve the entry directory basename under `/snapshot`, parent directory records no longer pull in unbundled sibling files, and packaged directory links preserve pkg-compatible file-before-directory ordering for `fs.readdirSync`/mountpoint behavior. Expanded deploy-file containment so dependency metadata cannot escape through absolute targets, `..` targets, mixed `..` targets, symlinked target parents, relative source traversal, or absolute source paths.
+
+Verified: curl-seeded `/private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64` matched SHA `13cc043442af8f110836e7a4abcfc4ba5cf1d9568564485f018fd93d688291e1`; `PKG_RUST_REAL_PKG_COMPARE=1 PKG_RUST_REAL_PKG_BIN=/private/tmp/pkg-rust-real-compare/oracle/node_modules/.bin/pkg PKG_CACHE_PATH=/private/tmp/pkg-rust-real-compare/cache PKG_RUST_REAL_TARGET=node18-macos-x64 cargo test --locked --test real_pkg_compare -- --nocapture` passed for snapshot-path, module-parent, mountpoints, fs-runtime-layer-2, require-edge-cases, and readdir-bundled-dir. An empty-cache Rust CLI run verified the live reqwest downloader after sandbox network approval and produced a matching SHA/correct `42` executable. `--build` still reports the explicit external built artifact requirement at `/private/tmp/pkg-rust-real-compare/cache/v3.5/built-v18.15.0-macos-x64`.
+
+Next: keep the real pkg comparison gate opt-in because it needs network/cache/oracle setup. A plain `npm install pkg@5.8.1` installs nested `pkg-fetch@3.4.2`, so the v3.5/Node 18.15.0 cache comparison requires overriding that nested dependency to `pkg-fetch@3.5.2`.

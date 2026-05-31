@@ -964,6 +964,70 @@ fn public_npm_target_node_oracle_probe_runs_when_enabled() -> Result<(), Box<dyn
 }
 
 #[test]
+fn public_npm_fixture_promotion_workflow_runs_when_enabled()
+-> Result<(), Box<dyn std::error::Error>> {
+    let Some(probe_name) = std::env::var("PKG_RUST_PROMOTE_PUBLIC_NPM")
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        eprintln!("skipping public npm promotion workflow: PKG_RUST_PROMOTE_PUBLIC_NPM is not set");
+        return Ok(());
+    };
+    if !npm_fixture_installs_enabled() {
+        eprintln!(
+            "skipping public npm promotion workflow: PKG_RUST_INSTALL_NPM_FIXTURES is not enabled"
+        );
+        return Ok(());
+    }
+    let Some(cache_root) = std::env::var_os("PKG_RUST_REAL_CACHE") else {
+        eprintln!("skipping public npm promotion workflow: PKG_RUST_REAL_CACHE is not set");
+        return Ok(());
+    };
+    let fixture = public_npm_probe_fixture(&probe_name)
+        .ok_or_else(|| format!("unknown public npm promotion fixture: {probe_name}"))?;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-79-npm");
+    let source = root.join(fixture.fixture_subdir);
+    let fixture_dir = copied_fixture(&format!("{}-promotion-work", fixture.name), &source)?;
+    install_public_npm_packages(
+        &fixture_dir,
+        fixture.package_spec,
+        public_npm_extra_package_specs(fixture.name),
+    )?;
+
+    let expected = run_target_node_oracle(&cache_root, &fixture_dir, fixture.node_input)?;
+    let output_mode = public_npm_output_mode(fixture.name);
+    let expected_stdout = public_npm_harness_stdout(&expected.stdout, output_mode);
+    assert_eq!(
+        expected_stdout,
+        public_npm_success_marker(output_mode),
+        "{} target-node oracle did not match the JS harness success marker: {}{}",
+        fixture.name,
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    let Some(package_run) =
+        package_and_run_real_fixture(fixture.name, &fixture_dir, fixture.package_input)?
+    else {
+        fs::remove_dir_all(fixture_dir)?;
+        return Ok(());
+    };
+    assert_eq!(
+        public_npm_harness_stdout(&package_run.run.stdout, output_mode),
+        expected_stdout
+    );
+    if matches!(output_mode, PublicNpmOutputMode::ExactStdout) {
+        assert_eq!(
+            normalize_node_warning_stderr(&package_run.run.stderr),
+            normalize_node_warning_stderr(&expected.stderr)
+        );
+    }
+
+    fs::remove_dir_all(fixture_dir)?;
+    Ok(())
+}
+
+#[test]
 fn native_npm_issue_fixtures_run_when_install_is_enabled() -> Result<(), Box<dyn std::error::Error>>
 {
     if !native_npm_fixture_installs_enabled() {

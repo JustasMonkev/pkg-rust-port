@@ -72,6 +72,28 @@ fn cache_path_matches_pkg_fetch_local_place() -> Result<(), Box<dyn std::error::
 }
 
 #[test]
+fn source_build_requirement_points_at_pkg_fetch_built_artifact()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cache = PkgFetchCache::new("/tmp/pkg-cache");
+    let defaults = TargetDefaults::host("node18");
+    let mut target = parse_targets("node18-linux-x64", &defaults)?
+        .targets
+        .remove(0);
+    target.force_build = true;
+
+    let requirement = cache.source_build_requirement(&target)?;
+
+    assert_eq!(requirement.target, target);
+    assert_eq!(
+        requirement.built_path,
+        std::path::PathBuf::from("/tmp/pkg-cache/v3.5/built-v18.15.0-linux-x64")
+    );
+    assert!(requirement.message().contains("source build required"));
+    assert!(requirement.message().contains("built-v18.15.0-linux-x64"));
+    Ok(())
+}
+
+#[test]
 fn cache_provider_removes_bad_fetched_and_reads_built() -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::temp_dir().join(format!("pkg-rust-fetch-cache-{}", std::process::id()));
     let cache = PkgFetchCache::new(&root);
@@ -194,7 +216,9 @@ fn force_build_errors_when_built_cache_artifact_is_absent() -> Result<(), Box<dy
 
     let error = cache.binary_for(&target).err();
 
-    assert!(matches!(error, Some(PkgError::Fetch(message)) if message.contains("no built binary")));
+    assert!(
+        matches!(error, Some(PkgError::Fetch(message)) if message.contains("source build required") && message.contains("built-v18.15.0-linux-x64"))
+    );
     assert!(fetched.exists());
     fs::remove_file(fetched)?;
     fs::remove_dir_all(root)?;

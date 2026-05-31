@@ -17,17 +17,25 @@ Status of the items parked during the port.
 - Added the remaining mapped JS-suite parity tests that are testable offline:
   test-77 (dictionary/fixture consistency), test-78 (version reporting), and a
   test-42 fetch-naming matrix.
+- Made the `--build` source-build boundary first-class. `PkgFetchCache` now
+  exposes the exact external `built-*` artifact requirement, force-build misses
+  report that requirement, and fetch parity tests prove fetched binaries are not
+  used as a fallback.
+- Added a reusable one-fixture public npm promotion gate that runs the selected
+  pkg-fetch target-node oracle before packaging and comparing the Rust output.
+- Added a manual `Gated Runtime Validation` GitHub Actions workflow for the
+  source-build boundary, npm issue fixtures, public npm smoke, target-node
+  probes, one-fixture public npm promotion, and native npm smoke.
 
-## Remaining (environment-bound)
+## External Preconditions
 
-- Real Node-from-source build for `--build` lives in the separate `pkg-fetch`
-  package, which is explicitly out of the pkg port's scope. The port faithfully
-  passes `forceBuild` through to the binary provider and requires a built cache
-  artifact for those targets; wiring an actual source build (full toolchain,
-  long compile) is the only way to exercise it end to end.
-- Native addon (`prebuild-install`) and public/native npm fixtures stay behind
-  the opt-in `PKG_RUST_INSTALL_NPM_FIXTURES` / `PKG_RUST_NATIVE_NPM_FIXTURES`
-  gates because they require npm installs, network access, and a real cache.
+- Real Node-from-source build for `--build` remains delegated to the separate
+  `pkg-fetch` source-build workflow. This crate consumes the resulting built
+  cache artifact and refuses to substitute a fetched binary for a force-build
+  target.
+- Native addon (`prebuild-install`) and public/native npm fixture validation is
+  complete as opt-in gates because it requires npm installs, network access,
+  native build tooling, and a real pkg-fetch cache.
 - Warm-cache release build timing needs a real fetched/built binary cache and is
   exercised through the gated real-runtime smoke rather than a micro-benchmark.
 

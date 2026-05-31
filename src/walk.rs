@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -718,9 +718,13 @@ impl WalkerState {
         };
 
         for deploy_file in deploy_files(&pkg_config.deploy_files) {
+            let Some(source) = contained_deploy_source(base_dir, Path::new(&deploy_file.source))
+            else {
+                continue;
+            };
             self.output.warnings.push(PackageWarning::DeployFile {
                 file_type: deploy_file.file_type,
-                source: base_dir.join(deploy_file.source),
+                source,
                 target: PathBuf::from(deploy_file.target),
             });
         }
@@ -869,22 +873,24 @@ impl WalkerState {
     }
 
     fn step_links(&mut self, directory: &Path, marker: &Marker) -> Result<(), PkgError> {
+        let _ = marker;
         if !directory.is_dir() {
             return Ok(());
         }
 
-        let mut children = Vec::new();
-        for entry in fs::read_dir(directory).map_err(|source| io_error(directory, source))? {
-            let entry = entry.map_err(|source| io_error(directory, source))?;
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                children.push(name.to_owned());
-            }
-            if inside_root(&self.root, &path) {
-                self.append(path, StoreKind::Stat, marker.clone());
-            }
-        }
+        let mut children = self
+            .output
+            .records
+            .keys()
+            .filter_map(|path| {
+                (path.parent() == Some(directory))
+                    .then(|| path.file_name().and_then(|name| name.to_str()))
+                    .flatten()
+                    .map(ToOwned::to_owned)
+            })
+            .collect::<Vec<_>>();
         children.sort();
+        children.dedup();
         self.record_mut(directory).children = children;
         Ok(())
     }
@@ -1306,6 +1312,23 @@ fn is_public_license(license: &str) -> bool {
             | "lgpl-2.1+"
             | "cc0-1.0"
     )
+}
+
+fn contained_deploy_source(base_dir: &Path, source: &Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in source.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(base_dir.join(relative))
 }
 
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {

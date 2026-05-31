@@ -58,7 +58,7 @@ pub use crate::error::PkgError;
 pub use crate::fabricate::{
     FabricateRequest, FabricatorPool, fabricate, fabricate_twice, shutdown_fabricators,
 };
-pub use crate::fetch::{BinaryKind, PkgFetchCache};
+pub use crate::fetch::{BinaryKind, PkgFetchCache, SourceBuildRequirement};
 pub use crate::fsx::plus_x;
 pub use crate::macho::{patch_macho_executable, sign_macho_executable};
 pub use crate::pack::{PackedOutput, Stripe, pack};

@@ -289,7 +289,7 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
     ])?;
 
     assert_eq!(plan.compression, Compression::Brotli);
-    assert!(plan.snapshot_base.ends_with("test-50-require-resolve"));
+    assert!(plan.snapshot_base.ends_with("test"));
     assert!(!plan.bytecode);
     assert!(plan.native_build);
     assert!(plan.signature);
