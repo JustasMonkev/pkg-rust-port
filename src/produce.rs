@@ -118,8 +118,9 @@ pub fn produce_manifest(
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
     let native_addons = NativeAddonOptions::default();
-    let (manifest, _payload, _warnings) =
+    let (manifest, _payload, warnings) =
         build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
+    fail_on_hidden_bytecode_warnings(&warnings)?;
     Ok(manifest)
 }
 
@@ -170,47 +171,21 @@ pub fn produce_executable_image(
     style: PathStyle,
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
-    let native_addons = NativeAddonOptions::default();
-    let (manifest, payload, _warnings) =
-        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
-    let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
-    let payload_position = binary.len() as u64;
-    let payload_size = payload.len() as u64;
-    let prelude_position = payload_position + payload_size;
-    let prelude_size = prelude.len() as u64;
-
-    let mut bytes = binary;
-    bytes.extend_from_slice(&payload);
-    bytes.extend_from_slice(&prelude);
-
-    let placeholders = discover_placeholders(&bytes);
-    let values = PlaceholderValues {
-        bakery,
-        payload_position,
-        payload_size,
-        prelude_position,
-        prelude_size,
-    };
-    inject_placeholders(
-        &mut bytes,
-        &placeholders,
-        &values,
-        &[
-            PlaceholderKind::Bakery,
-            PlaceholderKind::PayloadPosition,
-            PlaceholderKind::PayloadSize,
-            PlaceholderKind::PreludePosition,
-            PlaceholderKind::PreludeSize,
-        ],
+    let produced = build_executable_image_with_fabricator(
+        binary,
+        packed,
+        prelude_template,
+        ProducerBuildOptions {
+            compression,
+            style,
+            bakery,
+            bakes: &[],
+            fabricator_path: None,
+            native_addons: NativeAddonOptions::default(),
+        },
     )?;
-
-    Ok(ProducedExecutable {
-        bytes,
-        manifest,
-        payload_position,
-        prelude_position,
-        prelude_size,
-    })
+    fail_on_hidden_bytecode_warnings(&produced.warnings)?;
+    Ok(produced.executable)
 }
 
 /// Produce an executable image and write it to disk.
@@ -308,14 +283,12 @@ pub(crate) fn write_executable_image_with_fabricator(
     prelude_template: &str,
     options: ProducerBuildOptions<'_>,
 ) -> Result<ProducedExecutable, PkgError> {
-    write_executable_image_with_fabricator_diagnostics(
-        output,
-        binary,
-        packed,
-        prelude_template,
-        options,
-    )
-    .map(|produced| produced.executable)
+    let output = output.as_ref();
+    let produced =
+        build_executable_image_with_fabricator(binary, packed, prelude_template, options)?;
+    fail_on_hidden_bytecode_warnings(&produced.warnings)?;
+    write_produced_executable(output, &produced.executable)?;
+    Ok(produced.executable)
 }
 
 pub(crate) fn write_executable_image_with_fabricator_diagnostics(
@@ -326,6 +299,18 @@ pub(crate) fn write_executable_image_with_fabricator_diagnostics(
     options: ProducerBuildOptions<'_>,
 ) -> Result<ProducedExecutableWithWarnings, PkgError> {
     let output = output.as_ref();
+    let produced =
+        build_executable_image_with_fabricator(binary, packed, prelude_template, options)?;
+    write_produced_executable(output, &produced.executable)?;
+    Ok(produced)
+}
+
+fn build_executable_image_with_fabricator(
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    options: ProducerBuildOptions<'_>,
+) -> Result<ProducedExecutableWithWarnings, PkgError> {
     let (manifest, payload, warnings) = build_manifest_and_payload(
         packed,
         options.compression,
@@ -372,13 +357,31 @@ pub(crate) fn write_executable_image_with_fabricator_diagnostics(
         prelude_position,
         prelude_size,
     };
-    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
-        path: output.display().to_string(),
-        source,
-    })?;
     Ok(ProducedExecutableWithWarnings {
         executable: produced,
         warnings,
+    })
+}
+
+fn fail_on_hidden_bytecode_warnings(warnings: &[PackageWarning]) -> Result<(), PkgError> {
+    let messages = warnings
+        .iter()
+        .filter_map(|warning| match warning {
+            PackageWarning::BytecodeFabricationFailed { .. } => Some(warning.to_cli_message()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if messages.is_empty() {
+        Ok(())
+    } else {
+        Err(PkgError::Pack(messages.join("; ")))
+    }
+}
+
+fn write_produced_executable(output: &Path, produced: &ProducedExecutable) -> Result<(), PkgError> {
+    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
+        path: output.display().to_string(),
+        source,
     })
 }
 
@@ -401,9 +404,10 @@ fn build_manifest_and_payload(
         let snap = snapshotify(&stripe.snap, style);
         let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
         let payload_bytes = if stripe.store == StoreKind::Blob {
-            // DECISION: prefer target-specific bytecode when the provider
-            // exposes a runnable target binary path; fall back to host `node`
-            // for deterministic in-memory test providers.
+            // DECISION: fabricate bytecode only through the selected target
+            // binary. A request without an absolute executable fails closed in
+            // `fabricate`, so packaging never resolves a `node` shim through
+            // PATH; the failed stripe is recorded as a warning below.
             let request = match fabricator_path {
                 Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
                 None => FabricateRequest::new(&snap, &stripe_bytes),
