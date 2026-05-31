@@ -19,53 +19,30 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn builds_uncompressed_vfs_manifest_from_packed_stripes() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
-    let entrypoint = fixture_dir.join("test-x-index.js");
-    let walked = walk(
-        empty_marker()?,
-        &entrypoint,
-        None,
-        WalkerParams::new().with_root(&fixture_dir),
-    )?;
-    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = packed_content_and_stat("/app.js", b"console.log('hi');");
     let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;
 
-    assert_eq!(manifest.entrypoint, "/snapshot/test-x-index.js");
+    assert_eq!(manifest.entrypoint, "/snapshot/app.js");
     assert!(manifest.payload_size > 0);
     let content_pointer = manifest
         .vfs
-        .get("/snapshot/test-z-require-content.css")
+        .get("/snapshot/app.js")
         .and_then(|stores| stores.get(&StoreKind::Content.as_index()));
     assert!(content_pointer.is_some_and(|pointer| pointer.size > 0));
     let stat_pointer = manifest
         .vfs
-        .get("/snapshot/test-x-index.js")
+        .get("/snapshot/app.js")
         .and_then(|stores| stores.get(&StoreKind::Stat.as_index()));
     assert!(stat_pointer.is_some_and(|pointer| pointer.size > 0));
     Ok(())
 }
 
-#[cfg(unix)]
 #[test]
-fn snapshotifies_symlinks_in_manifest() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = PathBuf::from("/private/tmp")
-        .join(format!("pkg-rust-produce-symlink-{}", std::process::id()));
-    let real_file = fixture_dir.join("real.js");
-    let link_file = fixture_dir.join("link.js");
-    let _ignored = fs::remove_dir_all(&fixture_dir);
-    fs::create_dir_all(&fixture_dir)?;
-    fs::write(&real_file, "'use strict';\nmodule.exports = 1;\n")?;
-    std::os::unix::fs::symlink(&real_file, &link_file)?;
-
-    let walked = walk(
-        empty_marker()?,
-        &link_file,
-        None,
-        WalkerParams::new().with_root(&fixture_dir),
-    )?;
-    let refined = refine_walked(walked, &link_file, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+fn snapshotifies_symlinks_in_manifest() -> Result<(), PkgError> {
+    let mut packed = packed_content_and_stat("/real.js", b"module.exports = 1;");
+    packed
+        .symlinks
+        .insert("/link.js".to_owned(), "/real.js".to_owned());
     let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;
 
     assert_eq!(manifest.entrypoint, "/snapshot/real.js");
@@ -76,8 +53,6 @@ fn snapshotifies_symlinks_in_manifest() -> Result<(), Box<dyn std::error::Error>
             .map(String::as_str),
         Some("/snapshot/real.js")
     );
-
-    fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }
 
@@ -92,7 +67,7 @@ fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgE
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
 
     assert_eq!(manifest.compression, Compression::Gzip);
@@ -121,7 +96,7 @@ fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let manifest = produce_manifest(packed, Compression::Brotli, PathStyle::Posix)?;
 
     assert_eq!(manifest.compression, Compression::Brotli);
@@ -132,16 +107,7 @@ fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
 
 #[test]
 fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
-    let entrypoint = fixture_dir.join("test-x-index.js");
-    let walked = walk(
-        empty_marker()?,
-        &entrypoint,
-        None,
-        WalkerParams::new().with_root(&fixture_dir),
-    )?;
-    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = packed_content_and_stat("/test-x-index.js", b"console.log('hi');");
     let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;
     let rendered = render_prelude(
         "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
@@ -149,7 +115,7 @@ fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
     )?;
 
     assert!(rendered.contains(r#""/snapshot/test-x-index.js""#));
-    assert!(rendered.contains(r#""0":["#));
+    assert!(rendered.contains(r#""1":["#));
     assert!(rendered.contains(r#""3":["#));
     assert!(rendered.contains(r#""/snapshot/test-x-index.js""#));
     assert!(rendered.contains("{}"));
@@ -169,7 +135,7 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
     let rendered = render_prelude("%VIRTUAL_FILESYSTEM%\n%DICT%\n%DOCOMPRESS%", &manifest)?;
 
@@ -180,8 +146,7 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
 }
 
 #[test]
-fn blob_stripes_are_fabricated_as_bytecode_payload() -> Result<(), PkgError> {
-    let source = b"module.exports = 42;".to_vec();
+fn blob_stripes_without_target_fabricator_return_an_error() {
     let packed = pkg_rust::PackedOutput {
         entrypoint: "/app.js".to_owned(),
         symlinks: BTreeMap::new(),
@@ -189,33 +154,75 @@ fn blob_stripes_are_fabricated_as_bytecode_payload() -> Result<(), PkgError> {
             snap: "/app.js".to_owned(),
             store: StoreKind::Blob,
             file: None,
-            buffer: Some(source.clone()),
+            buffer: Some(b"module.exports = 42;".to_vec()),
         }],
     };
-    let produced = produce_executable_image(
+    let error = produce_executable_image(
         binary_with_placeholders(),
         packed,
         "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
         Compression::None,
         PathStyle::Posix,
         Vec::new(),
-    )?;
-    let pointer = produced
-        .manifest
-        .vfs
-        .get("/snapshot/app.js")
-        .and_then(|stores| stores.get(&StoreKind::Blob.as_index()))
-        .cloned()
-        .ok_or_else(|| PkgError::Pack("blob payload pointer was not written".to_owned()))?;
-    let start = produced.payload_position as usize + pointer.offset as usize;
-    let end = start + pointer.size as usize;
-    let payload = produced
-        .bytes
-        .get(start..end)
-        .ok_or_else(|| PkgError::Pack("blob payload range was outside image".to_owned()))?;
+    )
+    .err();
 
-    assert_ne!(payload, source.as_slice());
-    assert!(pointer.size > 0);
+    assert!(
+        matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
+    );
+}
+
+#[test]
+fn produce_manifest_errors_when_blob_lacks_fabricator() {
+    let packed = pkg_rust::PackedOutput {
+        entrypoint: "/app.js".to_owned(),
+        symlinks: BTreeMap::new(),
+        stripes: vec![Stripe {
+            snap: "/app.js".to_owned(),
+            store: StoreKind::Blob,
+            file: None,
+            buffer: Some(b"module.exports = 42;".to_vec()),
+        }],
+    };
+    let error = produce_manifest(packed, Compression::None, PathStyle::Posix).err();
+
+    assert!(
+        matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
+    );
+}
+
+#[test]
+fn write_executable_image_errors_without_blob_fabricator() -> Result<(), Box<dyn std::error::Error>>
+{
+    let packed = pkg_rust::PackedOutput {
+        entrypoint: "/app.js".to_owned(),
+        symlinks: BTreeMap::new(),
+        stripes: vec![Stripe {
+            snap: "/app.js".to_owned(),
+            store: StoreKind::Blob,
+            file: None,
+            buffer: Some(b"module.exports = 42;".to_vec()),
+        }],
+    };
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-produced-blob-error-{}",
+        std::process::id()
+    ));
+    let error = write_executable_image(
+        &output,
+        binary_with_placeholders(),
+        packed,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        Compression::None,
+        PathStyle::Posix,
+        Vec::new(),
+    )
+    .err();
+
+    assert!(
+        matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
+    );
+    assert!(!output.exists());
     Ok(())
 }
 
@@ -298,7 +305,7 @@ fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), Pkg
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let binary = binary_with_placeholders();
     let binary_len = binary.len();
     let produced = produce_executable_image(
@@ -339,7 +346,7 @@ fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), Pk
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let error = produce_executable_image(
         b"no placeholders".to_vec(),
         packed,
@@ -365,7 +372,7 @@ fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Er
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let output =
         std::env::temp_dir().join(format!("pkg-rust-produced-image-{}", std::process::id()));
     let produced = write_executable_image(
@@ -391,6 +398,27 @@ fn binary_with_placeholders() -> Vec<u8> {
     binary.extend_from_slice(b"// PRELUDE_POSITION //");
     binary.extend_from_slice(b"// PRELUDE_SIZE //");
     binary
+}
+
+fn packed_content_and_stat(entrypoint: &str, content: &[u8]) -> pkg_rust::PackedOutput {
+    pkg_rust::PackedOutput {
+        entrypoint: entrypoint.to_owned(),
+        symlinks: BTreeMap::new(),
+        stripes: vec![
+            Stripe {
+                snap: entrypoint.to_owned(),
+                store: StoreKind::Content,
+                file: None,
+                buffer: Some(content.to_vec()),
+            },
+            Stripe {
+                snap: entrypoint.to_owned(),
+                store: StoreKind::Stat,
+                file: None,
+                buffer: Some(b"{}".to_vec()),
+            },
+        ],
+    }
 }
 
 fn bakery_placeholder() -> Vec<u8> {

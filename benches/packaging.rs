@@ -55,10 +55,6 @@ fn require<T>(result: Result<T, PkgError>, context: &str) -> T {
 fn packaging_benchmarks(criterion: &mut Criterion) {
     let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
-    let packed = require(
-        packed_fixture(&fixture_dir, &entrypoint),
-        "failed to build benchmark fixture",
-    );
 
     criterion.bench_function("walk_refine_pack_require_resolve_fixture", |bencher| {
         bencher.iter(|| {
@@ -67,36 +63,11 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
         });
     });
 
-    // Compare payload production across every compression algorithm so
-    // regressions in compression accounting or encoder throughput are visible.
-    for (label, compression) in [
-        ("none", Compression::None),
-        ("gzip", Compression::Gzip),
-        ("brotli", Compression::Brotli),
-    ] {
-        let name = format!("produce_manifest_{label}_require_resolve_fixture");
-        criterion.bench_function(&name, |bencher| {
-            // Clone the packed input in the (untimed) setup so the measurement
-            // reflects production cost only, not the clone.
-            bencher.iter_batched(
-                || packed.clone(),
-                |input| {
-                    let result = produce_manifest(
-                        black_box(input),
-                        black_box(compression),
-                        black_box(PathStyle::Posix),
-                    );
-                    black_box(require(result, "failed to run producer manifest benchmark"))
-                },
-                criterion::BatchSize::SmallInput,
-            );
-        });
-    }
-
     // Fabrication-free payload assembly: bytecode disabled means content stripes
-    // only, so the producer never spawns `node`. These isolate the Rust-side
-    // assembly + compression cost (the blob benches above are dominated by the
-    // external Node bytecode process).
+    // only, so the producer never spawns `node`. Producing a manifest from
+    // bytecode stripes fails closed without an external fabricator, so these
+    // content benches isolate the Rust-side assembly + compression cost across
+    // every compression algorithm.
     let packed_content = require(
         packed_content_fixture(&fixture_dir, &entrypoint),
         "failed to build content-only benchmark fixture",
@@ -129,7 +100,7 @@ fn packaging_benchmarks(criterion: &mut Criterion) {
     // Render the runtime prelude from a real manifest -- this is on the hot path
     // of every executable image write.
     let manifest = require(
-        produce_manifest(packed.clone(), Compression::Gzip, PathStyle::Posix),
+        produce_manifest(packed_content.clone(), Compression::Gzip, PathStyle::Posix),
         "failed to build benchmark manifest",
     );
     let template = prelude_template(false);

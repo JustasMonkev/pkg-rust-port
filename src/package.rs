@@ -399,8 +399,9 @@ pub fn fabricator_for_target(target: &NodeTarget) -> NodeTarget {
 /// binary is fetched through the provider for the host-platform fabricator
 /// target and prepared (signed on macOS, made executable elsewhere) exactly
 /// like the JS CLI does before producing bytecode. Providers that expose only
-/// in-memory bytes without a runnable path fall back to the host `node`
-/// fabrication seam used by deterministic tests.
+/// in-memory bytes without a runnable absolute path yield no fabricator, so
+/// blob stripes fail closed and are reported as warnings rather than resolving
+/// a `node` shim through `PATH`.
 fn resolve_fabricator_binary(
     plan: &PackagePlan,
     target: &NodeTarget,
@@ -418,12 +419,12 @@ fn resolve_fabricator_binary(
 
     // Only spawn the fetched binary when it is a real executable on disk.
     // In-memory providers expose placeholder bytes and metadata-only paths, so
-    // they keep the host `node` fabrication seam used by deterministic tests.
+    // they yield no fabricator and the blob stripe fails closed downstream.
     match fabricator_path {
         Some(path) if looks_like_executable(&fabricator_bytes) => {
             prepare_fabricator_binary(&path, fabricator_target.platform).map(Some)
         }
-        _ => Ok(runnable_fabricator_path(output_binary, output_binary_path).map(Path::to_path_buf)),
+        _ => Ok(runnable_fabricator_path(output_binary, output_binary_path)),
     }
 }
 
@@ -460,11 +461,18 @@ fn signed_fabricator_path(path: &Path) -> PathBuf {
     PathBuf::from(signed)
 }
 
-fn runnable_fabricator_path<'a>(binary: &[u8], path: Option<&'a Path>) -> Option<&'a Path> {
-    if looks_like_executable(binary) {
-        path
+fn runnable_fabricator_path(binary: &[u8], path: Option<&Path>) -> Option<PathBuf> {
+    if !looks_like_executable(binary) {
+        return None;
+    }
+
+    let path = path?;
+    if path.is_absolute() {
+        Some(path.to_path_buf())
     } else {
-        None
+        // Resolve to an absolute path so fabrication never depends on the
+        // ambient PATH; drop the candidate if it cannot be canonicalized.
+        path.canonicalize().ok()
     }
 }
 
