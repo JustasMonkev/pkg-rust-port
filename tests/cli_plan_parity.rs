@@ -34,7 +34,7 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
         OsString::from("linux,win"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-46-input-package-json"),
+        OsString::from("test/test-46-input-package-json"),
     ])?;
 
     assert!(plan.entrypoint.ends_with("test-x-index.js"));
@@ -58,7 +58,7 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
 #[test]
 fn package_json_input_uses_package_directory_as_walk_root_for_subpath_bin()
 -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-99-#1192")])?;
+    let plan = plan_package([OsString::from("test/test-99-#1192")])?;
 
     assert!(plan.entrypoint.ends_with("test-99-#1192/src/index.js"));
     assert!(plan.root.ends_with("test-99-#1192"));
@@ -101,7 +101,7 @@ fn config_json_input_resolves_bin_like_package_json() -> Result<(), Box<dyn std:
 
 #[test]
 fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-46-input/test-x-index")])?;
+    let plan = plan_package([OsString::from("test/test-46-input/test-x-index")])?;
 
     assert!(plan.entrypoint.ends_with("test-46-input/test-x-index"));
     assert_output_suffixes(
@@ -118,7 +118,7 @@ fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std
 #[test]
 fn plans_default_multi_target_outputs_without_js_extension()
 -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-46-input-js/test-x-index.js")])?;
+    let plan = plan_package([OsString::from("test/test-46-input-js/test-x-index.js")])?;
 
     assert!(
         plan.entrypoint
@@ -144,7 +144,7 @@ fn plans_out_path_multi_target_outputs() -> Result<(), Box<dyn std::error::Error
     let plan = plan_package([
         OsString::from("--out-path"),
         OsString::from(output_root_text),
-        OsString::from("../test/test-46-outpath/test-x-index"),
+        OsString::from("test/test-46-outpath/test-x-index"),
     ])?;
 
     assert_output_suffixes(
@@ -161,16 +161,15 @@ fn plans_out_path_multi_target_outputs() -> Result<(), Box<dyn std::error::Error
 #[test]
 fn plans_package_json_targets_and_output_path_defaults() -> Result<(), Box<dyn std::error::Error>> {
     let target_plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-target/package.json",
+        "test/test-46-input-package-json-target/package.json",
     )])?;
     assert_eq!(target_plan.outputs.len(), 2);
     assert_eq!(target_plan.outputs[0].target.platform, Platform::Linux);
     assert_eq!(target_plan.outputs[1].target.platform, Platform::Macos);
     assert_output_suffixes(&target_plan, &["palookaville-linux", "palookaville-macos"]);
 
-    let output_path_plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-outputdir",
-    )])?;
+    let output_path_plan =
+        plan_package([OsString::from("test/test-46-input-package-json-outputdir")])?;
     assert_output_suffixes(
         &output_path_plan,
         &[
@@ -191,7 +190,7 @@ fn plans_explicit_output_as_single_host_target() -> Result<(), Box<dyn std::erro
     let plan = plan_package([
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-46-input-output/test-x-index"),
+        OsString::from("test/test-46-input-output/test-x-index"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 1);
@@ -222,7 +221,7 @@ fn plans_single_target_out_path_without_platform_suffix() -> Result<(), Box<dyn 
         OsString::from("linux"),
         OsString::from("--out-path"),
         OsString::from(output_root_text),
-        OsString::from("../test/test-46-outpath-target/test-x-index"),
+        OsString::from("test/test-46-outpath-target/test-x-index"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 1);
@@ -233,9 +232,7 @@ fn plans_single_target_out_path_without_platform_suffix() -> Result<(), Box<dyn 
 #[test]
 fn plans_scoped_package_directory_with_unscoped_basename() -> Result<(), Box<dyn std::error::Error>>
 {
-    let plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-dir-scope",
-    )])?;
+    let plan = plan_package([OsString::from("test/test-46-input-package-json-dir-scope")])?;
 
     assert!(
         plan.input
@@ -257,8 +254,8 @@ fn plans_scoped_package_directory_with_unscoped_basename() -> Result<(), Box<dyn
 fn rejects_explicit_output_that_would_overwrite_input() -> Result<(), Box<dyn std::error::Error>> {
     let error = match plan_package([
         OsString::from("--output"),
-        OsString::from("../test/test-46-input/test-x-index"),
-        OsString::from("../test/test-46-input/test-x-index"),
+        OsString::from("test/test-46-input/test-x-index"),
+        OsString::from("test/test-46-input/test-x-index"),
     ]) {
         Ok(plan) => {
             return Err(format!("explicit output unexpectedly planned: {plan:?}").into());
@@ -288,11 +285,11 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--compress"),
         OsString::from("br"),
         OsString::from("--no-bytecode"),
-        OsString::from("../test/test-50-require-resolve/test-x-index.js"),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.compression, Compression::Brotli);
-    assert!(plan.snapshot_base.ends_with("test-50-require-resolve"));
+    assert!(plan.snapshot_base.ends_with("test"));
     assert!(!plan.bytecode);
     assert!(plan.native_build);
     assert!(plan.signature);
@@ -316,7 +313,7 @@ fn plans_no_native_build_flag() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-native-build"),
-        OsString::from("../test/test-50-native-addon/test-x-index.js"),
+        OsString::from("test/test-50-native-addon/test-x-index.js"),
     ])?;
 
     assert!(!plan.native_build);
@@ -335,7 +332,7 @@ fn plans_no_signature_flag() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-signature"),
-        OsString::from("../test/test-50-api/test-x-index.js"),
+        OsString::from("test/test-50-api/test-x-index.js"),
     ])?;
 
     assert!(!plan.signature);
@@ -354,7 +351,7 @@ fn plans_force_build_on_all_targets() -> Result<(), Box<dyn std::error::Error>> 
         OsString::from("linux,win"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-require-resolve/test-x-index.js"),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 2);
@@ -376,7 +373,7 @@ fn plans_public_disclosure_flags() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--public"),
         OsString::from("--public-packages"),
         OsString::from("crusader,swordsman"),
-        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+        OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
     assert!(plan.public_toplevel);
@@ -397,7 +394,7 @@ fn plans_public_package_wildcard_like_js() -> Result<(), Box<dyn std::error::Err
         OsString::from(output_text),
         OsString::from("--public-packages"),
         OsString::from("crusader,*,swordsman"),
-        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+        OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
     assert!(!plan.public_toplevel);
@@ -418,7 +415,7 @@ fn plans_disabled_dictionary_modules() -> Result<(), Box<dyn std::error::Error>>
         OsString::from(output_text),
         OsString::from("--no-dict"),
         OsString::from("busboy.js,log4js.js"),
-        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+        OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.no_dictionary, vec!["busboy.js", "log4js.js"]);
@@ -438,7 +435,7 @@ fn plans_disabled_dictionary_wildcard_like_js() -> Result<(), Box<dyn std::error
         OsString::from(output_text),
         OsString::from("--no-dict"),
         OsString::from("busboy.js,*,log4js.js"),
-        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+        OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.no_dictionary, vec!["*"]);
@@ -457,7 +454,7 @@ fn file_input_inside_package_keeps_package_directory_in_snapshot()
         OsString::from("host"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-package-json-6c/beta/alpha.js"),
+        OsString::from("test/test-50-package-json-6c/beta/alpha.js"),
     ])?;
 
     assert!(plan.root.ends_with("test-50-package-json-6c/beta"));
@@ -477,7 +474,7 @@ fn file_input_inside_node_modules_package_keeps_node_modules_in_snapshot()
         OsString::from("host"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-package-json-6b/node_modules/alpha/alpha.js"),
+        OsString::from("test/test-50-package-json-6b/node_modules/alpha/alpha.js"),
     ])?;
 
     assert!(

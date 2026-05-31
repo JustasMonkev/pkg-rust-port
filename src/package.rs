@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::cli::PackagePlan;
 use crate::error::PkgError;
@@ -129,7 +129,7 @@ pub struct PackageBuild {
 ///     "linux",
 ///     "--output",
 ///     output_text,
-///     "../test/test-50-require-resolve/test-x-index.js",
+///     "test/test-50-require-resolve/test-x-index.js",
 /// ])?;
 /// let build = pkg_rust::build_package_with_provider(
 ///     &plan,
@@ -151,7 +151,13 @@ pub fn build_package_with_provider(
     for planned in &plan.outputs {
         let binary = provider.binary_artifact_for(&planned.target)?;
         let (binary_bytes, binary_path) = binary.into_parts();
-        let fabricator_path = runnable_fabricator_path(&binary_bytes, binary_path.as_deref());
+        let fabricator_path = resolve_fabricator_binary(
+            plan,
+            &planned.target,
+            provider,
+            &binary_bytes,
+            binary_path.as_deref(),
+        )?;
         let native_addons =
             native_addon_options(plan.native_build, &planned.target, binary_path.as_deref());
         let walked = walk(
@@ -221,9 +227,70 @@ fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), P
         let PackageWarning::DeployFile { source, target, .. } = warning else {
             continue;
         };
-        copy_deploy_path(source, &output_dir.join(target))?;
+        // Deploy-file targets come from package metadata, which may be
+        // attacker-controlled (for example a dependency's `pkg.deployFiles`).
+        // Contain the target inside the output directory so an absolute path or
+        // `..` traversal cannot write or overwrite files elsewhere.
+        let Some(target) = contained_deploy_target(output_dir, target) else {
+            continue;
+        };
+        let Some(target) = resolve_safe_deploy_target(output_dir, &target)? else {
+            continue;
+        };
+        copy_deploy_path(source, &target)?;
     }
     Ok(())
+}
+
+/// Resolve a deploy-file target strictly inside `output_dir`.
+///
+/// Returns `None` (skipping the deploy file) when the target is absolute, has a
+/// drive/UNC prefix, or contains a `..` component, so package metadata can never
+/// escape the output directory.
+fn contained_deploy_target(output_dir: &Path, target: &Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in target.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(output_dir.join(relative))
+}
+
+fn resolve_safe_deploy_target(
+    output_dir: &Path,
+    target: &Path,
+) -> Result<Option<PathBuf>, PkgError> {
+    let Some(parent) = target.parent() else {
+        return Ok(None);
+    };
+    if !parent.as_os_str().is_empty() {
+        fs::create_dir_all(parent).map_err(|source_error| PkgError::Io {
+            path: parent.display().to_string(),
+            source: source_error,
+        })?;
+    }
+
+    let output_dir = fs::canonicalize(output_dir).map_err(|source_error| PkgError::Io {
+        path: output_dir.display().to_string(),
+        source: source_error,
+    })?;
+    let parent = fs::canonicalize(parent).map_err(|source_error| PkgError::Io {
+        path: parent.display().to_string(),
+        source: source_error,
+    })?;
+    if !parent.starts_with(&output_dir) {
+        return Ok(None);
+    }
+
+    Ok(Some(target.to_path_buf()))
 }
 
 fn copy_deploy_path(source: &Path, target: &Path) -> Result<(), PkgError> {
@@ -294,6 +361,106 @@ fn bakery_from_bakes(bakes: &[String]) -> Vec<u8> {
     bakery
 }
 
+/// Compute the fabricator target for an output target.
+///
+/// This mirrors pkg's `fabricatorForTarget`: V8 cached data is platform
+/// independent, so bytecode is produced by running a Node binary built for the
+/// build host's platform while keeping the output target's node range and
+/// architecture. The target's own platform binary (for example a Windows `.exe`)
+/// may not run on the build host, so it is never used as the fabricator.
+#[must_use]
+pub fn fabricator_for_target(target: &NodeTarget) -> NodeTarget {
+    let host_platform = Platform::host();
+    let host_arch = Arch::host();
+    let platform = if host_arch != target.arch
+        && matches!(host_platform, Platform::Linux | Platform::Alpine)
+    {
+        // linuxstatic can generate bytecode for a different arch with a simple
+        // QEMU configuration instead of an entire sysroot.
+        Platform::LinuxStatic
+    } else {
+        host_platform
+    };
+    NodeTarget {
+        node_range: target.node_range.clone(),
+        platform,
+        arch: target.arch,
+        // The fabricator binary is always fetched, never force-built: pkg's
+        // `fabricatorForTarget` returns no `forceBuild`, and its cache lookup
+        // for the fabricator does not carry it. Only the output base binary
+        // honors `--build`.
+        force_build: false,
+    }
+}
+
+/// Resolve the Node binary used to fabricate bytecode for an output target.
+///
+/// When bytecode is disabled there is no fabricator. Otherwise the fabricator
+/// binary is fetched through the provider for the host-platform fabricator
+/// target and prepared (signed on macOS, made executable elsewhere) exactly
+/// like the JS CLI does before producing bytecode. Providers that expose only
+/// in-memory bytes without a runnable absolute path yield no fabricator, so
+/// blob stripes fail closed and are reported as warnings rather than resolving
+/// a `node` shim through `PATH`.
+fn resolve_fabricator_binary(
+    plan: &PackagePlan,
+    target: &NodeTarget,
+    provider: &impl TargetBinaryProvider,
+    output_binary: &[u8],
+    output_binary_path: Option<&Path>,
+) -> Result<Option<PathBuf>, PkgError> {
+    if !plan.bytecode {
+        return Ok(None);
+    }
+
+    let fabricator_target = fabricator_for_target(target);
+    let fabricator = provider.binary_artifact_for(&fabricator_target)?;
+    let (fabricator_bytes, fabricator_path) = fabricator.into_parts();
+
+    // Only spawn the fetched binary when it is a real executable on disk.
+    // In-memory providers expose placeholder bytes and metadata-only paths, so
+    // they yield no fabricator and the blob stripe fails closed downstream.
+    match fabricator_path {
+        Some(path) if looks_like_executable(&fabricator_bytes) => {
+            prepare_fabricator_binary(&path, fabricator_target.platform).map(Some)
+        }
+        _ => Ok(runnable_fabricator_path(output_binary, output_binary_path)),
+    }
+}
+
+/// Prepare a fetched fabricator binary so the host can run it for bytecode.
+fn prepare_fabricator_binary(path: &Path, platform: Platform) -> Result<PathBuf, PkgError> {
+    if platform == Platform::Macos {
+        // macOS mandates signed executables, so ad-hoc sign a copy of the base
+        // binary and fabricate bytecode with the signed copy.
+        let signed = signed_fabricator_path(path);
+        let _ignored = fs::remove_file(&signed);
+        fs::copy(path, &signed).map_err(|source| PkgError::Io {
+            path: signed.display().to_string(),
+            source,
+        })?;
+        sign_macho_executable(&signed)?;
+        plus_x(&signed)?;
+        return Ok(signed);
+    }
+
+    if platform != Platform::Win {
+        plus_x(path)?;
+    }
+    Ok(path.to_path_buf())
+}
+
+fn signed_fabricator_path(path: &Path) -> PathBuf {
+    // Use a per-process, per-call suffix so concurrent builds sharing a cache do
+    // not sign or remove the same `-signed` file out from under each other.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nonce = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut signed = path.as_os_str().to_os_string();
+    signed.push(format!("-signed-{}-{nonce}", std::process::id()));
+    PathBuf::from(signed)
+}
+
 fn runnable_fabricator_path(binary: &[u8], path: Option<&Path>) -> Option<PathBuf> {
     if !looks_like_executable(binary) {
         return None;
@@ -347,9 +514,7 @@ fn prebuild_install_path() -> Option<PathBuf> {
 }
 
 fn source_tree_prebuild_install() -> Option<PathBuf> {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest_dir
-        .parent()?
+    let candidate = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("node_modules")
         .join(".bin")
         .join(executable_name("prebuild-install"));

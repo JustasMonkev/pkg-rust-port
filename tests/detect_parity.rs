@@ -5,9 +5,42 @@ use pkg_rust::{
     successful_debug_lines,
 };
 
+/// Regression for test-50-require-edge-cases: a `require(...)` nested in
+/// operand-bearing expressions (typeof/await/new/seq/optional-chain/ts-cast)
+/// must still be detected, matching pkg's full Babel traversal. Previously the
+/// traversal stopped at these nodes, so e.g. `typeof require('./x')` was missed
+/// and the required file was dropped from the package.
+#[test]
+fn detects_require_inside_operand_expressions() -> Result<(), PkgError> {
+    let source = r#"
+        const a = typeof require('./a.js');
+        async function f() { return await require('./b.js'); }
+        const c = new Thing(require('./c.js'));
+        const d = (require('./d.js'), 1);
+        const e = require('./e.js')?.foo;
+        const g = require('./g.js');
+    "#;
+
+    let found: Vec<String> = detect(source)?
+        .into_iter()
+        .filter_map(|use_| match use_.kind {
+            DetectionKind::Successful(derivative) => Some(derivative.alias),
+            _ => None,
+        })
+        .collect();
+
+    for expected in ["./a.js", "./b.js", "./c.js", "./d.js", "./e.js", "./g.js"] {
+        assert!(
+            found.iter().any(|alias| alias == expected),
+            "expected to detect require({expected:?}); found {found:?}"
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn successful_debug_lines_match_ast_parsing_fixture() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-ast-parsing/test-y-data.txt");
+    let source = include_str!("../test/test-50-ast-parsing/test-y-data.txt");
     let expected = source
         .lines()
         .filter_map(|line| line.split_once("/***/ ").map(|(_prefix, suffix)| suffix))
@@ -20,7 +53,7 @@ fn successful_debug_lines_match_ast_parsing_fixture() -> Result<(), PkgError> {
 
 #[test]
 fn non_literal_and_cwd_lines_match_ast_parsing_2_fixture() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-ast-parsing-2/test-x-index.js");
+    let source = include_str!("../test/test-50-ast-parsing-2/test-x-index.js");
     let expected = source
         .lines()
         .filter_map(|line| line.split("/**/").nth(1))
@@ -60,7 +93,7 @@ fn detect_returns_typed_static_derivatives() -> Result<(), PkgError> {
 
 #[test]
 fn detect_accepts_commonjs_top_level_return() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-spawn/test-cluster.js");
+    let source = include_str!("../test/test-50-spawn/test-cluster.js");
     let uses = detect(source)?;
 
     assert!(uses.iter().any(|detected| matches!(
@@ -72,7 +105,7 @@ fn detect_accepts_commonjs_top_level_return() -> Result<(), PkgError> {
 
 #[test]
 fn detect_finds_spawn_child_require_resolve() -> Result<(), PkgError> {
-    let source = include_str!("../../test/test-50-spawn/test-cpfork-a-1.js");
+    let source = include_str!("../test/test-50-spawn/test-cpfork-a-1.js");
     let uses = detect(source)?;
 
     assert!(uses.iter().any(|detected| matches!(

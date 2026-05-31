@@ -18,55 +18,108 @@ use crate::walk::Marker;
 #[derive(Debug, Parser)]
 #[command(
     name = "pkg",
-    version,
-    about = "Package your Node.js project into an executable"
+    version = crate::prelude::PKG_VERSION,
+    disable_version_flag = true,
+    about = "Package your Node.js project into an executable",
+    after_help = CLI_EXAMPLES,
 )]
 struct Cli {
     #[arg(value_name = "input")]
     input: Option<PathBuf>,
 
-    #[arg(short = 't', long = "targets", alias = "target")]
+    /// output pkg version
+    #[arg(short = 'v', long = "version")]
+    version: bool,
+
+    /// comma-separated list of targets (see examples)
+    #[arg(
+        short = 't',
+        long = "targets",
+        alias = "target",
+        value_name = "targets"
+    )]
     targets: Option<String>,
 
-    #[arg(short = 'c', long = "config")]
+    /// package.json or any json file with top-level config
+    #[arg(short = 'c', long = "config", value_name = "config")]
     config: Option<PathBuf>,
 
-    #[arg(short = 'o', long = "output")]
+    /// output file name or template for several files
+    #[arg(short = 'o', long = "output", value_name = "output")]
     output: Option<PathBuf>,
 
-    #[arg(long = "out-path", alias = "out-dir", alias = "outdir")]
+    /// path to save output one or more executables
+    #[arg(
+        long = "out-path",
+        alias = "out-dir",
+        alias = "outdir",
+        value_name = "out-path"
+    )]
     out_path: Option<PathBuf>,
 
-    #[arg(long = "options")]
+    /// bake v8 options into executable to run with them on
+    #[arg(long = "options", value_name = "options")]
     options: Option<String>,
 
+    /// show more information during packaging process [off]
     #[arg(short = 'd', long = "debug")]
     debug: bool,
 
+    /// don't download prebuilt base binaries, build them
     #[arg(short = 'b', long = "build")]
     build: bool,
 
+    /// speed up and disclose the sources of top-level project
     #[arg(long = "public")]
     public: bool,
 
-    #[arg(long = "public-packages")]
+    /// force specified packages to be considered public
+    #[arg(long = "public-packages", value_name = "public-packages")]
     public_packages: Option<String>,
 
+    /// skip bytecode generation and include source files as plain js
     #[arg(long = "no-bytecode", default_value_t = false)]
     no_bytecode: bool,
 
+    /// skip native addons build
     #[arg(long = "no-native-build", default_value_t = false)]
     no_native_build: bool,
 
+    /// skip ad-hoc signing of macOS executables
     #[arg(long = "no-signature", default_value_t = false)]
     no_signature: bool,
 
-    #[arg(long = "no-dict")]
+    /// comma-separated list of packages names to ignore dictionaries. Use --no-dict * to disable all dictionaries
+    #[arg(long = "no-dict", value_name = "no-dict")]
     no_dict: Option<String>,
 
-    #[arg(short = 'C', long = "compress")]
+    /// [default=None] compression algorithm = Brotli or GZip
+    #[arg(short = 'C', long = "compress", value_name = "compress")]
     compress: Option<String>,
 }
+
+/// Usage examples appended to the CLI help, mirroring the JS `help.ts` output.
+const CLI_EXAMPLES: &str = "\
+Examples:
+
+– Makes executables for Linux, macOS and Windows
+  $ pkg index.js
+– Takes package.json from cwd and follows 'bin' entry
+  $ pkg .
+– Makes executable for particular target machine
+  $ pkg -t node14-win-arm64 index.js
+– Makes executables for target machines of your choice
+  $ pkg -t node12-linux,node14-linux,node14-win index.js
+– Bakes '--expose-gc' and '--max-heap-size=34' into executable
+  $ pkg --options \"expose-gc,max-heap-size=34\" index.js
+– Consider packageA and packageB to be public
+  $ pkg --public-packages \"packageA,packageB\" index.js
+– Consider all packages to be public
+  $ pkg --public-packages \"*\" index.js
+– Bakes '--expose-gc' into executable
+  $ pkg --options expose-gc index.js
+– reduce size of the data packed inside the executable with GZip
+  $ pkg --compress GZip index.js";
 
 /// Planned output artifact for one target.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -129,7 +182,7 @@ pub struct PackagePlan {
 ///     "linux,win",
 ///     "--output",
 ///     output.to_str().ok_or_else(|| pkg_rust::PkgError::Cli("non-utf8 temp path".to_owned()))?,
-///     "../test/test-46-input-package-json",
+///     "test/test-46-input-package-json",
 /// ])?;
 /// assert_eq!(plan.outputs.len(), 2);
 /// assert!(plan.outputs[1].output.ends_with("pkg-rust-plan-demo-win.exe"));
@@ -166,7 +219,15 @@ where
     let Some(cli) = parse_cli_or_display(argv)? else {
         return Ok(());
     };
+    if cli.version {
+        // JS pkg prints the bare version (`console.log(version)`).
+        println!("{}", crate::prelude::PKG_VERSION);
+        return Ok(());
+    }
     let debug = cli.debug;
+    // JS pkg logs `pkg@<version>` once arguments are accepted, before option,
+    // target, and input processing.
+    println!("> pkg@{}", crate::prelude::PKG_VERSION);
     let plan = plan_from_cli(cli)?;
     if plan.compression != Compression::None {
         println!("compression:  {}", plan.compression.cli_label());
@@ -222,12 +283,7 @@ where
     let args = std::iter::once(OsString::from("pkg")).chain(argv.into_iter().map(Into::into));
     match Cli::try_parse_from(args) {
         Ok(cli) => Ok(Some(cli)),
-        Err(error)
-            if matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            ) =>
-        {
+        Err(error) if error.kind() == ErrorKind::DisplayHelp => {
             error.print().map_err(|source| PkgError::Io {
                 path: "stdout".to_owned(),
                 source,
@@ -287,6 +343,9 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     // for file inputs; ancestor packages would accidentally make repo roots part
     // of unrelated fixture packages. Package files below node_modules keep the
     // first node_modules segment so bare self-requires still resolve at runtime.
+    // Plain file inputs still preserve their entry directory basename under
+    // /snapshot, matching pkg's /snapshot/<dir>/<entry> layout without widening
+    // the walk root to sibling fixture directories.
     let package_dir = if input_package.is_some() {
         input.parent().map(Path::to_path_buf)
     } else {
@@ -301,7 +360,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     let snapshot_base = if let Some(package_dir) = package_dir {
         package_snapshot_base(&package_dir, &root)
     } else {
-        root.clone()
+        file_input_snapshot_base(&root)
     };
     let auto_output = cli.output.is_none();
     let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
@@ -455,6 +514,12 @@ fn package_snapshot_base(package_dir: &Path, root: &Path) -> PathBuf {
 
     package_dir
         .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.to_path_buf())
+}
+
+fn file_input_snapshot_base(root: &Path) -> PathBuf {
+    root.parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| root.to_path_buf())
 }

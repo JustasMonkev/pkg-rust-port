@@ -15,7 +15,7 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -38,7 +38,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
             && stripe
                 .buffer
                 .as_ref()
-                .is_some_and(|buffer| buffer == br#"["main.js","test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
+                .is_some_and(|buffer| buffer == br#"["test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
     }));
     assert!(packed.stripes.iter().any(|stripe| {
         stripe.snap == "/test-x-index.js"
@@ -61,7 +61,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
 
 #[test]
 fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,

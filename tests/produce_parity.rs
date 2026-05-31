@@ -58,7 +58,7 @@ fn snapshotifies_symlinks_in_manifest() -> Result<(), PkgError> {
 
 #[test]
 fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -87,7 +87,7 @@ fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgE
 
 #[test]
 fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -126,7 +126,7 @@ fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
 
 #[test]
 fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -135,7 +135,7 @@ fn renders_compressed_prelude_dictionary() -> Result<(), PkgError> {
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
     let rendered = render_prelude("%VIRTUAL_FILESYSTEM%\n%DICT%\n%DOCOMPRESS%", &manifest)?;
 
@@ -189,6 +189,41 @@ fn produce_manifest_errors_when_blob_lacks_fabricator() {
     assert!(
         matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
     );
+}
+
+#[test]
+fn write_executable_image_errors_without_blob_fabricator() -> Result<(), Box<dyn std::error::Error>>
+{
+    let packed = pkg_rust::PackedOutput {
+        entrypoint: "/app.js".to_owned(),
+        symlinks: BTreeMap::new(),
+        stripes: vec![Stripe {
+            snap: "/app.js".to_owned(),
+            store: StoreKind::Blob,
+            file: None,
+            buffer: Some(b"module.exports = 42;".to_vec()),
+        }],
+    };
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-produced-blob-error-{}",
+        std::process::id()
+    ));
+    let error = write_executable_image(
+        &output,
+        binary_with_placeholders(),
+        packed,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+        Compression::None,
+        PathStyle::Posix,
+        Vec::new(),
+    )
+    .err();
+
+    assert!(
+        matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
+    );
+    assert!(!output.exists());
+    Ok(())
 }
 
 #[test]
@@ -261,7 +296,7 @@ fn injection_errors_when_placeholder_is_missing() {
 
 #[test]
 fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -270,7 +305,7 @@ fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), Pkg
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let binary = binary_with_placeholders();
     let binary_len = binary.len();
     let produced = produce_executable_image(
@@ -302,7 +337,7 @@ fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), Pkg
 
 #[test]
 fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -311,7 +346,7 @@ fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), Pk
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let error = produce_executable_image(
         b"no placeholders".to_vec(),
         packed,
@@ -328,7 +363,7 @@ fn produced_image_errors_when_required_placeholder_is_missing() -> Result<(), Pk
 
 #[test]
 fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
     let walked = walk(
         empty_marker()?,
@@ -337,7 +372,7 @@ fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Er
         WalkerParams::new().with_root(&fixture_dir),
     )?;
     let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
-    let packed = pack(refined, true)?;
+    let packed = pack(refined, false)?;
     let output =
         std::env::temp_dir().join(format!("pkg-rust-produced-image-{}", std::process::id()));
     let produced = write_executable_image(
@@ -352,41 +387,6 @@ fn writes_executable_image_to_output_file() -> Result<(), Box<dyn std::error::Er
 
     assert_eq!(fs::read(&output)?, produced.bytes);
     fs::remove_file(output)?;
-    Ok(())
-}
-
-#[test]
-fn write_executable_image_errors_without_blob_fabricator() -> Result<(), Box<dyn std::error::Error>>
-{
-    let packed = pkg_rust::PackedOutput {
-        entrypoint: "/app.js".to_owned(),
-        symlinks: BTreeMap::new(),
-        stripes: vec![Stripe {
-            snap: "/app.js".to_owned(),
-            store: StoreKind::Blob,
-            file: None,
-            buffer: Some(b"module.exports = 42;".to_vec()),
-        }],
-    };
-    let output = std::env::temp_dir().join(format!(
-        "pkg-rust-produced-blob-error-{}",
-        std::process::id()
-    ));
-    let error = write_executable_image(
-        &output,
-        binary_with_placeholders(),
-        packed,
-        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
-        Compression::None,
-        PathStyle::Posix,
-        Vec::new(),
-    )
-    .err();
-
-    assert!(
-        matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
-    );
-    assert!(!output.exists());
     Ok(())
 }
 

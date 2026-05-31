@@ -27,7 +27,7 @@ pub struct RefinedOutput {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-code-1.js";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-code-1.js";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine(output, entrypoint, pkg_rust::SymlinkMap::new(), pkg_rust::PathStyle::Posix);
 /// assert_eq!(refined.entrypoint, "/test-z-require-code-1.js");
@@ -62,6 +62,7 @@ pub fn refine(
         })
         .collect();
     ensure_parent_directory_records(&mut records, style);
+    sort_directory_children_like_pkg(&mut records);
     let symlinks = symlinks
         .into_iter()
         .map(|(link, real)| {
@@ -132,7 +133,6 @@ fn ensure_directory_record(
     if let Some(record) = records.get_mut(key) {
         if !record.children.iter().any(|existing| existing == &child) {
             record.children.push(child);
-            record.children.sort();
         }
         record.links = true;
         record.stat = true;
@@ -220,7 +220,7 @@ fn directory_stat(file: &Path) -> FileStat {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-code-1.js";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-code-1.js";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
 /// assert_eq!(refined.entrypoint, "/test-z-require-code-1.js");
@@ -292,7 +292,9 @@ fn refine_with_snapshot_base(
             )
         })
         .collect();
+    ensure_parent_directory_records(&mut records, style);
     ensure_snapshot_base_records(&mut records, &entrypoint, &snapshot_base, style);
+    sort_directory_children_like_pkg(&mut records);
     let symlinks = symlinks
         .into_iter()
         .map(|(link, real)| {
@@ -312,14 +314,51 @@ fn refine_with_snapshot_base(
     }
 }
 
+fn sort_directory_children_like_pkg(records: &mut BTreeMap<String, FileRecord>) {
+    let snapshot = records.clone();
+    for (directory, record) in records {
+        if !record.links {
+            continue;
+        }
+        record.children.sort_by(|left, right| {
+            let left_is_dir = child_record(&snapshot, directory, left)
+                .is_some_and(is_directory_record)
+                || !left.contains('.');
+            let right_is_dir = child_record(&snapshot, directory, right)
+                .is_some_and(is_directory_record)
+                || !right.contains('.');
+            left_is_dir.cmp(&right_is_dir).then_with(|| left.cmp(right))
+        });
+        record.children.dedup();
+    }
+}
+
+fn is_directory_record(record: &FileRecord) -> bool {
+    record
+        .metadata
+        .as_ref()
+        .is_some_and(|stat| stat.is_directory)
+        || record.links
+}
+
+fn child_record<'a>(
+    records: &'a BTreeMap<String, FileRecord>,
+    directory: &str,
+    child: &str,
+) -> Option<&'a FileRecord> {
+    let path = if directory == "/" {
+        format!("/{child}")
+    } else {
+        format!("{directory}/{child}")
+    };
+    records.get(&path)
+}
+
 fn purge_top_directories(records: &mut BTreeMap<PathBuf, FileRecord>) {
-    loop {
-        let Some(file) = records
-            .iter()
-            .find_map(|(file, record)| should_purge(file, record, records).then(|| file.clone()))
-        else {
-            break;
-        };
+    while let Some(file) = records
+        .iter()
+        .find_map(|(file, record)| should_purge(file, record, records).then(|| file.clone()))
+    {
         records.remove(&file);
     }
 }
@@ -413,4 +452,108 @@ fn default_directory_mode() -> u32 {
 #[cfg(not(unix))]
 fn default_directory_mode() -> u32 {
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn purge_top_directories_keeps_top_directory_with_multiple_children() {
+        let mut records = BTreeMap::new();
+        records.insert(
+            PathBuf::from("/project"),
+            directory_record("/project", ["app", "docs"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app"),
+            directory_record("/project/app", ["src"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app/src"),
+            directory_record("/project/app/src", ["index.js"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app/src/index.js"),
+            file_record("/project/app/src/index.js"),
+        );
+        records.insert(PathBuf::from("/project/docs"), file_record("/project/docs"));
+
+        purge_top_directories(&mut records);
+
+        assert!(records.contains_key(Path::new("/project")));
+    }
+
+    #[test]
+    fn purge_top_directories_keeps_matching_chain_when_it_has_a_parent() {
+        let mut records = BTreeMap::new();
+        records.insert(
+            PathBuf::from("/project"),
+            directory_record("/project", ["app", "docs"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app"),
+            directory_record("/project/app", ["src"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app/src"),
+            directory_record("/project/app/src", ["lib"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app/src/lib"),
+            directory_record("/project/app/src/lib", ["index.js"]),
+        );
+        records.insert(PathBuf::from("/project/docs"), file_record("/project/docs"));
+
+        purge_top_directories(&mut records);
+
+        assert!(records.contains_key(Path::new("/project/app")));
+    }
+
+    #[test]
+    fn purge_top_directories_keeps_chain_with_non_linked_grandchild() {
+        let mut records = BTreeMap::new();
+        records.insert(
+            PathBuf::from("/project"),
+            directory_record("/project", ["app"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app"),
+            directory_record("/project/app", ["index.js"]),
+        );
+        records.insert(
+            PathBuf::from("/project/app/index.js"),
+            file_record("/project/app/index.js"),
+        );
+
+        purge_top_directories(&mut records);
+
+        assert!(records.contains_key(Path::new("/project")));
+    }
+
+    fn directory_record<const N: usize>(file: &str, children: [&str; N]) -> FileRecord {
+        FileRecord {
+            file: PathBuf::from(file),
+            blob: false,
+            content: false,
+            links: true,
+            stat: true,
+            body: None,
+            children: children.into_iter().map(ToOwned::to_owned).collect(),
+            metadata: None,
+        }
+    }
+
+    fn file_record(file: &str) -> FileRecord {
+        FileRecord {
+            file: PathBuf::from(file),
+            blob: true,
+            content: false,
+            links: false,
+            stat: true,
+            body: None,
+            children: Vec::new(),
+            metadata: None,
+        }
+    }
 }

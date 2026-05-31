@@ -21,7 +21,7 @@ fn rendered_warning(warning: &pkg_rust::PackageWarning) -> String {
 
 #[test]
 fn walks_require_resolve_fixture_dependencies_in_fifo_order() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let output = walk(
         empty_marker()?,
@@ -88,7 +88,7 @@ fn walks_require_resolve_fixture_dependencies_in_fifo_order() -> Result<(), PkgE
 
 #[test]
 fn explicit_addition_is_stored_as_content() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let addition = fixture_dir.join("test-z-require-content.css");
 
     let output = walk(
@@ -104,7 +104,7 @@ fn explicit_addition_is_stored_as_content() -> Result<(), PkgError> {
 
 #[test]
 fn public_toplevel_discloses_entrypoint_source() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-extensions");
+    let fixture_dir = PathBuf::from("test/test-50-extensions");
     let entrypoint = fixture_dir.join("test-x-index.js");
 
     let output = walk(
@@ -123,7 +123,7 @@ fn public_toplevel_discloses_entrypoint_source() -> Result<(), PkgError> {
 
 #[test]
 fn public_package_list_discloses_dependency_source() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let fixture_dir = PathBuf::from("test/test-50-public-packages");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let dependency = fixture_dir.join("node_modules/crusader/index.js");
 
@@ -151,7 +151,7 @@ fn public_package_list_discloses_dependency_source() -> Result<(), PkgError> {
 
 #[test]
 fn public_package_wildcard_discloses_dependency_source() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let fixture_dir = PathBuf::from("test/test-50-public-packages");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let dependency = fixture_dir.join("node_modules/crusader/index.js");
 
@@ -211,7 +211,7 @@ fn builtin_like_package_subpaths_are_resolved_like_js() -> Result<(), Box<dyn st
 
 #[test]
 fn public_license_discloses_entrypoint_source() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-extensions");
+    let fixture_dir = PathBuf::from("test/test-50-extensions");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let package = PackageJson::parse(r#"{"name":"demo","license":"MIT"}"#)
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
@@ -230,7 +230,7 @@ fn public_license_discloses_entrypoint_source() -> Result<(), PkgError> {
 
 #[test]
 fn dictionary_packages_disclose_blob_source_like_js() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-4");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-4");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let busboy_entrypoint = fixture_dir.join("node_modules/busboy/index.js");
     let log4js_entrypoint = fixture_dir.join("node_modules/log4js/index.js");
@@ -251,7 +251,7 @@ fn dictionary_packages_disclose_blob_source_like_js() -> Result<(), PkgError> {
 
 #[test]
 fn no_dictionary_disables_builtin_dictionary_modules_by_filename() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-4");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-4");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let busboy_entrypoint = fixture_dir.join("node_modules/busboy/index.js");
     let busboy_script = fixture_dir.join("node_modules/busboy/lib/types/test-y-require.js");
@@ -374,7 +374,7 @@ fn dependency_internal_missing_literal_is_debug_warning() -> Result<(), Box<dyn 
 
 #[test]
 fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-public-packages");
+    let fixture_dir = PathBuf::from("test/test-50-public-packages");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let dependency = fixture_dir.join("node_modules/crusader/index.js");
     let package =
@@ -395,7 +395,7 @@ fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgErro
 
 #[test]
 fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-with-config");
+    let fixture_dir = PathBuf::from("test/test-50-require-with-config");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
     let output = walk(
         marker,
@@ -427,7 +427,7 @@ fn activates_package_config_scripts_and_assets() -> Result<(), PkgError> {
 
 #[test]
 fn expands_recursive_package_config_assets() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-99-#420-copy-from-snapshot");
+    let fixture_dir = PathBuf::from("test/test-99-#420-copy-from-snapshot");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
     let output = walk(
         marker,
@@ -442,7 +442,7 @@ fn expands_recursive_package_config_assets() -> Result<(), PkgError> {
 
 #[test]
 fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-config-log");
+    let fixture_dir = PathBuf::from("test/test-50-config-log");
     let package = PackageJson::parse("{}")
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -462,7 +462,7 @@ fn dictionary_log_records_config_warning() -> Result<(), PkgError> {
 
 #[test]
 fn deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let package = PackageJson::parse(
         r#"{"pkg":{"deployFiles":[["bin/tool","tools/tool","binary"],"data/readme.txt"]}}"#,
     )
@@ -494,7 +494,7 @@ fn deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
 
 #[test]
 fn dictionary_deploy_files_emit_external_distribution_warnings() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let package = PackageJson::parse(r#"{"name":"open"}"#)
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -519,7 +519,7 @@ fn dictionary_deploy_files_emit_external_distribution_warnings() -> Result<(), P
 
 #[test]
 fn dictionary_directory_deploy_files_keep_file_kind_in_warning() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let package = PackageJson::parse(r#"{"name":"leveldown"}"#)
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -544,7 +544,7 @@ fn dictionary_directory_deploy_files_keep_file_kind_in_warning() -> Result<(), P
 
 #[test]
 fn records_may_exclude_and_malformed_diagnostics_in_js_order() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-may-exclude-must-exclude");
+    let fixture_dir = PathBuf::from("test/test-50-may-exclude-must-exclude");
     let output = walk(
         empty_marker()?,
         fixture_dir.join("test-x-index.js"),
@@ -584,8 +584,8 @@ fn records_may_exclude_and_malformed_diagnostics_in_js_order() -> Result<(), Pkg
 #[test]
 fn activates_package_files_directories_and_absolute_style_entries() -> Result<(), PkgError> {
     for fixture in [
-        "../test/test-50-package-json-8",
-        "../test/test-50-package-json-8b",
+        "test/test-50-package-json-8",
+        "test/test-50-package-json-8b",
     ] {
         let fixture_dir = PathBuf::from(fixture);
         let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
@@ -610,8 +610,8 @@ fn activates_package_files_directories_and_absolute_style_entries() -> Result<()
 #[test]
 fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Result<(), PkgError> {
     let cases = [
-        ("../test/test-50-package-json-9", StoreKind::Content),
-        ("../test/test-50-package-json-9p", StoreKind::Blob),
+        ("test/test-50-package-json-9", StoreKind::Content),
+        ("test/test-50-package-json-9p", StoreKind::Blob),
     ];
 
     for (fixture, dependency_main_store) in cases {
@@ -649,7 +649,7 @@ fn dependency_package_markers_activate_dependency_files_and_pkg_config() -> Resu
 #[test]
 fn local_package_directory_requires_include_package_json_for_runtime_resolution()
 -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-6c");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-6c");
     let package = PackageJson::parse("{}")
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -666,7 +666,7 @@ fn local_package_directory_requires_include_package_json_for_runtime_resolution(
 
 #[test]
 fn dependency_without_main_still_activates_package_json_dependencies() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-5");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-5");
     let package = PackageJson::parse("{}")
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -689,7 +689,7 @@ fn dependency_without_main_still_activates_package_json_dependencies() -> Result
 
 #[test]
 fn dependency_without_main_records_js_warning() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-invalid-package-json-2");
+    let fixture_dir = PathBuf::from("test/test-50-invalid-package-json-2");
     let package = PackageJson::parse("{}")
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -708,7 +708,7 @@ fn dependency_without_main_records_js_warning() -> Result<(), PkgError> {
 
 #[test]
 fn dependency_package_self_subpath_require_includes_target() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-6b");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-6b");
     let package = PackageJson::parse("{}")
         .map_err(|error| PkgError::Resolve(format!("test package parse failed: {error}")))?;
     let output = walk(
@@ -727,7 +727,7 @@ fn dependency_package_self_subpath_require_includes_target() -> Result<(), PkgEr
 
 #[test]
 fn applies_package_config_patches_before_blob_detection() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-package-json-3");
+    let fixture_dir = PathBuf::from("test/test-50-package-json-3");
     let marker = Marker::from_package_path(fixture_dir.join("package.json"))?;
     let entrypoint = fixture_dir.join("test-x-index.js");
     let output = walk(

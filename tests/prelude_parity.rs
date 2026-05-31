@@ -1,6 +1,18 @@
 //! Parity tests for producer prelude template assembly.
 
-use pkg_rust::prelude_template;
+use pkg_rust::{PKG_VERSION, prelude_template};
+
+/// test-78-verify-pkg-version: the packaged app prints `process.versions.pkg`,
+/// which the JS bootstrap sets to `'%VERSION%'`. The rendered prelude must
+/// substitute the original pkg version so the produced executable reports it.
+#[test]
+fn prelude_injects_pkg_version_for_process_versions() {
+    let template = prelude_template(false);
+
+    assert_eq!(PKG_VERSION, "5.8.1");
+    assert!(template.contains(&format!("process.versions.pkg = '{PKG_VERSION}';")));
+    assert!(!template.contains("process.versions.pkg = '%VERSION%';"));
+}
 
 #[test]
 fn prelude_template_matches_packer_wrapper_shape() {

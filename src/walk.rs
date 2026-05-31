@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -87,7 +87,7 @@ impl Marker {
     /// # Example
     ///
     /// ```
-    /// let marker = pkg_rust::Marker::from_package_path("../test/test-46-input-package-json/package.json")?;
+    /// let marker = pkg_rust::Marker::from_package_path("test/test-46-input-package-json/package.json")?;
     /// assert!(marker.package().name.is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -302,8 +302,8 @@ impl FileRecord {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// let record = output.record("../test/test-50-require-resolve/test-z-require-code-1.js");
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// let record = output.record("test/test-50-require-resolve/test-z-require-code-1.js");
     /// assert!(record.is_some_and(|record| record.has_store(pkg_rust::StoreKind::Blob)));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -496,8 +496,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.record("../test/test-50-require-resolve/test-z-require-code-1.js").is_some());
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.record("test/test-50-require-resolve/test-z-require-code-1.js").is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -516,8 +516,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.contains_store("../test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.contains_store("test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -718,9 +718,13 @@ impl WalkerState {
         };
 
         for deploy_file in deploy_files(&pkg_config.deploy_files) {
+            let Some(source) = contained_deploy_source(base_dir, Path::new(&deploy_file.source))
+            else {
+                continue;
+            };
             self.output.warnings.push(PackageWarning::DeployFile {
                 file_type: deploy_file.file_type,
-                source: base_dir.join(deploy_file.source),
+                source,
                 target: PathBuf::from(deploy_file.target),
             });
         }
@@ -869,22 +873,24 @@ impl WalkerState {
     }
 
     fn step_links(&mut self, directory: &Path, marker: &Marker) -> Result<(), PkgError> {
+        let _ = marker;
         if !directory.is_dir() {
             return Ok(());
         }
 
-        let mut children = Vec::new();
-        for entry in fs::read_dir(directory).map_err(|source| io_error(directory, source))? {
-            let entry = entry.map_err(|source| io_error(directory, source))?;
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                children.push(name.to_owned());
-            }
-            if inside_root(&self.root, &path) {
-                self.append(path, StoreKind::Stat, marker.clone());
-            }
-        }
+        let mut children = self
+            .output
+            .records
+            .keys()
+            .filter_map(|path| {
+                (path.parent() == Some(directory))
+                    .then(|| path.file_name().and_then(|name| name.to_str()))
+                    .flatten()
+                    .map(ToOwned::to_owned)
+            })
+            .collect::<Vec<_>>();
         children.sort();
+        children.dedup();
         self.record_mut(directory).children = children;
         Ok(())
     }
@@ -1121,8 +1127,8 @@ fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<Packag
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
-/// assert!(output.contains_store("../test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
+/// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
+/// assert!(output.contains_store("test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 pub fn walk(
@@ -1306,6 +1312,23 @@ fn is_public_license(license: &str) -> bool {
             | "lgpl-2.1+"
             | "cc0-1.0"
     )
+}
+
+fn contained_deploy_source(base_dir: &Path, source: &Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in source.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(base_dir.join(relative))
 }
 
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {

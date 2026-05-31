@@ -324,6 +324,46 @@ mod tests {
         Ok(())
     }
 
+    // Real macOS signing smoke: ad-hoc sign an actual Mach-O binary with the
+    // installed `codesign` and verify the signature is accepted. Runs only on
+    // macOS, and skips gracefully when `codesign` is unavailable.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn signs_real_macho_with_codesign() -> Result<(), Box<dyn std::error::Error>> {
+        use std::process::Command;
+
+        if Command::new("codesign").arg("--help").output().is_err() {
+            eprintln!("skipping real macOS signing smoke: codesign is unavailable");
+            return Ok(());
+        }
+
+        let temp_dir =
+            std::env::temp_dir().join(format!("pkg-rust-macho-real-sign-{}", std::process::id()));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+
+        // The test executable itself is a real Mach-O on macOS.
+        let source = std::env::current_exe()?;
+        let target = temp_dir.join("app");
+        fs::copy(&source, &target)?;
+
+        sign_macho_executable(&target)?;
+
+        let verify = Command::new("codesign")
+            .arg("--verify")
+            .arg("--strict")
+            .arg(&target)
+            .output()?;
+        assert!(
+            verify.status.success(),
+            "codesign --verify failed: {}",
+            String::from_utf8_lossy(&verify.stderr)
+        );
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
     #[cfg(unix)]
     fn script(
         temp_dir: &Path,

@@ -17,20 +17,13 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
     let cache_root = temp_root.join("cache");
     let output = temp_root.join("demo-bin");
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let input = "../test/test-50-require-resolve/test-x-index.js";
+    let input = "test/test-50-require-resolve/test-x-index.js";
     let target = parse_targets("node18-macos-arm64", &TargetDefaults::host("node18"))?
         .targets
         .into_iter()
         .next()
         .ok_or_else(|| "target parser returned no targets".to_owned())?;
-    let cache = PkgFetchCache::new(&cache_root);
-    let built = cache.binary_path(&target, BinaryKind::Built)?;
-    fs::create_dir_all(
-        built
-            .parent()
-            .ok_or_else(|| "cache binary path has no parent".to_owned())?,
-    )?;
-    fs::write(&built, binary_with_placeholders())?;
+    seed_cached_target(&cache_root, &target)?;
 
     let output_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(manifest_dir)
@@ -80,7 +73,7 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-2");
+        .join("test/test-50-invalid-package-json-2");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -127,8 +120,7 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
     let output_text = output_path
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-50-config-log");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-config-log");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -174,7 +166,7 @@ fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
         .to_str()
         .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-may-exclude-must-exclude");
+        .join("test/test-50-may-exclude-must-exclude");
     let output = run_cli_with_env(
         &fixture,
         [
@@ -248,8 +240,8 @@ fn cli_reports_missing_input_like_js_invalid_fixture() -> TestResult {
 
 #[test]
 fn cli_reports_missing_package_json_like_js_invalid_fixture() -> TestResult {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json");
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-invalid-package-json");
     let output = run_cli(
         &fixture,
         [
@@ -268,7 +260,7 @@ fn cli_reports_missing_package_json_like_js_invalid_fixture() -> TestResult {
 #[test]
 fn cli_reports_missing_package_bin_like_js_invalid_fixture() -> TestResult {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-bin");
+        .join("test/test-50-invalid-package-json-bin");
     let output = run_cli(
         &fixture,
         [
@@ -290,7 +282,7 @@ fn cli_reports_missing_package_bin_like_js_invalid_fixture() -> TestResult {
 #[test]
 fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-package-json-bin-2");
+        .join("test/test-50-invalid-package-json-bin-2");
     let output = run_cli(
         &fixture,
         [
@@ -307,9 +299,50 @@ fn cli_reports_missing_package_bin_file_like_js_invalid_fixture() -> TestResult 
 }
 
 #[test]
+fn cli_help_matches_js_help_text() -> TestResult {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = run_cli(manifest_dir, ["--help"])?;
+    assert!(output.status.success(), "pkg --help failed");
+    let help = String::from_utf8_lossy(&output.stdout);
+
+    // Flag descriptions ported verbatim from JS help.ts.
+    for fragment in [
+        "comma-separated list of targets (see examples)",
+        "package.json or any json file with top-level config",
+        "bake v8 options into executable to run with them on",
+        "don't download prebuilt base binaries, build them",
+        "speed up and disclose the sources of top-level project",
+        "force specified packages to be considered public",
+        "skip bytecode generation and include source files as plain js",
+        "[default=None] compression algorithm = Brotli or GZip",
+    ] {
+        assert!(help.contains(fragment), "help missing {fragment:?}");
+    }
+
+    // Examples section ported from JS help.ts.
+    assert!(help.contains("Examples:"));
+    assert!(help.contains("$ pkg -t node12-linux,node14-linux,node14-win index.js"));
+    assert!(help.contains("$ pkg --compress GZip index.js"));
+    Ok(())
+}
+
+#[test]
+fn cli_version_flag_prints_bare_pkg_version_like_js() -> TestResult {
+    // test-78-verify-pkg-version: JS prints the bare pkg version for `-v`.
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected = format!("{}\n", pkg_rust::PKG_VERSION);
+    for flag in ["--version", "-v"] {
+        let output = run_cli(manifest_dir, [flag])?;
+        assert!(output.status.success(), "pkg {flag} failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../test/test-50-invalid-unknown-token");
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-50-invalid-unknown-token");
     let output = run_cli(
         &fixture,
         [
@@ -327,8 +360,7 @@ fn cli_reports_unknown_target_token_like_js_invalid_fixture() -> TestResult {
 
 #[test]
 fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/test-80-compression");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-80-compression");
     let output = run_cli(
         &fixture,
         [
@@ -371,14 +403,26 @@ fn seed_cached_binary(cache_root: &Path, target: &str) -> Result<(), Box<dyn std
         .into_iter()
         .next()
         .ok_or_else(|| "target parser returned no targets".to_owned())?;
+    seed_cached_target(cache_root, &target)
+}
+
+/// Seed the output target binary and its host-platform fabricator binary so
+/// bytecode packaging stays offline. The fabricator binary holds placeholder
+/// bytes, so fabrication falls back to host `node` like the other stub tests.
+fn seed_cached_target(
+    cache_root: &Path,
+    target: &pkg_rust::NodeTarget,
+) -> Result<(), Box<dyn std::error::Error>> {
     let cache = PkgFetchCache::new(cache_root);
-    let built = cache.binary_path(&target, BinaryKind::Built)?;
-    fs::create_dir_all(
-        built
-            .parent()
-            .ok_or_else(|| "cache binary path has no parent".to_owned())?,
-    )?;
-    fs::write(&built, binary_with_placeholders())?;
+    for seed in [target.clone(), pkg_rust::fabricator_for_target(target)] {
+        let built = cache.binary_path(&seed, BinaryKind::Built)?;
+        fs::create_dir_all(
+            built
+                .parent()
+                .ok_or_else(|| "cache binary path has no parent".to_owned())?,
+        )?;
+        fs::write(&built, binary_with_placeholders())?;
+    }
     Ok(())
 }
 

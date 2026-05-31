@@ -32,6 +32,7 @@ mod macho;
 mod pack;
 mod package;
 mod prelude;
+mod prelude_assets;
 mod produce;
 mod refine;
 mod resolve;
@@ -57,14 +58,15 @@ pub use crate::error::PkgError;
 pub use crate::fabricate::{
     FabricateRequest, FabricatorPool, fabricate, fabricate_twice, shutdown_fabricators,
 };
-pub use crate::fetch::{BinaryKind, PkgFetchCache};
+pub use crate::fetch::{BinaryKind, PkgFetchCache, SourceBuildRequirement};
 pub use crate::fsx::plus_x;
 pub use crate::macho::{patch_macho_executable, sign_macho_executable};
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,
+    fabricator_for_target,
 };
-pub use crate::prelude::prelude_template;
+pub use crate::prelude::{PKG_VERSION, prelude_template};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,

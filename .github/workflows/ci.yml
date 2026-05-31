@@ -1,24 +1,30 @@
 name: Rust Port CI
 
+# The full Linux/Windows/macOS matrix is expensive, so it only runs on version
+# tags (releases) and on-demand via the Actions "Run workflow" button.
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   rust:
-    name: Rust ${{ matrix.toolchain }}
-    runs-on: ubuntu-latest
+    name: Rust ${{ matrix.toolchain }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        toolchain:
-          - stable
-          - 1.85.0
-    defaults:
-      run:
-        working-directory: rust-port
+        os: [ubuntu-latest]
+        toolchain: [stable, 1.85.0]
+        include:
+          # Run the full locked test suite on Windows and macOS so OS-gated
+          # tests (Windows fabricator target, macOS signing/fabricator) and
+          # platform-specific code paths are actually exercised.
+          - os: windows-latest
+            toolchain: stable
+          - os: macos-latest
+            toolchain: stable
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -26,25 +32,26 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
-      - run: cargo check --all-targets --all-features
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo fmt --check
-      - run: cargo test --all-targets --all-features
-      - run: cargo test --doc --all-features
-      - run: cargo doc --no-deps --all-features
+      - run: cargo check --locked --all-targets --all-features
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-targets --all-features
+      - run: cargo test --locked --doc --all-features
+      # Format, docs, and bench compilation are platform-independent; run them
+      # once on Linux to keep the matrix fast while still enforcing the gate.
+      - if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --check
+      - if: matrix.os == 'ubuntu-latest'
+        run: cargo doc --locked --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+      - if: matrix.os == 'ubuntu-latest'
+        run: cargo bench --locked --bench packaging --no-run
 
   real-runtime-smoke:
     name: Real runtime smoke
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust-port
     env:
-      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/rust-port/.pkg-rust-real-cache
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}/.pkg-rust-real-cache
       PKG_RUST_REAL_TARGET: node18-linux-x64
     steps:
       - uses: actions/checkout@v4
@@ -52,22 +59,17 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
       - uses: actions/cache@v4
         with:
-          path: rust-port/.pkg-rust-real-cache
+          path: .pkg-rust-real-cache
           key: pkg-fetch-v3.5-node18-linux-x64
-      - run: cargo test --test runtime_smoke -- --nocapture
+      - run: cargo test --locked --test runtime_smoke -- --nocapture
 
   windows-issue-smoke:
     name: Windows issue smoke
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: rust-port
     env:
-      PKG_RUST_REAL_CACHE: ${{ github.workspace }}\rust-port\.pkg-rust-real-cache
+      PKG_RUST_REAL_CACHE: ${{ github.workspace }}\.pkg-rust-real-cache
       PKG_RUST_REAL_TARGET: node18-win-x64
     steps:
       - uses: actions/checkout@v4
@@ -75,10 +77,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust-port
       - uses: actions/cache@v4
         with:
-          path: rust-port/.pkg-rust-real-cache
+          path: .pkg-rust-real-cache
           key: pkg-fetch-v3.5-node18-win-x64
-      - run: cargo test --test runtime_smoke windows_issue_regression_fixtures_run_when_real_cache_is_configured -- --nocapture
+      - run: cargo test --locked --test runtime_smoke windows_issue_regression_fixtures_run_when_real_cache_is_configured -- --nocapture
