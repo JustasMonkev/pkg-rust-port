@@ -191,6 +191,7 @@ pub fn build_package_with_provider(
                 bakery: bakery_from_bakes(&plan.bakes),
                 bakes: &plan.bakes,
                 fabricator_path: fabricator_path.as_deref(),
+                fallback_to_source: plan.fallback_to_source,
                 native_addons,
             },
         )?;

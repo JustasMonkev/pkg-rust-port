@@ -119,7 +119,7 @@ pub fn produce_manifest(
 ) -> Result<ProducerManifest, PkgError> {
     let native_addons = NativeAddonOptions::default();
     let (manifest, _payload, warnings) =
-        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
+        build_manifest_and_payload(packed, compression, style, None, &[], false, &native_addons)?;
     fail_on_hidden_bytecode_warnings(&warnings)?;
     Ok(manifest)
 }
@@ -181,6 +181,7 @@ pub fn produce_executable_image(
             bakery,
             bakes: &[],
             fabricator_path: None,
+            fallback_to_source: false,
             native_addons: NativeAddonOptions::default(),
         },
     )?;
@@ -248,6 +249,7 @@ pub fn write_executable_image(
             bakery,
             bakes: &[],
             fabricator_path: None,
+            fallback_to_source: false,
             native_addons: NativeAddonOptions::default(),
         },
     )
@@ -259,6 +261,7 @@ pub(crate) struct ProducerBuildOptions<'a> {
     pub(crate) bakery: Vec<u8>,
     pub(crate) bakes: &'a [String],
     pub(crate) fabricator_path: Option<&'a Path>,
+    pub(crate) fallback_to_source: bool,
     pub(crate) native_addons: NativeAddonOptions,
 }
 
@@ -317,6 +320,7 @@ fn build_executable_image_with_fabricator(
         options.style,
         options.fabricator_path,
         options.bakes,
+        options.fallback_to_source,
         &options.native_addons,
     )?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
@@ -391,6 +395,7 @@ fn build_manifest_and_payload(
     style: PathStyle,
     fabricator_path: Option<&Path>,
     bakes: &[String],
+    fallback_to_source: bool,
     native_addons: &NativeAddonOptions,
 ) -> Result<(ProducerManifest, Vec<u8>, Vec<PackageWarning>), PkgError> {
     // Reserve roughly the uncompressed size up front so the contiguous payload
@@ -408,7 +413,7 @@ fn build_manifest_and_payload(
 
     for mut stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
-        let store = stripe.store;
+        let mut store = stripe.store;
         // Move the stripe buffer out instead of cloning it.
         let raw = take_stripe_bytes(&mut stripe, native_addons)?;
         let bytes = if store == StoreKind::Blob {
@@ -423,6 +428,17 @@ fn build_manifest_and_payload(
             .with_bakes(bakes);
             match fabricate(&mut fabricator_pool, request) {
                 Ok(bytes) => bytes,
+                Err(error) if fallback_to_source => {
+                    // JS producer: on fabrication failure with
+                    // --fallback-to-source, the stripe is shipped as plain
+                    // source under STORE_CONTENT instead of being skipped.
+                    warnings.push(PackageWarning::BytecodeFallbackToSource {
+                        snap: snap.clone(),
+                        message: error.to_string(),
+                    });
+                    store = StoreKind::Content;
+                    raw
+                }
                 Err(error) => {
                     warnings.push(PackageWarning::BytecodeFabricationFailed {
                         snap,
@@ -1048,6 +1064,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &bakes,
                 fabricator_path: Some(&fabricator),
+                fallback_to_source: false,
                 native_addons: NativeAddonOptions::default(),
             },
         )?;
@@ -1119,6 +1136,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &[],
                 fabricator_path: Some(&fabricator),
+                fallback_to_source: false,
                 native_addons: NativeAddonOptions::default(),
             },
         )?;
@@ -1134,7 +1152,7 @@ process.stdin.resume();
         assert!(
             warning
                 .to_cli_message()
-                .contains("Failed to make bytecode for /snapshot/esm.js")
+                .contains("Failed to generate V8 bytecode for /snapshot/esm.js")
         );
         let produced = produced.executable;
 
@@ -1155,6 +1173,85 @@ process.stdin.resume();
                 .get(start..end)
                 .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
             b"export default 42;"
+        );
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_blob_fabrication_ships_source_with_fallback_to_source()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-fabricator-fallback-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let fabricator = temp_dir.join("failing-node");
+        fs::write(&fabricator, "#!/bin/sh\nexit 7\n")?;
+        let mut permissions = fs::metadata(&fabricator)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fabricator, permissions)?;
+
+        let produced = write_executable_image_with_fabricator_diagnostics(
+            temp_dir.join("out"),
+            binary_with_placeholders(),
+            PackedOutput {
+                entrypoint: "/app.js".to_owned(),
+                symlinks: BTreeMap::new(),
+                stripes: vec![Stripe {
+                    snap: "/app.js".to_owned(),
+                    store: StoreKind::Blob,
+                    file: None,
+                    buffer: Some(b"module.exports = 42;".to_vec()),
+                }],
+            },
+            "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+            ProducerBuildOptions {
+                compression: PayloadCompression::None,
+                style: PathStyle::Posix,
+                bakery: Vec::new(),
+                bakes: &[],
+                fabricator_path: Some(&fabricator),
+                fallback_to_source: true,
+                native_addons: NativeAddonOptions::default(),
+            },
+        )?;
+        assert_eq!(produced.warnings.len(), 1);
+        let warning = produced
+            .warnings
+            .first()
+            .ok_or_else(|| PkgError::Pack("fallback warning was missing".to_owned()))?;
+        assert!(matches!(
+            warning,
+            PackageWarning::BytecodeFallbackToSource { snap, .. } if snap == "/snapshot/app.js"
+        ));
+        assert!(
+            warning
+                .to_cli_message()
+                .contains("Shipping source instead.")
+        );
+        let produced = produced.executable;
+
+        let stores = produced
+            .manifest
+            .vfs
+            .get("/snapshot/app.js")
+            .ok_or_else(|| PkgError::Pack("payload pointers were missing".to_owned()))?;
+        assert!(!stores.contains_key(&StoreKind::Blob.as_index()));
+        let pointer = stores
+            .get(&StoreKind::Content.as_index())
+            .ok_or_else(|| PkgError::Pack("content payload pointer was missing".to_owned()))?;
+        let start = produced.payload_position as usize + pointer.offset as usize;
+        let end = start + pointer.size as usize;
+        assert_eq!(
+            produced
+                .bytes
+                .get(start..end)
+                .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
+            b"module.exports = 42;"
         );
 
         fs::remove_dir_all(temp_dir)?;
@@ -1334,6 +1431,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &[],
                 fabricator_path: None,
+                fallback_to_source: false,
                 native_addons,
             },
         )

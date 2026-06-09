@@ -21,6 +21,14 @@ porting order. Items move to "Done" as they land with parity tests.
   still requires a target Node >= 22.15 to decompress (enforced at runtime by
   `bootstrap-shared.js`).
 
+- [x] `--fallback-to-source`: failed bytecode fabrication ships the file as
+  plain source (`STORE_CONTENT`) with the yao-pkg warning wording instead of
+  skipping it. Without the flag, skipped-blob warnings keep this port's
+  fail-closed behavior and now use the yao-pkg wording with the
+  `--fallback-to-source` hint.
+- [x] `--signature` positive flag (overrides `--no-signature`; will override
+  config `signature: false` once config-file support lands).
+
 ## Backlog (porting order)
 
 1. **External config file support** (`lib/config.ts`, ~1040 lines)
@@ -31,31 +39,28 @@ porting order. Items move to "Done" as they land with parity tests.
      overrides config (`resolveFlags`, precedence CLI > config > default)
    - Note: `.js`/`.cjs`/`.mjs` config files execute JS; the Rust port will
      need a decision (Node subprocess evaluation vs JSON-only support).
-2. **`--fallback-to-source`**: when bytecode fabrication fails for a file,
-   ship plain source instead of skipping it (fabricator/producer flag).
-3. **`--signature`** positive flag (override `signature: false` from config).
-4. **Exports-field-aware resolver** (`lib/resolver.ts` + `resolve.exports`):
+2. **Exports-field-aware resolver** (`lib/resolver.ts` + `resolve.exports`):
    package.json `exports` resolution with `require` condition first, then
    `import` fallback for ESM-only packages.
-5. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
+3. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
    ESM entrypoints and `.mjs` files to CJS via esbuild; `wasTransformed`
    record flag; packer renames transformed `.mjs` → `.js` in the snapshot.
    Requires a bundler decision for Rust (SWC bundling vs esbuild subprocess).
-6. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
+4. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
-7. **pkg-fetch 3.6.x targets** (`@yao-pkg/pkg-fetch` 3.6.3): node18/20/22/24
+5. **pkg-fetch 3.6.x targets** (`@yao-pkg/pkg-fetch` 3.6.3): node18/20/22/24
    binaries, updated expected-hash table, updated cache version naming, new
    default node range. The embedded `fetch_expected_shas.json` is still the
    vercel pkg-fetch 3.5 table.
-8. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+6. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-9. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
-10. **Help text / CLI surface**: update to the yao-pkg help output (new
+7. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
+8. **Help text / CLI surface**: update to the yao-pkg help output (new
     flags, examples, config-file mention) and picocolors-equivalent styling.
-11. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+9. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources

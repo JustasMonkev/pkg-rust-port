@@ -388,6 +388,14 @@ pub enum PackageWarning {
         /// Fabricator failure details.
         message: String,
     },
+    /// A blob stripe could not be compiled to bytecode and was shipped as
+    /// plain source because `--fallback-to-source` was set.
+    BytecodeFallbackToSource {
+        /// Snapshot path for the blob stripe.
+        snap: String,
+        /// Fabricator failure details.
+        message: String,
+    },
     /// A dynamic `require` or `require.resolve` could not be resolved at
     /// compile time.
     CannotResolve {
@@ -451,9 +459,12 @@ impl PackageWarning {
                 "Unable to sign the macOS executable '{}'. Due to the mandatory code signing requirement, before the executable is distributed to end users, it must be signed. Otherwise, it will be immediately killed by kernel on launch. An ad-hoc signature is sufficient. Signing failure: {message}",
                 output.display()
             ),
-            Self::BytecodeFabricationFailed { snap, message } => {
-                format!("Failed to make bytecode for {snap}: {message}")
-            }
+            Self::BytecodeFabricationFailed { snap, message } => format!(
+                "Failed to generate V8 bytecode for {snap}. Cause: {message}. Use --fallback-to-source to include the file as plain source instead."
+            ),
+            Self::BytecodeFallbackToSource { snap, message } => format!(
+                "Failed to generate V8 bytecode for {snap}. Shipping source instead. Cause: {message}"
+            ),
             Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
             Self::MalformedRequirement { alias, .. } => {
                 format!("Malformed requirement for '{alias}'")
@@ -480,7 +491,8 @@ impl PackageWarning {
             | Self::StylusResolveImports { .. }
             | Self::DeployFile { .. }
             | Self::MacosSignature { .. }
-            | Self::BytecodeFabricationFailed { .. } => false,
+            | Self::BytecodeFabricationFailed { .. }
+            | Self::BytecodeFallbackToSource { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
         }

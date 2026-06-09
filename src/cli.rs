@@ -86,8 +86,24 @@ struct Cli {
     no_native_build: bool,
 
     /// skip ad-hoc signing of macOS executables
-    #[arg(long = "no-signature", default_value_t = false)]
+    #[arg(
+        long = "no-signature",
+        default_value_t = false,
+        overrides_with = "signature"
+    )]
     no_signature: bool,
+
+    /// enable macOS binary signing (default; overrides --no-signature)
+    #[arg(
+        long = "signature",
+        default_value_t = false,
+        overrides_with = "no_signature"
+    )]
+    signature: bool,
+
+    /// if bytecode generation fails for a file, ship it as plain source instead of skipping it
+    #[arg(long = "fallback-to-source", default_value_t = false)]
+    fallback_to_source: bool,
 
     /// comma-separated list of packages names to ignore dictionaries. Use --no-dict * to disable all dictionaries
     #[arg(long = "no-dict", value_name = "no-dict")]
@@ -155,6 +171,9 @@ pub struct PackagePlan {
     pub native_build: bool,
     /// Whether macOS outputs should be ad-hoc signed.
     pub signature: bool,
+    /// Whether failed bytecode fabrication ships plain source instead of
+    /// skipping the file.
+    pub fallback_to_source: bool,
     /// Whether JavaScript source should be disclosed for the top-level package.
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
@@ -396,6 +415,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         bytecode: !cli.no_bytecode,
         native_build: !cli.no_native_build,
         signature: !cli.no_signature,
+        fallback_to_source: cli.fallback_to_source,
         public_toplevel: cli.public,
         public_packages,
         no_dictionary,
