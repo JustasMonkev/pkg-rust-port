@@ -56,6 +56,15 @@ porting order. Items move to "Done" as they land with parity tests.
   CJS packages keep classic `main` resolution. Not yet ported: the
   synthetic-`main` injection for exports-only packages at walk time.
 
+- [x] Dictionary deltas vs yao-pkg 6.19.0: added `sqlite3`
+  (`pkg.assets: build/Release/*.node`) and `thread-stream`
+  (`pkg.scripts: lib/worker.js`) plus the `thread-stream` test-79-npm
+  fixture; `tesseract.js` already carried the yao value.
+- [x] Help text / CLI surface updated to the yao-pkg help: config-file
+  discovery wording, signature flag wording, Brotli/GZip/Zstd compression
+  line, node22/node24 examples, Zstd example, and the config-file
+  paragraph. `--sea` stays out of the help until the SEA slice lands.
+
 ## Backlog (porting order)
 
 1. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
@@ -69,10 +78,7 @@ porting order. Items move to "Done" as they land with parity tests.
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-4. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
-5. **Help text / CLI surface**: update to the yao-pkg help output (new
-    flags, examples, config-file mention) and picocolors-equivalent styling.
-6. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+4. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources

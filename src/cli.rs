@@ -40,7 +40,7 @@ struct Cli {
     )]
     targets: Option<String>,
 
-    /// package.json or any json file with top-level config
+    /// package.json or a .json, .js, .cjs, or .mjs file with top-level config (auto-discovered as .pkgrc, .pkgrc.json, pkg.config.js, pkg.config.cjs, or pkg.config.mjs)
     #[arg(short = 'c', long = "config", value_name = "config")]
     config: Option<PathBuf>,
 
@@ -97,7 +97,7 @@ struct Cli {
     #[arg(long = "native-build", hide = true, overrides_with = "no_native_build")]
     native_build: bool,
 
-    /// skip ad-hoc signing of macOS executables
+    /// skip macOS binary signing [default: sign]
     #[arg(
         long = "no-signature",
         default_value_t = false,
@@ -105,7 +105,7 @@ struct Cli {
     )]
     no_signature: bool,
 
-    /// enable macOS binary signing (default; overrides --no-signature)
+    /// enable macOS binary signing (default; use to override signature:false in config)
     #[arg(
         long = "signature",
         default_value_t = false,
@@ -128,13 +128,17 @@ struct Cli {
     #[arg(long = "no-dict", value_name = "no-dict")]
     no_dict: Option<String>,
 
-    /// [default=None] compression algorithm = Brotli or GZip
+    /// [default=None] compression algorithm = Brotli, GZip, or Zstd (Zstd requires Node.js >= 22.15 in the produced executable)
     #[arg(short = 'C', long = "compress", value_name = "compress")]
     compress: Option<String>,
 }
 
 /// Usage examples appended to the CLI help, mirroring the JS `help.ts` output.
 const CLI_EXAMPLES: &str = "\
+All build-shaping flags above (compress, fallback-to-source, public, public-packages,
+options, bytecode, native-build, no-dict, debug, signature) can also be set in
+the pkg config file (camelCase keys). CLI flags override config values.
+
 Examples:
 
 – Makes executables for Linux, macOS and Windows
@@ -144,7 +148,7 @@ Examples:
 – Makes executable for particular target machine
   $ pkg -t node14-win-arm64 index.js
 – Makes executables for target machines of your choice
-  $ pkg -t node12-linux,node14-linux,node14-win index.js
+  $ pkg -t node22-linux,node24-linux,node24-win index.js
 – Bakes '--expose-gc' and '--max-heap-size=34' into executable
   $ pkg --options \"expose-gc,max-heap-size=34\" index.js
 – Consider packageA and packageB to be public
@@ -154,7 +158,9 @@ Examples:
 – Bakes '--expose-gc' into executable
   $ pkg --options expose-gc index.js
 – reduce size of the data packed inside the executable with GZip
-  $ pkg --compress GZip index.js";
+  $ pkg --compress GZip index.js
+– reduce size further with Zstd (Node.js >= 22.15 required at runtime)
+  $ pkg --compress Zstd index.js";
 
 /// Planned output artifact for one target.
 #[derive(Clone, Debug, Eq, PartialEq)]
