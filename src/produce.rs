@@ -653,7 +653,27 @@ pub enum PlaceholderKind {
 }
 
 fn discover_placeholder(binary: &[u8], needle: &[u8], padder: u8) -> Option<Placeholder> {
-    find_subslice(binary, needle).map(|position| Placeholder {
+    discover_placeholder_from(binary, needle, padder, 0)
+}
+
+fn discover_placeholder_from(
+    binary: &[u8],
+    needle: &[u8],
+    padder: u8,
+    search_offset: usize,
+) -> Option<Placeholder> {
+    let position = search_offset + find_subslice(binary.get(search_offset..)?, needle)?;
+    // yao-pkg/pkg#86: an apostrophe before the match means this occurrence is
+    // a quoted source-code literal inside the binary, not the real injection
+    // site; prefer a later occurrence when one exists.
+    if position > 0
+        && binary.get(position - 1) == Some(&b'\'')
+        && let Some(next) =
+            discover_placeholder_from(binary, needle, padder, position + needle.len())
+    {
+        return Some(next);
+    }
+    Some(Placeholder {
         position,
         size: needle.len(),
         padder,

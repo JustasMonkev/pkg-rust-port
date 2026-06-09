@@ -72,6 +72,10 @@ porting order. Items move to "Done" as they land with parity tests.
   already handled). Remaining walker deltas are the ESM-transform and
   SEA-mode paths tracked below, plus the symlink junction-point change.
 
+- [x] Producer placeholder discovery skips apostrophe-quoted source-literal
+  occurrences of the placeholder text (yao-pkg/pkg#86), preferring a later
+  occurrence when one exists.
+
 ## Backlog (porting order)
 
 1. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
@@ -85,7 +89,14 @@ porting order. Items move to "Done" as they land with parity tests.
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-4. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+4. **Misc**: prebuild-install `npm_config_<name>` env prefixing,
+   `findCommonJunctionPoint` symlink change, JS `validatePkgConfig`
+   unknown-key warnings/type wording, synthetic-`main` injection for
+   exports-only packages, walker `unlikelyJavascript` exact-list parity
+   (Rust currently retags all non-JS blobs as content, a superset).
+   Known pre-existing test flake: parallel lib tests that write-then-exec
+   helper scripts can hit a fork/exec text-busy race; does not reproduce
+   in isolated runs.: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources

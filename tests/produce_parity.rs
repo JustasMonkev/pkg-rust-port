@@ -257,6 +257,31 @@ fn write_executable_image_errors_without_blob_fabricator() -> Result<(), Box<dyn
 }
 
 #[test]
+fn placeholder_discovery_skips_apostrophe_quoted_source_literal() -> Result<(), PkgError> {
+    // yao-pkg/pkg#86: a quoted occurrence of the placeholder text inside the
+    // binary's embedded source must not shadow the real injection site.
+    let mut binary = Vec::new();
+    binary.extend_from_slice(b"var s = '// PAYLOAD_POSITION //';");
+    let quoted_position = binary
+        .windows(b"// PAYLOAD_POSITION //".len())
+        .position(|window| window == b"// PAYLOAD_POSITION //")
+        .ok_or_else(|| PkgError::Pack("missing quoted occurrence".to_owned()))?;
+    binary.extend_from_slice(b"real:");
+    let real_position = binary.len();
+    binary.extend_from_slice(b"// PAYLOAD_POSITION //");
+    binary.extend_from_slice(&bakery_placeholder());
+    binary.extend_from_slice(b"// PAYLOAD_SIZE //// PRELUDE_POSITION //// PRELUDE_SIZE //");
+
+    let placeholders = discover_placeholders(&binary);
+    let payload_position = placeholders
+        .payload_position
+        .ok_or_else(|| PkgError::Pack("payload position placeholder missing".to_owned()))?;
+    assert_eq!(payload_position.position, real_position);
+    assert_ne!(payload_position.position, quoted_position);
+    Ok(())
+}
+
+#[test]
 fn discovers_and_injects_binary_placeholders() -> Result<(), PkgError> {
     let mut binary = Vec::new();
     binary.extend_from_slice(b"prefix");
