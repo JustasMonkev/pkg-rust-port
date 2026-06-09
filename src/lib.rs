@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod esm;
 mod fabricate;
 mod fetch;
 mod fsx;

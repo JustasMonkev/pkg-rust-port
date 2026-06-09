@@ -152,3 +152,65 @@ fn carries_walker_symlinks_into_packed_output() -> Result<(), Box<dyn std::error
     fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }
+
+#[test]
+fn transformed_mjs_records_are_renamed_to_js_in_snapshot() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_root = std::env::temp_dir().join(format!("pkg-rust-esm-pack-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root)?;
+    std::fs::write(
+        temp_root.join("entry.mjs"),
+        "import { helper } from './helper.mjs';\nconsole.log(helper());\n",
+    )?;
+    std::fs::write(
+        temp_root.join("helper.mjs"),
+        "export function helper() { return 42; }\n",
+    )?;
+
+    let package = pkg_rust::PackageJson::parse("{}")
+        .map_err(|error| pkg_rust::PkgError::Cli(error.to_string()))?;
+    let entrypoint = temp_root.join("entry.mjs");
+    let walked = pkg_rust::walk(
+        pkg_rust::Marker::new(package),
+        &entrypoint,
+        None,
+        pkg_rust::WalkerParams::new().with_root(&temp_root),
+    )?;
+    let refined = pkg_rust::refine_walked(walked, &entrypoint, pkg_rust::PathStyle::Posix);
+    let packed = pkg_rust::pack(refined, true)?;
+
+    assert!(
+        packed.entrypoint.ends_with("entry.js"),
+        "entrypoint {} should be renamed to .js",
+        packed.entrypoint
+    );
+    assert!(
+        packed
+            .stripes
+            .iter()
+            .all(|stripe| !stripe.snap.ends_with(".mjs")),
+        "no snapshot path should keep the .mjs extension"
+    );
+    let entry_blob = packed
+        .stripes
+        .iter()
+        .find(|stripe| {
+            stripe.snap.ends_with("entry.js") && stripe.store == pkg_rust::StoreKind::Blob
+        })
+        .ok_or("missing transformed entry blob")?;
+    let body = String::from_utf8_lossy(
+        entry_blob
+            .buffer
+            .as_deref()
+            .ok_or("entry blob should carry a transformed buffer")?,
+    );
+    assert!(
+        body.contains(r#"require("./helper.js")"#),
+        "transformed body: {body}"
+    );
+    assert!(!body.contains("import {"));
+
+    std::fs::remove_dir_all(&temp_root)?;
+    Ok(())
+}

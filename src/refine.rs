@@ -186,6 +186,7 @@ fn synthetic_directory_record(file: PathBuf, child: String) -> FileRecord {
         links: true,
         stat: true,
         body: None,
+        was_transformed: false,
         children: vec![child],
         metadata: Some(directory_stat(&file)),
     }
@@ -539,6 +540,7 @@ mod tests {
             links: true,
             stat: true,
             body: None,
+            was_transformed: false,
             children: children.into_iter().map(ToOwned::to_owned).collect(),
             metadata: None,
         }
@@ -552,6 +554,7 @@ mod tests {
             links: false,
             stat: true,
             body: None,
+            was_transformed: false,
             children: Vec::new(),
             metadata: None,
         }

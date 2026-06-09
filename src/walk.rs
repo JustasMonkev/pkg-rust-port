@@ -294,6 +294,9 @@ pub struct FileRecord {
     pub stat: bool,
     /// Raw content bytes when the content store read the file.
     pub body: Option<Vec<u8>>,
+    /// Whether an `.mjs` body was transformed to CommonJS (packer renames the
+    /// snapshot to `.js`).
+    pub was_transformed: bool,
     /// Sorted directory child names when the links store read a directory.
     pub children: Vec<String>,
     /// Filesystem metadata when available.
@@ -309,6 +312,7 @@ impl FileRecord {
             links: false,
             stat: false,
             body: None,
+            was_transformed: false,
             children: Vec::new(),
             metadata: None,
         }
@@ -408,6 +412,11 @@ pub enum PackageWarning {
         /// Fabricator failure details.
         message: String,
     },
+    /// An ESM module could not be transformed to CommonJS.
+    EsmTransform {
+        /// Pre-rendered warning message from the transformer.
+        message: String,
+    },
     /// A blob stripe could not be compiled to bytecode and was shipped as
     /// plain source because `--fallback-to-source` was set.
     BytecodeFallbackToSource {
@@ -482,6 +491,7 @@ impl PackageWarning {
             Self::BytecodeFabricationFailed { snap, message } => format!(
                 "Failed to generate V8 bytecode for {snap}. Cause: {message}. Use --fallback-to-source to include the file as plain source instead."
             ),
+            Self::EsmTransform { message } => message.clone(),
             Self::BytecodeFallbackToSource { snap, message } => format!(
                 "Failed to generate V8 bytecode for {snap}. Shipping source instead. Cause: {message}"
             ),
@@ -512,6 +522,7 @@ impl PackageWarning {
             | Self::DeployFile { .. }
             | Self::MacosSignature { .. }
             | Self::BytecodeFabricationFailed { .. }
+            | Self::EsmTransform { .. }
             | Self::BytecodeFallbackToSource { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
@@ -818,7 +829,24 @@ impl WalkerState {
 
         let mut body = read_to_string(file)?;
         self.apply_patch(file, &mut body);
-        let body = strip_bom_and_shebang(&body);
+        let mut body = strip_bom_and_shebang(&body);
+        // yao-pkg walker: ESM blobs are transformed to CommonJS before
+        // detection and bytecode compilation; transformed `.mjs` records are
+        // marked so the packer renames their snapshots to `.js`.
+        if crate::esm::is_esm_file(file) {
+            let transform = crate::esm::transform_esm_to_cjs(&body, file);
+            if let Some(message) = transform.warning {
+                self.output
+                    .warnings
+                    .push(PackageWarning::EsmTransform { message });
+            }
+            if transform.is_transformed {
+                body = transform.code;
+                if file.extension().is_some_and(|extension| extension == "mjs") {
+                    self.record_mut(file).was_transformed = true;
+                }
+            }
+        }
         self.record_mut(file).body = Some(body.as_bytes().to_vec());
         let mut successful = Vec::new();
         for detected in detect(&body)? {
@@ -879,6 +907,23 @@ impl WalkerState {
                         derivative.may_exclude || trying,
                     )?;
                 }
+            }
+        }
+
+        // After dependencies are resolved, rewrite relative `.mjs` require
+        // paths to `.js` in transformed bodies, matching the packer's
+        // snapshot renames.
+        if self
+            .output
+            .records
+            .get(file)
+            .is_some_and(|record| record.was_transformed)
+        {
+            let record = self.record_mut(file);
+            if let Some(body) = record.body.take() {
+                let rewritten =
+                    crate::esm::rewrite_mjs_require_paths(&String::from_utf8_lossy(&body));
+                record.body = Some(rewritten.into_bytes());
             }
         }
 

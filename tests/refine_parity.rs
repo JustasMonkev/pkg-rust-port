@@ -105,6 +105,7 @@ fn directory_record<const N: usize>(file: &str, children: [&str; N]) -> FileReco
         links: true,
         stat: true,
         body: None,
+        was_transformed: false,
         children: children.into_iter().map(ToOwned::to_owned).collect(),
         metadata: None,
     }
@@ -118,6 +119,7 @@ fn file_record(file: &str) -> FileRecord {
         links: false,
         stat: true,
         body: None,
+        was_transformed: false,
         children: Vec::new(),
         metadata: None,
     }

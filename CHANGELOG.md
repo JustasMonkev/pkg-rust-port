@@ -9,6 +9,13 @@
   wrapper parameter and the inline debug diagnostic that calls
   `REQUIRE_SHARED.installDiagnostic`. Version reporting and
   `process.versions.pkg` are now `6.19.0`.
+- Added ESM support: ESM modules transform to CommonJS through SWC before
+  bytecode compilation, with async-IIFE wrapping for top-level await,
+  `import.meta` rewriting, `.mjs` require-path rewriting, and packer
+  renaming of transformed `.mjs` snapshots to `.js`.
+- Added exports-field-aware module resolution for ESM packages, literal
+  dynamic `import()` detection, `.mjs` resolve extensions, and top-level
+  config `ignore` patterns.
 - Added external config file support: `-c/--config` with JSON and JS config
   modules, `.pkgrc`/`pkg.config.*` auto-discovery, bare-config wrapping, and
   CLI > config > default resolution for build-shaping flags.

@@ -76,16 +76,23 @@ porting order. Items move to "Done" as they land with parity tests.
   occurrences of the placeholder text (yao-pkg/pkg#86), preferring a later
   occurrence when one exists.
 
+- [x] ESM support: ESM blobs (`.mjs`, or `.js` under `"type": "module"`)
+  are transformed to CommonJS before detection and bytecode compilation.
+  The Rust port uses SWC's `common_js` pass (the JS implementation uses
+  esbuild), which natively rewrites `import.meta.url`/`.filename`/`.dirname`
+  to CJS equivalents. Top-level await without exports wraps in an async IIFE
+  with imports hoisted; top-level await with exports ships untransformed
+  with the yao-pkg warning. Transformed `.mjs` records are marked
+  `was_transformed`, relative `.mjs` require paths are rewritten to `.js`,
+  and the packer renames transformed `.mjs` snapshots (including the
+  entrypoint) to `.js`.
+
 ## Backlog (porting order)
 
-1. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
-   ESM entrypoints and `.mjs` files to CJS via esbuild; `wasTransformed`
-   record flag; packer renames transformed `.mjs` → `.js` in the snapshot.
-   Requires a bundler decision for Rust (SWC bundling vs esbuild subprocess).
-2. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
+1. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
-3. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+2. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).

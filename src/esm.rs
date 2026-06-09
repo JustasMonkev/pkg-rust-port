@@ -1,0 +1,409 @@
+//! ESM-to-CommonJS transformation, ported from yao-pkg `lib/esm-transformer.ts`.
+//!
+//! The JS implementation analyzes modules with Babel and transforms them with
+//! esbuild. The Rust port performs both steps with SWC: analysis through the
+//! same parser used by source detection, and transformation through SWC's
+//! `common_js` pass, which also rewrites `import.meta.url` / `.filename` /
+//! `.dirname` to their CommonJS equivalents natively (the JS implementation
+//! patches esbuild output with a shim for the same effect).
+
+use std::path::Path;
+use std::sync::OnceLock;
+
+use swc_common::{FileName, GLOBALS, Globals, Mark, SourceMap, sync::Lrc};
+use swc_ecma_ast::{EsVersion, Module, ModuleDecl, ModuleItem, Program};
+use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, lexer::Lexer};
+use swc_ecma_transforms_base::helpers::{HELPERS, Helpers};
+use swc_ecma_transforms_base::resolver;
+use swc_ecma_transforms_module::common_js::{FeatureFlag, common_js};
+use swc_ecma_transforms_module::path::Resolver as ImportPathResolver;
+use swc_ecma_visit::{Visit, VisitWith};
+
+/// Result of attempting an ESM-to-CJS transformation.
+pub(crate) struct EsmTransform {
+    /// Output source: transformed CJS, or the original input when
+    /// `is_transformed` is false.
+    pub(crate) code: String,
+    /// Whether the code was actually transformed.
+    pub(crate) is_transformed: bool,
+    /// Warning to surface through the package warning channel, if any.
+    pub(crate) warning: Option<String>,
+}
+
+impl EsmTransform {
+    fn untransformed(code: &str, warning: Option<String>) -> Self {
+        Self {
+            code: code.to_owned(),
+            is_transformed: false,
+            warning,
+        }
+    }
+}
+
+/// JS `common.isESMFile`: `.mjs` is ESM, `.cjs` is CJS, `.js` follows the
+/// nearest `package.json` `"type": "module"` marker.
+pub(crate) fn is_esm_file(path: &Path) -> bool {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    match extension {
+        Some("mjs") => return true,
+        Some("cjs") => return false,
+        Some("js") => {}
+        _ => return false,
+    }
+    let mut current = path.parent();
+    while let Some(directory) = current {
+        let package_json = directory.join("package.json");
+        if package_json.is_file() {
+            return std::fs::read_to_string(&package_json)
+                .ok()
+                .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok())
+                .and_then(|json| {
+                    json.get("type")
+                        .and_then(|value| value.as_str())
+                        .map(|value| value == "module")
+                })
+                .unwrap_or(false);
+        }
+        current = directory.parent();
+    }
+    false
+}
+
+/// JS `common.unlikelyJavascript` plus the `.d.ts` compound-extension check.
+fn unlikely_javascript(path: &Path) -> bool {
+    if path
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .ends_with(".d.ts")
+    {
+        return true;
+    }
+    matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("css" | "html" | "json" | "vue")
+    )
+}
+
+/// JS `rewriteMjsRequirePaths`: relative `require("./x.mjs")` calls in
+/// transformed output are rewritten to `.js` because the packer renames
+/// transformed `.mjs` snapshots to `.js`.
+pub(crate) fn rewrite_mjs_require_paths(code: &str) -> String {
+    static PATTERN: OnceLock<regex::Regex> = OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        regex::Regex::new(r#"require\((["'])(\.\.?/[^"']*?)\.mjs(["'])\)"#)
+            .unwrap_or_else(|_| regex::Regex::new("$^").unwrap_or_else(|_| unreachable!()))
+    });
+    pattern
+        .replace_all(code, |captures: &regex::Captures<'_>| {
+            let open = &captures[1];
+            let path = &captures[2];
+            let close = &captures[3];
+            if open == close {
+                format!("require({open}{path}.js{close})")
+            } else {
+                captures[0].to_owned()
+            }
+        })
+        .into_owned()
+}
+
+/// JS `transformESMtoCJS`: convert an ESM module to CommonJS so it can be
+/// compiled to bytecode. Top-level await without exports is wrapped in an
+/// async IIFE (imports hoisted above the wrapper); top-level await combined
+/// with exports cannot be transformed and ships untransformed with a warning.
+pub(crate) fn transform_esm_to_cjs(code: &str, filename: &Path) -> EsmTransform {
+    if unlikely_javascript(filename) {
+        return EsmTransform::untransformed(code, None);
+    }
+
+    let analysis = analyze_module(code);
+    let mut code_to_transform = code.to_owned();
+    if let Some(analysis) = &analysis
+        && analysis.has_top_level_await
+    {
+        if analysis.has_exports {
+            return EsmTransform::untransformed(
+                code,
+                Some(format!(
+                    "Module {} has both top-level await and export statements. This combination cannot be safely transformed to CommonJS in pkg's ESM transformer. The original source code will be used as-is; depending on the package visibility and build configuration, bytecode compilation may fail and the module may need to be loaded from source or be skipped.",
+                    filename.display()
+                )),
+            );
+        }
+        code_to_transform = wrap_in_async_iife(code, &analysis.import_lines);
+    }
+
+    match transform_module_source(&code_to_transform) {
+        Ok(output) => EsmTransform {
+            code: output,
+            is_transformed: true,
+            warning: None,
+        },
+        Err(message) => EsmTransform::untransformed(
+            code,
+            Some(format!(
+                "Failed to transform ESM to CJS for {}: {message}",
+                filename.display()
+            )),
+        ),
+    }
+}
+
+struct ModuleAnalysis {
+    has_top_level_await: bool,
+    has_exports: bool,
+    /// Zero-based source line indices occupied by import declarations.
+    import_lines: Vec<usize>,
+}
+
+fn analyze_module(code: &str) -> Option<ModuleAnalysis> {
+    let (module, base_offset) = parse_esm_module(code).ok()?;
+
+    let mut has_exports = false;
+    let mut import_lines = Vec::new();
+    let line_starts = line_start_offsets(code);
+    for item in &module.body {
+        match item {
+            ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
+                let lo = usize::try_from(import.span.lo.0).ok()?;
+                let hi = usize::try_from(import.span.hi.0).ok()?;
+                let start = line_for_offset(&line_starts, lo.saturating_sub(base_offset));
+                let end = line_for_offset(&line_starts, hi.saturating_sub(base_offset));
+                import_lines.extend(start..=end);
+            }
+            ModuleItem::ModuleDecl(
+                ModuleDecl::ExportDecl(_)
+                | ModuleDecl::ExportNamed(_)
+                | ModuleDecl::ExportDefaultDecl(_)
+                | ModuleDecl::ExportDefaultExpr(_)
+                | ModuleDecl::ExportAll(_),
+            ) => {
+                has_exports = true;
+            }
+            _ => {}
+        }
+    }
+
+    let mut await_finder = TopLevelAwaitFinder::default();
+    module.visit_with(&mut await_finder);
+
+    Some(ModuleAnalysis {
+        has_top_level_await: await_finder.found,
+        has_exports,
+        import_lines,
+    })
+}
+
+/// Visitor that finds `await` (or `for await ... of`) outside any function
+/// body, mirroring the parent-walk in the JS `detectESMFeatures`.
+#[derive(Default)]
+struct TopLevelAwaitFinder {
+    found: bool,
+}
+
+impl Visit for TopLevelAwaitFinder {
+    fn visit_await_expr(&mut self, node: &swc_ecma_ast::AwaitExpr) {
+        self.found = true;
+        node.visit_children_with(self);
+    }
+
+    fn visit_for_of_stmt(&mut self, node: &swc_ecma_ast::ForOfStmt) {
+        if node.is_await {
+            self.found = true;
+        }
+        node.visit_children_with(self);
+    }
+
+    fn visit_function(&mut self, _node: &swc_ecma_ast::Function) {}
+
+    fn visit_arrow_expr(&mut self, _node: &swc_ecma_ast::ArrowExpr) {}
+}
+
+fn line_start_offsets(code: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    for (index, byte) in code.bytes().enumerate() {
+        if byte == b'\n' {
+            starts.push(index + 1);
+        }
+    }
+    starts
+}
+
+fn line_for_offset(line_starts: &[usize], offset: usize) -> usize {
+    match line_starts.binary_search(&offset) {
+        Ok(line) => line,
+        Err(line) => line.saturating_sub(1),
+    }
+}
+
+/// JS `ASYNC_IIFE_WRAPPER` handling: hoist import lines above the wrapper and
+/// wrap the remaining lines in `(async () => { ... })()`.
+fn wrap_in_async_iife(code: &str, import_lines: &[usize]) -> String {
+    let import_set: std::collections::BTreeSet<usize> = import_lines.iter().copied().collect();
+    if import_set.is_empty() {
+        return format!("(async () => {{\n{code}\n}})()");
+    }
+    let mut imports = Vec::new();
+    let mut rest = Vec::new();
+    for (index, line) in code.lines().enumerate() {
+        if import_set.contains(&index) {
+            imports.push(line);
+        } else {
+            rest.push(line);
+        }
+    }
+    format!(
+        "{}\n(async () => {{\n{}\n}})()",
+        imports.join("\n"),
+        rest.join("\n")
+    )
+}
+
+fn parse_esm_module(code: &str) -> Result<(Module, usize), String> {
+    let cm: Lrc<SourceMap> = Default::default();
+    let file = cm.new_source_file(FileName::Custom("module.js".into()).into(), code.to_owned());
+    let base_offset = usize::try_from(file.start_pos.0).map_err(|error| error.to_string())?;
+    let lexer = Lexer::new(
+        Syntax::Es(EsSyntax {
+            decorators: true,
+            ..Default::default()
+        }),
+        EsVersion::latest(),
+        StringInput::from(&*file),
+        None,
+    );
+    let mut parser = Parser::new_from(lexer);
+    let module = parser
+        .parse_module()
+        .map_err(|error| format!("{error:?}"))?;
+    if let Some(error) = parser.take_errors().into_iter().next() {
+        return Err(format!("{error:?}"));
+    }
+    Ok((module, base_offset))
+}
+
+fn transform_module_source(code: &str) -> Result<String, String> {
+    let cm: Lrc<SourceMap> = Default::default();
+    let file = cm.new_source_file(FileName::Custom("module.js".into()).into(), code.to_owned());
+    let lexer = Lexer::new(
+        Syntax::Es(EsSyntax {
+            decorators: true,
+            ..Default::default()
+        }),
+        EsVersion::latest(),
+        StringInput::from(&*file),
+        None,
+    );
+    let mut parser = Parser::new_from(lexer);
+    let module = parser
+        .parse_module()
+        .map_err(|error| format!("{error:?}"))?;
+    if let Some(error) = parser.take_errors().into_iter().next() {
+        return Err(format!("{error:?}"));
+    }
+
+    let globals = Globals::new();
+    let mut program = Program::Module(module);
+    GLOBALS.set(&globals, || {
+        // `false` inlines the interop helpers into the output, so the
+        // transformed module stays self-contained like esbuild's CJS output.
+        HELPERS.set(&Helpers::new(false), || {
+            let unresolved_mark = Mark::new();
+            let top_level_mark = Mark::new();
+            program.mutate(resolver(unresolved_mark, top_level_mark, false));
+            program.mutate(common_js(
+                ImportPathResolver::Default,
+                unresolved_mark,
+                Default::default(),
+                // The produced executables target Node 14+; arrows and block
+                // scoping are always available, matching esbuild target node20.
+                FeatureFlag {
+                    support_block_scoping: true,
+                    support_arrow: true,
+                },
+            ));
+        });
+    });
+
+    let mut buffer = Vec::new();
+    {
+        let writer =
+            swc_ecma_codegen::text_writer::JsWriter::new(cm.clone(), "\n", &mut buffer, None);
+        let mut emitter = swc_ecma_codegen::Emitter {
+            cfg: Default::default(),
+            cm,
+            comments: None,
+            wr: writer,
+        };
+        emitter
+            .emit_program(&program)
+            .map_err(|error| error.to_string())?;
+    }
+    String::from_utf8(buffer).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{rewrite_mjs_require_paths, transform_esm_to_cjs};
+
+    #[test]
+    fn transforms_esm_imports_and_exports_to_cjs() {
+        let result = transform_esm_to_cjs(
+            "import { readFile } from 'fs';\nexport const answer = 42;\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(result.code.contains("require(\"fs\")"));
+        assert!(result.code.contains("exports"));
+        assert!(!result.code.contains("import {"));
+    }
+
+    #[test]
+    fn rewrites_import_meta_members_to_cjs_equivalents() {
+        let result = transform_esm_to_cjs(
+            "export const here = import.meta.dirname;\nexport const me = import.meta.filename;\nconsole.log(import.meta.url);\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(result.code.contains("__dirname"));
+        assert!(result.code.contains("__filename"));
+        assert!(!result.code.contains("import.meta"));
+    }
+
+    #[test]
+    fn wraps_top_level_await_without_exports_in_async_iife() {
+        let result = transform_esm_to_cjs(
+            "import fs from 'fs';\nconst data = await Promise.resolve(1);\nconsole.log(data, fs ? 1 : 0);\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(result.code.contains("async ()"));
+        assert!(result.code.contains("require(\"fs\")"));
+    }
+
+    #[test]
+    fn top_level_await_with_exports_ships_untransformed_with_warning() {
+        let result = transform_esm_to_cjs(
+            "export const data = 1;\nawait Promise.resolve(1);\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(!result.is_transformed);
+        assert!(
+            result
+                .warning
+                .is_some_and(|warning| warning.contains("top-level await and export statements"))
+        );
+    }
+
+    #[test]
+    fn rewrites_relative_mjs_require_paths() {
+        let rewritten = rewrite_mjs_require_paths(
+            "const a = require('./x.mjs'); const b = require(\"../y.mjs\"); const c = require('pkg/z.mjs');",
+        );
+        assert!(rewritten.contains("require('./x.js')"));
+        assert!(rewritten.contains("require(\"../y.js\")"));
+        assert!(rewritten.contains("require('pkg/z.mjs')"));
+    }
+}
