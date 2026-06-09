@@ -10,10 +10,14 @@ use crate::fsx::plus_x;
 use crate::package::{TargetBinary, TargetBinaryProvider};
 use crate::target::NodeTarget;
 
-const PKG_FETCH_VERSION: &str = "3.5.2";
-const PKG_FETCH_RELEASE_BASE_URL: &str = "https://github.com/vercel/pkg-fetch/releases/download";
+const PKG_FETCH_VERSION: &str = "3.6.3";
+const PKG_FETCH_RELEASE_BASE_URL: &str = "https://github.com/yao-pkg/pkg-fetch/releases/download";
+// Node versions patched by @yao-pkg/pkg-fetch 3.6.3 (`patches/patches.json`).
+// Prebuilt release binaries exist only for v14 and newer; older entries are
+// reachable solely through the external `--build` source-build boundary.
 const SUPPORTED_NODE_VERSIONS: &[&str] = &[
-    "8.17.0", "10.24.1", "12.22.11", "14.21.3", "16.19.1", "18.15.0", "19.8.1",
+    "8.17.0", "10.24.1", "12.22.11", "14.21.3", "16.20.2", "18.20.8", "20.20.2", "22.22.3",
+    "24.15.0", "26.2.0",
 ];
 
 /// Kind of pkg-fetch cache artifact.
@@ -72,7 +76,7 @@ impl BinaryKind {
 ///     .targets
 ///     .remove(0);
 /// let path = cache.binary_path(&target, pkg_rust::BinaryKind::Fetched)?;
-/// assert!(path.to_string_lossy().contains("fetched-v18.15.0-linux-x64"));
+/// assert!(path.to_string_lossy().contains("fetched-v18.20.8-linux-x64"));
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -106,7 +110,7 @@ impl PkgFetchCache {
     ///     .targets
     ///     .remove(0);
     /// let path = cache.binary_path(&target, pkg_rust::BinaryKind::Fetched)?;
-    /// assert!(path.to_string_lossy().contains("v3.5"));
+    /// assert!(path.to_string_lossy().contains("v3.6"));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]

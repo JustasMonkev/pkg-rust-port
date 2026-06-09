@@ -28,6 +28,11 @@ porting order. Items move to "Done" as they land with parity tests.
   `--fallback-to-source` hint.
 - [x] `--signature` positive flag (overrides `--no-signature`; will override
   config `signature: false` once config-file support lands).
+- [x] pkg-fetch retargeted to `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`,
+  release downloads from `yao-pkg/pkg-fetch`, the 3.6.3 patched node version
+  set (8/10/12/14/16.20.2/18.20.8/20.20.2/22.22.3/24.15.0/26.2.0), the 3.6.3
+  expected-SHA table, and the yao-pkg known-arch set (adds `x86`, `ppc64`,
+  `s390x`, `riscv64`, `loong64`; drops `armv6`).
 
 ## Backlog (porting order)
 
@@ -49,18 +54,14 @@ porting order. Items move to "Done" as they land with parity tests.
 4. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
-5. **pkg-fetch 3.6.x targets** (`@yao-pkg/pkg-fetch` 3.6.3): node18/20/22/24
-   binaries, updated expected-hash table, updated cache version naming, new
-   default node range. The embedded `fetch_expected_shas.json` is still the
-   vercel pkg-fetch 3.5 table.
-6. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+5. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-7. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
-8. **Help text / CLI surface**: update to the yao-pkg help output (new
+6. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
+7. **Help text / CLI surface**: update to the yao-pkg help output (new
     flags, examples, config-file mention) and picocolors-equivalent styling.
-9. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+8. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources

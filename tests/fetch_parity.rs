@@ -19,9 +19,12 @@ fn cache_binary_name_matches_pkg_fetch_matrix() -> Result<(), Box<dyn std::error
         ("node10", "10.24.1"),
         ("node12", "12.22.11"),
         ("node14", "14.21.3"),
-        ("node16", "16.19.1"),
-        ("node18", "18.15.0"),
-        ("node19", "19.8.1"),
+        ("node16", "16.20.2"),
+        ("node18", "18.20.8"),
+        ("node20", "20.20.2"),
+        ("node22", "22.22.3"),
+        ("node24", "24.15.0"),
+        ("node26", "26.2.0"),
     ];
     let combos = [
         ("alpine", "x64"),
@@ -43,7 +46,7 @@ fn cache_binary_name_matches_pkg_fetch_matrix() -> Result<(), Box<dyn std::error
             assert_eq!(
                 cache.binary_path(&target, BinaryKind::Fetched)?,
                 std::path::PathBuf::from(format!(
-                    "/tmp/pkg-cache/v3.5/fetched-v{version}-{platform}-{arch}"
+                    "/tmp/pkg-cache/v3.6/fetched-v{version}-{platform}-{arch}"
                 )),
                 "unexpected cache name for {spec}"
             );
@@ -62,11 +65,11 @@ fn cache_path_matches_pkg_fetch_local_place() -> Result<(), Box<dyn std::error::
 
     assert_eq!(
         cache.binary_path(&target, BinaryKind::Fetched)?,
-        std::path::PathBuf::from("/tmp/pkg-cache/v3.5/fetched-v18.15.0-macos-arm64")
+        std::path::PathBuf::from("/tmp/pkg-cache/v3.6/fetched-v18.20.8-macos-arm64")
     );
     assert_eq!(
         cache.binary_path(&target, BinaryKind::Built)?,
-        std::path::PathBuf::from("/tmp/pkg-cache/v3.5/built-v18.15.0-macos-arm64")
+        std::path::PathBuf::from("/tmp/pkg-cache/v3.6/built-v18.20.8-macos-arm64")
     );
     Ok(())
 }
@@ -86,10 +89,10 @@ fn source_build_requirement_points_at_pkg_fetch_built_artifact()
     assert_eq!(requirement.target, target);
     assert_eq!(
         requirement.built_path,
-        std::path::PathBuf::from("/tmp/pkg-cache/v3.5/built-v18.15.0-linux-x64")
+        std::path::PathBuf::from("/tmp/pkg-cache/v3.6/built-v18.20.8-linux-x64")
     );
     assert!(requirement.message().contains("source build required"));
-    assert!(requirement.message().contains("built-v18.15.0-linux-x64"));
+    assert!(requirement.message().contains("built-v18.20.8-linux-x64"));
     Ok(())
 }
 
@@ -217,7 +220,7 @@ fn force_build_errors_when_built_cache_artifact_is_absent() -> Result<(), Box<dy
     let error = cache.binary_for(&target).err();
 
     assert!(
-        matches!(error, Some(PkgError::Fetch(message)) if message.contains("source build required") && message.contains("built-v18.15.0-linux-x64"))
+        matches!(error, Some(PkgError::Fetch(message)) if message.contains("source build required") && message.contains("built-v18.20.8-linux-x64"))
     );
     assert!(fetched.exists());
     fs::remove_file(fetched)?;
