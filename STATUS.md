@@ -1764,3 +1764,15 @@ Next: continue the YAO_PKG_PARITY.md backlog with the exports-aware resolver, th
 Decisions made: JS config modules are evaluated through the host `node` subprocess (the same external boundary as bytecode fabrication) instead of embedding a JS engine; config type validation keeps serde error wording for now instead of the JS `validatePkgConfig` messages.
 
 Blockers worked around: none.
+
+## 2026-06-09 - Resolver, walker deltas, dictionary, help, and ESM shipped
+
+Shipped: five more yao-pkg parity slices. Exports-field-aware resolution (require-then-import conditions, pattern subpaths, ESM-only gating). Non-ESM walker/detector deltas: literal dynamic `import()` detection, `.mjs` resolve extension, and top-level config `ignore` patterns. Dictionary sync (`sqlite3`, `thread-stream` + fixture). Help text updated to the yao-pkg surface. Producer placeholder discovery now skips apostrophe-quoted source literals (yao-pkg/pkg#86). ESM support landed end to end: SWC `common_js` transformation before detection/bytecode, async-IIFE wrapping for top-level await, `import.meta` rewriting, `.mjs` require-path rewriting, `was_transformed` records, and packer `.mjs` -> `.js` snapshot renames. SWC crates aligned on a single AST family (ast 25 / parser 41 / common 23).
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` green offline, including new parity tests for exports resolution, dynamic import detection, walker ignore, apostrophe placeholder skip, ESM unit transforms, and an end-to-end .mjs walk/refine/pack test.
+
+Next: SEA support is the last large backlog item; misc small items are listed in YAO_PKG_PARITY.md.
+
+Decisions made: the Rust port transforms ESM with SWC instead of an esbuild subprocess, keeping the toolchain native; SWC's native import.meta rewriting replaces the JS regex shim. Known pre-existing flake: parallel lib tests that write-then-exec helper scripts can hit a fork/exec text-busy race.
+
+Blockers worked around: the transform crates initially pulled a second SWC AST family; the existing parser pins were upgraded instead of carrying duplicate ASTs.
