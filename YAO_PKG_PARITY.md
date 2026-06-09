@@ -93,9 +93,35 @@ porting order. Items move to "Done" as they land with parity tests.
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
 2. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
-   `prelude/sea-*.js`): Node single-executable-application pipeline via
-   postject; simple mode (plain .js, no package.json) and enhanced mode
-   (walker-backed VFS assets, compression support).
+   `prelude/sea-*.js`): Node single-executable-application pipeline.
+   Design notes from the 2026-06-09 study of yao-pkg 6.19.0:
+   - Host requirement: Node >= 20 on the build machine; enhanced mode
+     requires a single target major and Node >= 22 targets.
+   - Target binaries come from official nodejs.org dist (and
+     unofficial-builds for linuxstatic/armv7), checksum-verified and
+     cached, NOT from pkg-fetch. Rust will need zip + tar.gz + tar.xz
+     extraction (`zip`, `tar`, `flate2`, plus an xz backend).
+   - Blob generation shells out to a host-compatible downloaded node:
+     `node --experimental-sea-config sea-config.json`; simple mode uses
+     the entry as `main`, enhanced mode uses the bundled
+     `prelude/sea-bootstrap.bundle.js` (an esbuild bundle of
+     `sea-bootstrap.js` + `sea-vfs-setup.js` + `bootstrap-shared.js`,
+     generated at yao-pkg build time — the Rust port must either vendor
+     the generated bundle or assemble it) plus walker-derived assets
+     from `sea-assets.ts` (`__pkg_manifest__` + per-file assets, with
+     optional per-asset compression).
+   - Injection: yao-pkg uses the postject library (LIEF-based) to add
+     the `NODE_SEA_BLOB` section/segment/resource with the SEA fuse
+     sentinel (built by string concatenation to avoid duplicate
+     sentinel occurrences). The Rust port needs a decision: implement
+     native section injection for ELF/Mach-O/PE (large; no
+     off-the-shelf crate covers all three) or shell out to
+     `npx postject` (keeps an npm boundary). Enhanced mode forbids
+     `useSnapshot` and walks with `seaMode: true` (blob stores
+     downgraded to content; no ESM transform).
+   - After injection: Mach-O payload patch + ad-hoc re-sign (existing
+     `macho.rs` covers this), Windows signature removal is N/A (yao
+     leaves PE unsigned).
 4. **Misc**: prebuild-install `npm_config_<name>` env prefixing,
    `findCommonJunctionPoint` symlink change, JS `validatePkgConfig`
    unknown-key warnings/type wording, synthetic-`main` injection for
