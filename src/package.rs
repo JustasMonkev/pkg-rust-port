@@ -168,7 +168,8 @@ pub fn build_package_with_provider(
                 .with_root(&plan.root)
                 .with_public_toplevel(plan.public_toplevel)
                 .with_public_packages(plan.public_packages.clone())
-                .with_no_dictionary(plan.no_dictionary.clone()),
+                .with_no_dictionary(plan.no_dictionary.clone())
+                .with_ignore(plan.ignore.clone()),
         )?;
         let output_warnings = walked.warnings.clone();
         warnings.extend(output_warnings.clone());

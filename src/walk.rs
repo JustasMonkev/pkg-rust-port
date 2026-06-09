@@ -152,6 +152,8 @@ pub struct WalkerParams {
     pub public_packages: Vec<String>,
     /// Dictionary module filenames disabled for this walk.
     pub no_dictionary: Vec<String>,
+    /// Top-level config `ignore` glob patterns; matching files are skipped.
+    pub ignore: Vec<String>,
 }
 
 impl WalkerParams {
@@ -234,6 +236,24 @@ impl WalkerParams {
         S: Into<String>,
     {
         self.no_dictionary = modules.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set top-level config `ignore` glob patterns.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let params = pkg_rust::WalkerParams::new().with_ignore(["**/*.md"]);
+    /// assert_eq!(params.ignore, ["**/*.md"]);
+    /// ```
+    #[must_use]
+    pub fn with_ignore<I, S>(mut self, patterns: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.ignore = patterns.into_iter().map(Into::into).collect();
         self
     }
 }
@@ -567,6 +587,7 @@ struct WalkerState {
     public_toplevel: bool,
     public_packages: Vec<String>,
     no_dictionary: Vec<String>,
+    ignore: Vec<String>,
     custom_dictionaries: BTreeMap<String, DictionaryEntry>,
     activated_packages: BTreeSet<PathBuf>,
     patches: BTreeMap<PathBuf, Vec<PatchOp>>,
@@ -578,6 +599,7 @@ impl WalkerState {
         public_toplevel: bool,
         public_packages: Vec<String>,
         no_dictionary: Vec<String>,
+        ignore: Vec<String>,
         custom_dictionaries: BTreeMap<String, DictionaryEntry>,
     ) -> Self {
         Self {
@@ -587,6 +609,7 @@ impl WalkerState {
             public_toplevel,
             public_packages,
             no_dictionary,
+            ignore,
             custom_dictionaries,
             activated_packages: BTreeSet::new(),
             patches: BTreeMap::new(),
@@ -619,6 +642,13 @@ impl WalkerState {
 
         if self.should_activate_marker(&mut task.marker) {
             self.activate_marker(&mut task.marker)?;
+        }
+
+        // yao-pkg walker: top-level config `ignore` patterns skip blob and
+        // content stores for matching files before any payload is recorded.
+        if matches!(task.store, StoreKind::Blob | StoreKind::Content) && self.is_ignored(&task.file)
+        {
+            return Ok(());
         }
 
         let completed_store = match task.store {
@@ -1014,6 +1044,16 @@ impl WalkerState {
         Ok(())
     }
 
+    fn is_ignored(&self, file: &Path) -> bool {
+        if self.ignore.is_empty() {
+            return false;
+        }
+        let candidate = path_to_slash_string(file);
+        self.ignore
+            .iter()
+            .any(|pattern| path_pattern_matches(pattern, &candidate))
+    }
+
     fn append(&mut self, file: PathBuf, store: StoreKind, marker: Marker) {
         if matches!(
             store,
@@ -1167,6 +1207,7 @@ pub fn walk(
         params.public_toplevel,
         params.public_packages,
         params.no_dictionary,
+        params.ignore,
         custom_dictionaries,
     );
     state.append(entrypoint, StoreKind::Blob, marker.clone());

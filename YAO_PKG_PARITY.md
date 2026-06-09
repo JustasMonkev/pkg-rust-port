@@ -65,6 +65,13 @@ porting order. Items move to "Done" as they land with parity tests.
   line, node22/node24 examples, Zstd example, and the config-file
   paragraph. `--sea` stays out of the help until the SEA slice lands.
 
+- [x] Walker/detector deltas (non-ESM): literal dynamic `import("x")` is
+  detected as a resolvable alias (`visitorDynamicImport`); module resolution
+  extensions now include `.mjs`; top-level config `ignore` glob patterns skip
+  blob/content stores for matching files (`node:` builtin prefixes were
+  already handled). Remaining walker deltas are the ESM-transform and
+  SEA-mode paths tracked below, plus the symlink junction-point change.
+
 ## Backlog (porting order)
 
 1. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle

@@ -160,6 +160,9 @@ pub struct PkgConfig {
     /// Files that cannot be embedded and must be deployed with the executable.
     #[serde(default)]
     pub deploy_files: Value,
+    /// Glob patterns for files excluded from the package (yao-pkg `ignore`).
+    #[serde(default)]
+    pub ignore: Value,
     /// Extra dictionary entries.
     #[serde(default)]
     pub dictionary: Map<String, Value>,

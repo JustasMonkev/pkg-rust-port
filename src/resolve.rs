@@ -33,7 +33,13 @@ impl ResolveOptions {
     pub fn new(basedir: impl Into<PathBuf>) -> Self {
         Self {
             basedir: basedir.into(),
-            extensions: vec![".js".to_owned(), ".json".to_owned(), ".node".to_owned()],
+            // yao-pkg MODULE_RESOLVE_EXTENSIONS: ['.js', '.json', '.node', '.mjs'].
+            extensions: vec![
+                ".js".to_owned(),
+                ".json".to_owned(),
+                ".node".to_owned(),
+                ".mjs".to_owned(),
+            ],
         }
     }
 }

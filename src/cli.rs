@@ -207,6 +207,8 @@ pub struct PackagePlan {
     pub public_packages: Vec<String>,
     /// Built-in dictionary module filenames disabled for this package build.
     pub no_dictionary: Vec<String>,
+    /// Top-level config `ignore` glob patterns.
+    pub ignore: Vec<String>,
     /// Command-line options baked into the executable.
     pub bakes: Vec<String>,
     /// Output artifacts in target order.
@@ -519,6 +521,9 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .collect();
     let public_packages = parse_public_packages(public_packages_raw.as_deref());
     let no_dictionary = parse_dictionary_modules(no_dict_raw.as_deref());
+    let ignore = flag_config
+        .map(|pkg| config_value_strings(&pkg.ignore))
+        .unwrap_or_default();
 
     Ok(PackagePlan {
         input,
@@ -536,10 +541,23 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         public_toplevel,
         public_packages,
         no_dictionary,
+        ignore,
         bakes,
         outputs,
         notices,
     })
+}
+
+/// Flatten a string-or-array config value into a string list.
+fn config_value_strings(value: &serde_json::Value) -> Vec<String> {
+    match value {
+        serde_json::Value::String(text) => vec![text.clone()],
+        serde_json::Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Collapse a positive/negative CLI flag pair into an explicit tri-state.
