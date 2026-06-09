@@ -45,7 +45,7 @@ pub use crate::common::{
     retrieve_denominator, snapshotify, strip_snapshot, substitute_denominator,
 };
 pub use crate::compress::{Compression, CompressionParseError};
-pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig};
+pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig, StringOrList};
 pub use crate::detect::{
     Derivative, DetectedUse, DetectionKind, detect, non_literal_and_cwd_debug_lines,
     successful_debug_lines,

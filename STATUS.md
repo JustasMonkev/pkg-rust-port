@@ -1752,3 +1752,15 @@ Next: continue the `YAO_PKG_PARITY.md` backlog: external config file support (`-
 Decisions made: the Rust producer encodes Zstd natively with libzstd instead of requiring a Node >= 22.15 build host the way the JS producer does; only the produced binary keeps the runtime Node >= 22.15 requirement. The debug diagnostic is now the yao-pkg inline packer snippet rather than the retired `prelude/diagnostic.js`.
 
 Blockers worked around: none.
+
+## 2026-06-09 - yao-pkg flags, pkg-fetch 3.6.3, and config files shipped
+
+Shipped: three more yao-pkg parity slices. `--fallback-to-source` ships plain source when bytecode fabrication fails (yao warning wording; fail-closed skip behavior retained without the flag) and `--signature` is accepted as the positive override. Binary fetching now targets `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`, yao-pkg release downloads, the 3.6.3 node version set, the 3.6.3 expected-SHA table, and the yao known-arch set. External config files now work end to end: `-c/--config` with JSON or node-evaluated JS modules, `.pkgrc`/`pkg.config.*` auto-discovery with the `Using config` notice and precedence warning, bare-config wrapping, and CLI > config > default flag resolution.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline, including new parity tests for fallback-to-source payloads, the pkg-fetch 3.6 cache matrix, pkgrc discovery/precedence, bare-config wrapping, missing-config wording, and node-evaluated JS configs.
+
+Next: continue the YAO_PKG_PARITY.md backlog with the exports-aware resolver, then the walker/detector deltas and ESM transformation.
+
+Decisions made: JS config modules are evaluated through the host `node` subprocess (the same external boundary as bytecode fabrication) instead of embedding a JS engine; config type validation keeps serde error wording for now instead of the JS `validatePkgConfig` messages.
+
+Blockers worked around: none.

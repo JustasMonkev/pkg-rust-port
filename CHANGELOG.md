@@ -9,6 +9,14 @@
   wrapper parameter and the inline debug diagnostic that calls
   `REQUIRE_SHARED.installDiagnostic`. Version reporting and
   `process.versions.pkg` are now `6.19.0`.
+- Added external config file support: `-c/--config` with JSON and JS config
+  modules, `.pkgrc`/`pkg.config.*` auto-discovery, bare-config wrapping, and
+  CLI > config > default resolution for build-shaping flags.
+- Added `--fallback-to-source` and the `--signature` positive flag, plus the
+  hidden positive/negative pairs for config-overridable boolean flags.
+- Retargeted binary fetching to `@yao-pkg/pkg-fetch` 3.6.3 (cache tag `v3.6`,
+  node 16.20.2/18.20.8/20.20.2/22.22.3/24.15.0/26.2.0, new expected-SHA
+  table, new arch tokens).
 - Added Zstd payload compression (`--compress Zstd|zs|zstd`, enum index 3)
   with native Rust encoding at libzstd default level. Produced binaries
   require target Node >= 22.15 to decompress (enforced by the runtime

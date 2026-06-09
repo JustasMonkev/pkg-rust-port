@@ -490,3 +490,130 @@ async fn exec_treats_version_as_successful_display() -> Result<(), Box<dyn std::
     pkg_rust::exec(["--version"]).await?;
     Ok(())
 }
+
+#[test]
+fn pkgrc_discovery_resolves_flags_with_cli_precedence() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"compress":"GZip","bytecode":false,"fallbackToSource":true,"publicPackages":["alpha","beta"],"options":"expose-gc"}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Gzip);
+    assert!(!plan.bytecode);
+    assert!(plan.fallback_to_source);
+    assert_eq!(plan.public_packages, ["alpha", "beta"]);
+    assert_eq!(plan.bakes, ["--expose-gc"]);
+    assert!(
+        plan.notices
+            .iter()
+            .any(|notice| notice.starts_with("> Using config") && notice.ends_with(".pkgrc"))
+    );
+
+    // CLI flags take precedence over the discovered config.
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--compress"),
+        OsString::from("Brotli"),
+        OsString::from("--bytecode"),
+        OsString::from("--no-fallback-to-source"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+    assert_eq!(plan.compression, Compression::Brotli);
+    assert!(plan.bytecode);
+    assert!(!plan.fallback_to_source);
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn explicit_bare_json_config_wraps_into_pkg_options() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-bare-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("flags.config.json"),
+        r#"{"signature":false,"noDictionary":"*"}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-macos-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from("--config"),
+        OsString::from(temp_root.join("flags.config.json").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert!(!plan.signature);
+    assert_eq!(plan.no_dictionary, ["*"]);
+    Ok(())
+}
+
+#[test]
+fn missing_explicit_config_reports_js_wording() {
+    let error = plan_package([
+        OsString::from("--config"),
+        OsString::from("/nonexistent/pkg.config.json"),
+        OsString::from("test/test-50-require-resolve/test-z-require-content.css"),
+    ])
+    .err();
+
+    assert!(
+        matches!(&error, Some(PkgError::Cli(message)) if message.starts_with("Config file does not exist")),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn js_config_module_loads_through_node() -> Result<(), Box<dyn std::error::Error>> {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping: node is unavailable");
+        return Ok(());
+    }
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-js-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("pkg.config.cjs"),
+        "module.exports = { compress: 'Zstd', public: true };\n",
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node24-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Zstd);
+    assert!(plan.public_toplevel);
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}

@@ -62,28 +62,40 @@ struct Cli {
     options: Option<String>,
 
     /// show more information during packaging process [off]
-    #[arg(short = 'd', long = "debug")]
+    #[arg(short = 'd', long = "debug", overrides_with = "no_debug")]
     debug: bool,
+
+    #[arg(long = "no-debug", hide = true, overrides_with = "debug")]
+    no_debug: bool,
 
     /// don't download prebuilt base binaries, build them
     #[arg(short = 'b', long = "build")]
     build: bool,
 
     /// speed up and disclose the sources of top-level project
-    #[arg(long = "public")]
+    #[arg(long = "public", overrides_with = "no_public")]
     public: bool,
+
+    #[arg(long = "no-public", hide = true, overrides_with = "public")]
+    no_public: bool,
 
     /// force specified packages to be considered public
     #[arg(long = "public-packages", value_name = "public-packages")]
     public_packages: Option<String>,
 
     /// skip bytecode generation and include source files as plain js
-    #[arg(long = "no-bytecode", default_value_t = false)]
+    #[arg(long = "no-bytecode", overrides_with = "bytecode")]
     no_bytecode: bool,
 
+    #[arg(long = "bytecode", hide = true, overrides_with = "no_bytecode")]
+    bytecode: bool,
+
     /// skip native addons build
-    #[arg(long = "no-native-build", default_value_t = false)]
+    #[arg(long = "no-native-build", overrides_with = "native_build")]
     no_native_build: bool,
+
+    #[arg(long = "native-build", hide = true, overrides_with = "no_native_build")]
+    native_build: bool,
 
     /// skip ad-hoc signing of macOS executables
     #[arg(
@@ -102,8 +114,15 @@ struct Cli {
     signature: bool,
 
     /// if bytecode generation fails for a file, ship it as plain source instead of skipping it
-    #[arg(long = "fallback-to-source", default_value_t = false)]
+    #[arg(long = "fallback-to-source", overrides_with = "no_fallback_to_source")]
     fallback_to_source: bool,
+
+    #[arg(
+        long = "no-fallback-to-source",
+        hide = true,
+        overrides_with = "fallback_to_source"
+    )]
+    no_fallback_to_source: bool,
 
     /// comma-separated list of packages names to ignore dictionaries. Use --no-dict * to disable all dictionaries
     #[arg(long = "no-dict", value_name = "no-dict")]
@@ -165,6 +184,8 @@ pub struct PackagePlan {
     pub snapshot_base: PathBuf,
     /// Compression algorithm requested for payload stripes.
     pub compression: Compression,
+    /// Whether debug diagnostics are enabled (CLI flag or config).
+    pub debug: bool,
     /// Whether bytecode generation is enabled.
     pub bytecode: bool,
     /// Whether native addon prebuild selection/building is enabled.
@@ -184,6 +205,9 @@ pub struct PackagePlan {
     pub bakes: Vec<String>,
     /// Output artifacts in target order.
     pub outputs: Vec<PlannedOutput>,
+    /// Informational/warning lines produced while planning (config discovery),
+    /// already formatted with their `> `/`> Warning ` prefixes.
+    pub notices: Vec<String>,
 }
 
 /// Parse command arguments into a package plan.
@@ -243,11 +267,14 @@ where
         println!("{}", crate::prelude::PKG_VERSION);
         return Ok(());
     }
-    let debug = cli.debug;
     // JS pkg logs `pkg@<version>` once arguments are accepted, before option,
     // target, and input processing.
     println!("> pkg@{}", crate::prelude::PKG_VERSION);
     let plan = plan_from_cli(cli)?;
+    let debug = plan.debug;
+    for notice in &plan.notices {
+        println!("{notice}");
+    }
     if plan.compression != Compression::None {
         println!("compression:  {}", plan.compression.cli_label());
     }
@@ -314,12 +341,6 @@ where
 }
 
 fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
-    let compression = cli
-        .compress
-        .as_deref()
-        .unwrap_or("none")
-        .parse::<Compression>()
-        .map_err(|error| PkgError::Cli(error.to_string()))?;
     let input_arg = cli
         .input
         .as_ref()
@@ -337,15 +358,105 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         ));
     }
 
-    let config_path = cli
-        .config
-        .as_ref()
-        .map(|config| absolute_path(config))
-        .transpose()?;
+    let mut notices = Vec::new();
+    let explicit_config = cli.config.is_some();
+    let config_path = match cli.config.as_ref() {
+        Some(config) => Some(absolute_path(config)?),
+        None => {
+            let discovered = input.parent().and_then(find_pkgrc);
+            if let Some(found) = discovered.as_ref() {
+                notices.push(format!("> Using config {}", relative_to_cwd(found)));
+            }
+            discovered
+        }
+    };
     let config = match config_path.as_ref() {
-        Some(config) => Some(read_package_json(config)?),
+        Some(config) => Some(load_pkgrc(config)?),
         None => None,
     };
+    if !explicit_config
+        && let Some(config_path) = config_path.as_ref()
+        && input_package
+            .as_ref()
+            .is_some_and(|package| package.pkg.is_some())
+    {
+        let basename = config_path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        notices.push(format!(
+            "> Warning Both {basename} and \"pkg\" field in package.json were found. The {basename} file takes precedence."
+        ));
+    }
+
+    // JS resolveConfig: an external config file's `pkg` options take
+    // precedence over the input package.json `pkg` field; build-shaping
+    // flags resolve CLI > config > default.
+    let flag_config = config
+        .as_ref()
+        .and_then(|package| package.pkg.as_ref())
+        .or_else(|| {
+            if config.is_some() {
+                None
+            } else {
+                input_package
+                    .as_ref()
+                    .and_then(|package| package.pkg.as_ref())
+            }
+        });
+    let compression = cli
+        .compress
+        .as_deref()
+        .map(ToOwned::to_owned)
+        .or_else(|| flag_config.and_then(|pkg| pkg.compress.clone()))
+        .unwrap_or_else(|| "none".to_owned())
+        .parse::<Compression>()
+        .map_err(|error| PkgError::Cli(error.to_string()))?;
+    let debug = resolve_bool(
+        cli_bool(cli.debug, cli.no_debug),
+        flag_config.and_then(|pkg| pkg.debug),
+        false,
+    );
+    let bytecode = resolve_bool(
+        cli_bool(cli.bytecode, cli.no_bytecode),
+        flag_config.and_then(|pkg| pkg.bytecode),
+        true,
+    );
+    let native_build = resolve_bool(
+        cli_bool(cli.native_build, cli.no_native_build),
+        flag_config.and_then(|pkg| pkg.native_build),
+        true,
+    );
+    let signature = resolve_bool(
+        cli_bool(cli.signature, cli.no_signature),
+        flag_config.and_then(|pkg| pkg.signature),
+        true,
+    );
+    let fallback_to_source = resolve_bool(
+        cli_bool(cli.fallback_to_source, cli.no_fallback_to_source),
+        flag_config.and_then(|pkg| pkg.fallback_to_source),
+        false,
+    );
+    let public_toplevel = resolve_bool(
+        cli_bool(cli.public, cli.no_public),
+        flag_config.and_then(|pkg| pkg.public),
+        false,
+    );
+    let public_packages_raw = cli.public_packages.clone().or_else(|| {
+        flag_config
+            .and_then(|pkg| pkg.public_packages.as_ref())
+            .map(crate::config::StringOrList::to_comma_joined)
+    });
+    let no_dict_raw = cli.no_dict.clone().or_else(|| {
+        flag_config
+            .and_then(|pkg| pkg.no_dictionary.as_ref())
+            .map(crate::config::StringOrList::to_comma_joined)
+    });
+    let options_raw = cli.options.clone().or_else(|| {
+        flag_config
+            .and_then(|pkg| pkg.options.as_ref())
+            .map(crate::config::StringOrList::to_comma_joined)
+    });
     let entrypoint = resolve_entrypoint(&input, input_package.as_ref())?;
     let marker = build_marker(
         &input,
@@ -394,15 +505,14 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         target.force_build = cli.build;
     }
     let outputs = plan_outputs(&output_base, &targets, auto_output, &entrypoint)?;
-    let bakes = cli
-        .options
+    let bakes = options_raw
         .unwrap_or_default()
         .split(',')
         .filter(|option| !option.is_empty())
         .map(|option| format!("--{option}"))
         .collect();
-    let public_packages = parse_public_packages(cli.public_packages.as_deref());
-    let no_dictionary = parse_dictionary_modules(cli.no_dict.as_deref());
+    let public_packages = parse_public_packages(public_packages_raw.as_deref());
+    let no_dictionary = parse_dictionary_modules(no_dict_raw.as_deref());
 
     Ok(PackagePlan {
         input,
@@ -412,16 +522,142 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         root,
         snapshot_base,
         compression,
-        bytecode: !cli.no_bytecode,
-        native_build: !cli.no_native_build,
-        signature: !cli.no_signature,
-        fallback_to_source: cli.fallback_to_source,
-        public_toplevel: cli.public,
+        debug,
+        bytecode,
+        native_build,
+        signature,
+        fallback_to_source,
+        public_toplevel,
         public_packages,
         no_dictionary,
         bakes,
         outputs,
+        notices,
     })
+}
+
+/// Collapse a positive/negative CLI flag pair into an explicit tri-state.
+const fn cli_bool(positive: bool, negative: bool) -> Option<bool> {
+    if positive {
+        Some(true)
+    } else if negative {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// JS `resolveFlags` precedence: CLI > pkg config > default.
+const fn resolve_bool(cli: Option<bool>, config: Option<bool>, default: bool) -> bool {
+    match (cli, config) {
+        (Some(value), _) => value,
+        (None, Some(value)) => value,
+        (None, None) => default,
+    }
+}
+
+/// Auto-discovered config filenames, in JS `PKGRC_FILENAMES` precedence order.
+const PKGRC_FILENAMES: &[&str] = &[
+    ".pkgrc",
+    ".pkgrc.json",
+    "pkg.config.js",
+    "pkg.config.cjs",
+    "pkg.config.mjs",
+];
+
+fn find_pkgrc(base_dir: &Path) -> Option<PathBuf> {
+    PKGRC_FILENAMES
+        .iter()
+        .map(|name| base_dir.join(name))
+        .find(|candidate| candidate.exists())
+}
+
+fn relative_to_cwd(path: &Path) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| path.strip_prefix(&cwd).ok())
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+/// Load a pkgrc / pkg.config file the way JS `loadPkgrc` does: `.pkgrc` and
+/// `*.json` parse as JSON; `.js`/`.cjs`/`.mjs` are evaluated through the host
+/// `node` (dynamic import, default export preferred). A bare pkg config (no
+/// package-like keys) is wrapped as `{ "pkg": ... }`.
+fn load_pkgrc(path: &Path) -> Result<PackageJson, PkgError> {
+    if !path.exists() {
+        return Err(PkgError::Cli(format!(
+            "Config file does not exist: {}",
+            path.display()
+        )));
+    }
+    let basename = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let is_json = basename == ".pkgrc" || basename.ends_with(".json");
+    let raw = if is_json {
+        fs::read_to_string(path).map_err(|source| PkgError::Io {
+            path: path.display().to_string(),
+            source,
+        })?
+    } else {
+        load_js_config_source(path)?
+    };
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|error| PkgError::Cli(format!("invalid config file {basename}: {error}")))?;
+    let wrapped = wrap_bare_pkg_config(value);
+    serde_json::from_value(wrapped)
+        .map_err(|error| PkgError::Cli(format!("invalid config file {basename}: {error}")))
+}
+
+/// Evaluate a `.js`/`.cjs`/`.mjs` config through the host `node` and return
+/// its default export serialized as JSON.
+///
+/// DECISION: the JS implementation dynamically imports config modules
+/// in-process. The Rust port keeps config-module execution behind the same
+/// external-`node` boundary already used for bytecode fabrication instead of
+/// embedding a JavaScript engine.
+fn load_js_config_source(path: &Path) -> Result<String, PkgError> {
+    let script = "const { pathToFileURL } = require('url');\n\
+        import(pathToFileURL(process.argv[1]).href)\n\
+          .then((mod) => process.stdout.write(JSON.stringify(mod.default ?? mod)))\n\
+          .catch((error) => { console.error(error && error.message ? error.message : String(error)); process.exit(1); });";
+    let output = Command::new("node")
+        .arg("-e")
+        .arg(script)
+        .arg(path)
+        .output()
+        .map_err(|source| PkgError::Io {
+            path: "node".to_owned(),
+            source,
+        })?;
+    if !output.status.success() {
+        return Err(PkgError::Cli(format!(
+            "Failed to load config file {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|error| PkgError::Cli(format!("config file produced non-UTF8 JSON: {error}")))
+}
+
+/// JS `resolveConfigFile`: a config without package-like keys is a bare pkg
+/// config and gets wrapped as `{ "pkg": ... }`.
+fn wrap_bare_pkg_config(value: serde_json::Value) -> serde_json::Value {
+    let is_bare = value.as_object().is_some_and(|object| {
+        !object.contains_key("name")
+            && !object.contains_key("files")
+            && !object.contains_key("dependencies")
+            && !object.contains_key("pkg")
+    });
+    if is_bare {
+        serde_json::json!({ "pkg": value })
+    } else {
+        value
+    }
 }
 
 fn parse_public_packages(packages: Option<&str>) -> Vec<String> {

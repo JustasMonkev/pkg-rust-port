@@ -26,8 +26,22 @@ porting order. Items move to "Done" as they land with parity tests.
   skipping it. Without the flag, skipped-blob warnings keep this port's
   fail-closed behavior and now use the yao-pkg wording with the
   `--fallback-to-source` hint.
-- [x] `--signature` positive flag (overrides `--no-signature`; will override
-  config `signature: false` once config-file support lands).
+- [x] `--signature` positive flag (overrides `--no-signature` and config
+  `signature: false`).
+- [x] External config file support: `-c/--config` accepting `package.json`,
+  `*.json`, `.js`, `.cjs`, `.mjs`; auto-discovery of `.pkgrc`, `.pkgrc.json`,
+  `pkg.config.js`, `pkg.config.cjs`, `pkg.config.mjs` (first match wins, with
+  the `Using config` info line and the "takes precedence" warning when
+  `package.json` also has a `pkg` field); bare configs wrapped as
+  `{ "pkg": ... }`; build-shaping flags resolvable from config with
+  CLI > config > default precedence (`debug`, `compress`, `bytecode`,
+  `nativeBuild`, `signature`, `fallbackToSource`, `public`, `publicPackages`,
+  `noDictionary`, `options`), including the hidden positive/negative CLI flag
+  pairs (`--bytecode`, `--native-build`, `--no-debug`, `--no-public`,
+  `--no-fallback-to-source`). JS config modules are evaluated through the
+  host `node` (same external boundary as bytecode fabrication). Not yet
+  ported: unknown-key warnings and per-key type-error wording from
+  `validatePkgConfig`, and the `sea` flag (blocked on the SEA slice).
 - [x] pkg-fetch retargeted to `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`,
   release downloads from `yao-pkg/pkg-fetch`, the 3.6.3 patched node version
   set (8/10/12/14/16.20.2/18.20.8/20.20.2/22.22.3/24.15.0/26.2.0), the 3.6.3
@@ -36,32 +50,24 @@ porting order. Items move to "Done" as they land with parity tests.
 
 ## Backlog (porting order)
 
-1. **External config file support** (`lib/config.ts`, ~1040 lines)
-   - `-c/--config` accepting `package.json`, `*.json`, `.js`, `.cjs`, `.mjs`
-   - Auto-discovery of `.pkgrc`, `.pkgrc.json`, `pkg.config.js`,
-     `pkg.config.cjs`, `pkg.config.mjs` (first match wins)
-   - All build-shaping flags settable in config (camelCase keys); CLI
-     overrides config (`resolveFlags`, precedence CLI > config > default)
-   - Note: `.js`/`.cjs`/`.mjs` config files execute JS; the Rust port will
-     need a decision (Node subprocess evaluation vs JSON-only support).
-2. **Exports-field-aware resolver** (`lib/resolver.ts` + `resolve.exports`):
+1. **Exports-field-aware resolver** (`lib/resolver.ts` + `resolve.exports`):
    package.json `exports` resolution with `require` condition first, then
    `import` fallback for ESM-only packages.
-3. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
+2. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
    ESM entrypoints and `.mjs` files to CJS via esbuild; `wasTransformed`
    record flag; packer renames transformed `.mjs` → `.js` in the snapshot.
    Requires a bundler decision for Rust (SWC bundling vs esbuild subprocess).
-4. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
+3. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
-5. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+4. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-6. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
-7. **Help text / CLI surface**: update to the yao-pkg help output (new
+5. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
+6. **Help text / CLI surface**: update to the yao-pkg help output (new
     flags, examples, config-file mention) and picocolors-equivalent styling.
-8. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+7. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources
