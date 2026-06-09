@@ -378,8 +378,8 @@ fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
         &output,
         [
             "Error!",
-            "Invalid compression algorithm Crap",
-            "should be None, Brotli or Gzip",
+            "Invalid compression algorithm \"Crap\"",
+            "accepted: None/none, Brotli/br, GZip/gz/gzip, or Zstd/zs/zstd",
         ],
     );
     Ok(())

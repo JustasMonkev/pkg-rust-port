@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Retargeted the port from `vercel/pkg` 5.8.1 to the maintained fork
+  `yao-pkg/pkg` 6.19.0 (see `YAO_PKG_PARITY.md` for the gap backlog).
+- Replaced the embedded runtime prelude with the yao-pkg 6.19.0 split prelude
+  (`bootstrap.js` + `bootstrap-shared.js`), including the `REQUIRE_SHARED`
+  wrapper parameter and the inline debug diagnostic that calls
+  `REQUIRE_SHARED.installDiagnostic`. Version reporting and
+  `process.versions.pkg` are now `6.19.0`.
+- Added Zstd payload compression (`--compress Zstd|zs|zstd`, enum index 3)
+  with native Rust encoding at libzstd default level. Produced binaries
+  require target Node >= 22.15 to decompress (enforced by the runtime
+  prelude). Updated the invalid-algorithm error to the yao-pkg wording.
 - Started the Rust rewrite of `pkg` under `rust-port`.
 - Added typed public APIs for compression, stores, aliases, targets, package
   config, walking, packing, producing executable images, and cache-backed target

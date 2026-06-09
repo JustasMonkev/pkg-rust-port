@@ -106,6 +106,36 @@ fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
 }
 
 #[test]
+fn zstd_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, false)?;
+    let manifest = produce_manifest(packed, Compression::Zstd, PathStyle::Posix)?;
+
+    assert_eq!(manifest.compression, Compression::Zstd);
+    assert!(manifest.payload_size > 0);
+    assert!(manifest.vfs.keys().any(|key| key.starts_with("0/1/")));
+    Ok(())
+}
+
+#[test]
+fn zstd_prelude_renders_docompress_index() -> Result<(), PkgError> {
+    let packed = packed_content_and_stat("/test-x-index.js", b"console.log('hi');");
+    let manifest = produce_manifest(packed, Compression::Zstd, PathStyle::Posix)?;
+    let rendered = render_prelude("%DOCOMPRESS%", &manifest)?;
+
+    assert_eq!(rendered, "3");
+    Ok(())
+}
+
+#[test]
 fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
     let packed = packed_content_and_stat("/test-x-index.js", b"console.log('hi');");
     let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;

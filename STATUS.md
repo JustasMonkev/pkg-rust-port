@@ -1740,3 +1740,15 @@ Shipped: added a gated `real_pkg_compare` integration harness that packages sele
 Verified: curl-seeded `/private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64` matched SHA `13cc043442af8f110836e7a4abcfc4ba5cf1d9568564485f018fd93d688291e1`; `PKG_RUST_REAL_PKG_COMPARE=1 PKG_RUST_REAL_PKG_BIN=/private/tmp/pkg-rust-real-compare/oracle/node_modules/.bin/pkg PKG_CACHE_PATH=/private/tmp/pkg-rust-real-compare/cache PKG_RUST_REAL_TARGET=node18-macos-x64 cargo test --locked --test real_pkg_compare -- --nocapture` passed for snapshot-path, module-parent, mountpoints, fs-runtime-layer-2, require-edge-cases, and readdir-bundled-dir. An empty-cache Rust CLI run verified the live reqwest downloader after sandbox network approval and produced a matching SHA/correct `42` executable. `--build` still reports the explicit external built artifact requirement at `/private/tmp/pkg-rust-real-compare/cache/v3.5/built-v18.15.0-macos-x64`.
 
 Next: keep the real pkg comparison gate opt-in because it needs network/cache/oracle setup. A plain `npm install pkg@5.8.1` installs nested `pkg-fetch@3.4.2`, so the v3.5/Node 18.15.0 cache comparison requires overriding that nested dependency to `pkg-fetch@3.5.2`.
+
+## 2026-06-09 - yao-pkg retarget: prelude + Zstd shipped
+
+Shipped: retargeted the parity oracle from vercel/pkg 5.8.1 to yao-pkg/pkg 6.19.0 and added `YAO_PKG_PARITY.md` as the gap backlog. Replaced the embedded prelude with the yao-pkg 6.19.0 `bootstrap.js` + `bootstrap-shared.js` pair (verbatim, SHA-pinned in `src/prelude_assets.rs`), updated `prelude_template` to the new packer wrapper with the `REQUIRE_SHARED` module IIFE and inline diagnostic snippet, and bumped the reported version to 6.19.0. Added `Compression::Zstd` end to end: parser aliases `zstd`/`zs`, enum index 3 for `%DOCOMPRESS%`, native Rust zstd payload encoding, and the yao-pkg invalid-compression wording.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline; new parity tests cover the wrapper shape, diagnostic injection, Zstd manifest accounting, and `%DOCOMPRESS%` rendering.
+
+Next: continue the `YAO_PKG_PARITY.md` backlog: external config file support (`-c/--config` + `.pkgrc` discovery + CLI>config>default flag resolution), then `--fallback-to-source` and the exports-aware resolver.
+
+Decisions made: the Rust producer encodes Zstd natively with libzstd instead of requiring a Node >= 22.15 build host the way the JS producer does; only the produced binary keeps the runtime Node >= 22.15 requirement. The debug diagnostic is now the yao-pkg inline packer snippet rather than the retired `prelude/diagnostic.js`.
+
+Blockers worked around: none.

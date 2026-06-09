@@ -956,6 +956,22 @@ fn append_payload(
                 .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
             Ok(())
         }
+        PayloadCompression::Zstd => {
+            // DECISION: the JS producer compresses through Node's
+            // `createZstdCompress()` and therefore needs a Node >= 22.15 build
+            // host; the Rust port encodes natively with libzstd at the same
+            // default level (3), so only the produced binary keeps the
+            // Node >= 22.15 requirement (enforced by the runtime prelude).
+            let mut encoder = zstd::stream::write::Encoder::new(payload, 3)
+                .map_err(|error| PkgError::Pack(format!("zstd encoder failed: {error}")))?;
+            encoder
+                .write_all(bytes)
+                .map_err(|error| PkgError::Pack(format!("zstd write failed: {error}")))?;
+            encoder
+                .finish()
+                .map_err(|error| PkgError::Pack(format!("zstd finish failed: {error}")))?;
+            Ok(())
+        }
     }
 }
 
