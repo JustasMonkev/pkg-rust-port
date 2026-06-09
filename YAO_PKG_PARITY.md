@@ -48,26 +48,31 @@ porting order. Items move to "Done" as they land with parity tests.
   expected-SHA table, and the yao-pkg known-arch set (adds `x86`, `ppc64`,
   `s390x`, `riscv64`, `loong64`; drops `armv6`).
 
+- [x] Exports-field-aware resolver: bare specifiers resolve through the
+  target package's `exports` field (`require` condition first, `import`
+  fallback; `{condition, node, default}` set; exact, shorthand, and `*`
+  pattern subpaths), gated like JS `follow.ts` so only actual ESM files
+  (`.mjs`, or `.js` under `"type": "module"`) use the exports result while
+  CJS packages keep classic `main` resolution. Not yet ported: the
+  synthetic-`main` injection for exports-only packages at walk time.
+
 ## Backlog (porting order)
 
-1. **Exports-field-aware resolver** (`lib/resolver.ts` + `resolve.exports`):
-   package.json `exports` resolution with `require` condition first, then
-   `import` fallback for ESM-only packages.
-2. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
+1. **ESM support** (`lib/esm-transformer.ts`, ~430 lines): transform/bundle
    ESM entrypoints and `.mjs` files to CJS via esbuild; `wasTransformed`
    record flag; packer renames transformed `.mjs` → `.js` in the snapshot.
    Requires a bundler decision for Rust (SWC bundling vs esbuild subprocess).
-3. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
+2. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
    lines): diff and port behavior changes, including `wasTransformed`
    propagation and new dictionary handling.
-4. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+3. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline via
    postject; simple mode (plain .js, no package.json) and enhanced mode
    (walker-backed VFS assets, compression support).
-5. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
-6. **Help text / CLI surface**: update to the yao-pkg help output (new
+4. **Dictionary deltas**: diff `dictionary/*.js` against the Rust typed data.
+5. **Help text / CLI surface**: update to the yao-pkg help output (new
     flags, examples, config-file mention) and picocolors-equivalent styling.
-7. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
+6. **Misc**: `compression:` info line for Zstd targets gating, yao-pkg
     CHANGELOG-driven behavior fixes not covered above.
 
 ## Sources
