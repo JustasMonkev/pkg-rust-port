@@ -128,6 +128,11 @@ porting order. Items move to "Done" as they land with parity tests.
    Known pre-existing test flake: parallel lib tests that write-then-exec
    helper scripts can hit a fork/exec text-busy race; it does not
    reproduce in isolated runs.
+   Known pre-existing runtime edge (found 2026-06-10, unrelated to ESM):
+   packaging a file that sits one directory below the filesystem root
+   (e.g. `/tmp/app.js`) produces a `Cannot find module 'tmp/app.js'`
+   snapshot path at runtime; files inside any deeper project directory
+   work. Needs a snapshot-base/denominator fix for near-root inputs.
 
 ## Sources
 

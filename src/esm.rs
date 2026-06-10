@@ -132,7 +132,7 @@ pub(crate) fn transform_esm_to_cjs(code: &str, filename: &Path) -> EsmTransform 
                 )),
             );
         }
-        code_to_transform = wrap_in_async_iife(code, &analysis.import_lines);
+        code_to_transform = wrap_in_async_iife(code, &analysis.import_spans);
     }
 
     match transform_module_source(&code_to_transform) {
@@ -154,24 +154,24 @@ pub(crate) fn transform_esm_to_cjs(code: &str, filename: &Path) -> EsmTransform 
 struct ModuleAnalysis {
     has_top_level_await: bool,
     has_exports: bool,
-    /// Zero-based source line indices occupied by import declarations.
-    import_lines: Vec<usize>,
+    /// Byte ranges of import declarations within the source.
+    import_spans: Vec<(usize, usize)>,
 }
 
 fn analyze_module(code: &str) -> Option<ModuleAnalysis> {
     let (module, base_offset) = parse_esm_module(code).ok()?;
 
     let mut has_exports = false;
-    let mut import_lines = Vec::new();
-    let line_starts = line_start_offsets(code);
+    let mut import_spans = Vec::new();
     for item in &module.body {
         match item {
             ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
                 let lo = usize::try_from(import.span.lo.0).ok()?;
                 let hi = usize::try_from(import.span.hi.0).ok()?;
-                let start = line_for_offset(&line_starts, lo.saturating_sub(base_offset));
-                let end = line_for_offset(&line_starts, hi.saturating_sub(base_offset));
-                import_lines.extend(start..=end);
+                import_spans.push((
+                    lo.saturating_sub(base_offset),
+                    hi.saturating_sub(base_offset),
+                ));
             }
             ModuleItem::ModuleDecl(
                 ModuleDecl::ExportDecl(_)
@@ -192,7 +192,7 @@ fn analyze_module(code: &str) -> Option<ModuleAnalysis> {
     Some(ModuleAnalysis {
         has_top_level_await: await_finder.found,
         has_exports,
-        import_lines,
+        import_spans,
     })
 }
 
@@ -221,44 +221,39 @@ impl Visit for TopLevelAwaitFinder {
     fn visit_arrow_expr(&mut self, _node: &swc_ecma_ast::ArrowExpr) {}
 }
 
-fn line_start_offsets(code: &str) -> Vec<usize> {
-    let mut starts = vec![0];
-    for (index, byte) in code.bytes().enumerate() {
-        if byte == b'\n' {
-            starts.push(index + 1);
-        }
-    }
-    starts
-}
-
-fn line_for_offset(line_starts: &[usize], offset: usize) -> usize {
-    match line_starts.binary_search(&offset) {
-        Ok(line) => line,
-        Err(line) => line.saturating_sub(1),
-    }
-}
-
-/// JS `ASYNC_IIFE_WRAPPER` handling: hoist import lines above the wrapper and
-/// wrap the remaining lines in `(async () => { ... })()`.
-fn wrap_in_async_iife(code: &str, import_lines: &[usize]) -> String {
-    let import_set: std::collections::BTreeSet<usize> = import_lines.iter().copied().collect();
-    if import_set.is_empty() {
+/// JS `ASYNC_IIFE_WRAPPER` handling: hoist import declarations above the
+/// wrapper and wrap the remaining source in `(async () => { ... })()`.
+///
+/// The JS implementation hoists whole physical lines; this port splices the
+/// exact import-declaration byte ranges instead, so statements sharing a line
+/// with an import (e.g. minified `import x from 'x'; await start()`) stay
+/// inside the async wrapper.
+fn wrap_in_async_iife(code: &str, import_spans: &[(usize, usize)]) -> String {
+    let mut spans: Vec<(usize, usize)> = import_spans
+        .iter()
+        .copied()
+        .filter(|(lo, hi)| lo < hi && *hi <= code.len())
+        .collect();
+    spans.sort_unstable();
+    if spans.is_empty() {
         return format!("(async () => {{\n{code}\n}})()");
     }
-    let mut imports = Vec::new();
-    let mut rest = Vec::new();
-    for (index, line) in code.lines().enumerate() {
-        if import_set.contains(&index) {
-            imports.push(line);
-        } else {
-            rest.push(line);
+    let mut imports = String::new();
+    let mut rest = String::new();
+    let mut cursor = 0;
+    for (lo, hi) in spans {
+        if lo < cursor {
+            continue;
         }
+        rest.push_str(&code[cursor..lo]);
+        imports.push_str(&code[lo..hi]);
+        // Each hoisted declaration ends its own line; ASI keeps declarations
+        // without a trailing semicolon well-formed.
+        imports.push('\n');
+        cursor = hi;
     }
-    format!(
-        "{}\n(async () => {{\n{}\n}})()",
-        imports.join("\n"),
-        rest.join("\n")
-    )
+    rest.push_str(&code[cursor..]);
+    format!("{imports}\n(async () => {{\n{rest}\n}})()")
 }
 
 fn parse_esm_module(code: &str) -> Result<(Module, usize), String> {
@@ -387,6 +382,25 @@ mod tests {
         );
         assert!(result.is_transformed);
         assert!(result.code.contains("async ()"));
+        assert!(result.code.contains("require(\"fs\")"));
+    }
+
+    #[test]
+    fn statements_sharing_an_import_line_stay_inside_the_async_wrapper() {
+        // Minified-style ESM: the import shares a physical line with the
+        // top-level await. The await must end up inside the async IIFE.
+        let result = transform_esm_to_cjs(
+            "import { start } from 'fs'; const out = await Promise.resolve(start ? 1 : 2); console.log(out);",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        let async_at = result.code.find("async").unwrap_or(usize::MAX);
+        let await_at = result.code.find("await").unwrap_or(usize::MAX);
+        assert!(
+            async_at < await_at && await_at != usize::MAX,
+            "await must be wrapped by the async IIFE: {}",
+            result.code
+        );
         assert!(result.code.contains("require(\"fs\")"));
     }
 

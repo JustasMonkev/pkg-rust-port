@@ -501,14 +501,15 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         file_input_snapshot_base(&root)
     };
     let auto_output = cli.output.is_none();
-    let output_base = output_base(&cli, &entrypoint, input_package.as_ref(), config.as_ref())?;
-    let target_defaults = TargetDefaults::host(host_node_range());
-    let mut targets = resolve_targets(
+    let output_base = output_base(
         &cli,
+        &entrypoint,
         input_package.as_ref(),
         config.as_ref(),
-        &target_defaults,
+        flag_config,
     )?;
+    let target_defaults = TargetDefaults::host(host_node_range());
+    let mut targets = resolve_targets(&cli, flag_config, &target_defaults)?;
     for target in &mut targets {
         target.force_build = cli.build;
     }
@@ -809,6 +810,7 @@ fn output_base(
     entrypoint: &Path,
     input_package: Option<&PackageJson>,
     config: Option<&PackageJson>,
+    pkg_options: Option<&crate::config::PkgConfig>,
 ) -> Result<PathBuf, PkgError> {
     if cli.output.is_some() && cli.out_path.is_some() {
         return Err(PkgError::Cli(
@@ -844,18 +846,13 @@ fn output_base(
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or(output_name);
+    // `pkg_options` already carries the JS resolveConfig precedence: an
+    // external/discovered config's `pkg` wins over the package.json `pkg`.
     let configured_out_path = cli
         .out_path
         .clone()
         .or_else(|| {
-            input_package
-                .and_then(|package| package.pkg.as_ref())
-                .and_then(|pkg| pkg.output_path.as_ref())
-                .map(PathBuf::from)
-        })
-        .or_else(|| {
-            config
-                .and_then(|package| package.pkg.as_ref())
+            pkg_options
                 .and_then(|pkg| pkg.output_path.as_ref())
                 .map(PathBuf::from)
         })
@@ -865,8 +862,7 @@ fn output_base(
 
 fn resolve_targets(
     cli: &Cli,
-    input_package: Option<&PackageJson>,
-    config: Option<&PackageJson>,
+    pkg_options: Option<&crate::config::PkgConfig>,
     defaults: &TargetDefaults,
 ) -> Result<Vec<NodeTarget>, PkgError> {
     if let Some(targets) = cli.targets.as_deref()
@@ -877,14 +873,9 @@ fn resolve_targets(
             .map_err(|error| PkgError::Cli(error.to_string()));
     }
 
-    let json_targets = input_package
-        .and_then(|package| package.pkg.as_ref())
-        .map(|pkg| &pkg.targets)
-        .or_else(|| {
-            config
-                .and_then(|package| package.pkg.as_ref())
-                .map(|pkg| &pkg.targets)
-        });
+    // `pkg_options` already carries the JS resolveConfig precedence: an
+    // external/discovered config's `pkg` wins over the package.json `pkg`.
+    let json_targets = pkg_options.map(|pkg| &pkg.targets);
     if let Some(targets) = json_targets
         && !targets.is_empty()
     {

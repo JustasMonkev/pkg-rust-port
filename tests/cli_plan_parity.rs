@@ -617,3 +617,45 @@ fn js_config_module_loads_through_node() -> Result<(), Box<dyn std::error::Error
     fs::remove_dir_all(temp_root)?;
     Ok(())
 }
+
+#[test]
+fn discovered_pkgrc_targets_and_output_path_override_package_json()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-prec-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"prec-demo","bin":"app.js","pkg":{"targets":["node18-linux-x64"],"outputPath":"from-package"}}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"targets":["node22-win-x64"],"outputPath":"from-pkgrc"}"#,
+    )?;
+
+    let plan = plan_package([OsString::from(temp_root.as_os_str())])?;
+
+    // The discovered .pkgrc takes precedence over the package.json pkg field
+    // for targets and outputPath, matching the JS resolveConfig warning.
+    assert_eq!(plan.outputs.len(), 1);
+    assert_eq!(plan.outputs[0].target.node_range, "node22");
+    assert_eq!(plan.outputs[0].target.platform, Platform::Win);
+    assert!(
+        plan.outputs[0]
+            .output
+            .to_string_lossy()
+            .contains("from-pkgrc"),
+        "output {} should use the pkgrc outputPath",
+        plan.outputs[0].output.display()
+    );
+    assert!(
+        plan.notices
+            .iter()
+            .any(|notice| notice.contains("takes precedence"))
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
