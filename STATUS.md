@@ -1776,3 +1776,15 @@ Next: SEA support is the last large backlog item; misc small items are listed in
 Decisions made: the Rust port transforms ESM with SWC instead of an esbuild subprocess, keeping the toolchain native; SWC's native import.meta rewriting replaces the JS regex shim. Known pre-existing flake: parallel lib tests that write-then-exec helper scripts can hit a fork/exec text-busy race.
 
 Blockers worked around: the transform crates initially pulled a second SWC AST family; the existing parser pins were upgraded instead of carrying duplicate ASTs.
+
+## 2026-06-10 - Real-runtime validation against node22 and ESM codegen fix
+
+Shipped: validated the yao-pkg retarget end to end on this machine. Seeded the pkg-fetch v3.6 cache with the real `node-v22.22.3-linux-x64` release binary (SHA-256 matched the embedded 3.6.3 expected-hash table), then ran the full gated runtime smoke suite with `PKG_RUST_REAL_TARGET=node22-linux-x64`: all 33 tests pass, covering the new 6.19.0 prelude, Zstd/GZip/Brotli payloads, `.pkgrc` discovery, and ESM entrypoints executed as produced binaries. Fixed a real ESM bug the run exposed: the SWC pipeline was missing the `hygiene` and `fixer` passes, so `(0, _mod.fn)()` indirect calls lost their parentheses and corrupted argument lists; transformed output now goes through the full resolver/common_js/hygiene/fixer pipeline. Updated the write-guard smoke expectation to yao-pkg 6.19's node20+ contract (final `writeFileSync` surfaces ENOENT for the snapshot path).
+
+Verified: `PKG_RUST_REAL_CACHE=... PKG_RUST_REAL_TARGET=node22-linux-x64 cargo test --test runtime_smoke` is 33/33 green; offline `cargo test` (22 suites), clippy, and fmt remain green. Manual end-to-end runs confirmed `--compress Zstd` output executes on the node22 target and an `.mjs` entrypoint with top-level await and `import.meta.url` prints correct values.
+
+Next: SEA support remains the last large backlog item in YAO_PKG_PARITY.md; in-process release downloads fail in this sandbox because reqwest ignores the HTTP proxy that curl/npm honor, so the cache was seeded externally (real-machine downloads are unaffected).
+
+Decisions made: the test-80-compression fixture needs `minimist` and `chalk` installed locally (matching the JS repo where the suite resolves them from the repo root); its fixture .gitignore now also ignores node_modules.
+
+Blockers worked around: GitHub release downloads were seeded via curl due to the sandbox proxy; SHA verification still ran against the embedded expected-hash table.

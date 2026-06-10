@@ -13,7 +13,9 @@ use std::sync::OnceLock;
 use swc_common::{FileName, GLOBALS, Globals, Mark, SourceMap, sync::Lrc};
 use swc_ecma_ast::{EsVersion, Module, ModuleDecl, ModuleItem, Program};
 use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, lexer::Lexer};
+use swc_ecma_transforms_base::fixer::fixer;
 use swc_ecma_transforms_base::helpers::{HELPERS, Helpers};
+use swc_ecma_transforms_base::hygiene::hygiene;
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_module::common_js::{FeatureFlag, common_js};
 use swc_ecma_transforms_module::path::Resolver as ImportPathResolver;
@@ -322,6 +324,11 @@ fn transform_module_source(code: &str) -> Result<String, String> {
                     support_arrow: true,
                 },
             ));
+            // hygiene + fixer finish the standard SWC pipeline: hygiene
+            // resolves mark-based renames and fixer restores required
+            // parentheses (e.g. `(0, _mod.fn)()`) before code generation.
+            program.mutate(hygiene());
+            program.mutate(fixer(None));
         });
     });
 

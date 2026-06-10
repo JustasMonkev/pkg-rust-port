@@ -55,9 +55,12 @@ fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
         return Ok(());
     };
 
+    // yao-pkg 6.19 expectation: on node20+ targets the final writeFileSync
+    // surfaces ENOENT for the snapshot path instead of the write-guard
+    // wording (see the FIXME in yao-pkg test-50-fs-runtime-layer-3/main.js).
     assert_eq!(
         String::from_utf8_lossy(&run_result.run.stdout),
-        "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nCannot write to packaged file\nundefined\n"
+        "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nENOENT: no such file or directory, open '/snapshot/test-50-fs-runtime-layer-3/test-z-asset.css'\nundefined\n"
     );
     Ok(())
 }
