@@ -89,10 +89,7 @@ porting order. Items move to "Done" as they land with parity tests.
 
 ## Backlog (porting order)
 
-1. **Walker/detector/refiner deltas vs 5.8.1** (`lib/walker.ts` is now ~1320
-   lines): diff and port behavior changes, including `wasTransformed`
-   propagation and new dictionary handling.
-2. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
+1. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
    `prelude/sea-*.js`): Node single-executable-application pipeline.
    Design notes from the 2026-06-09 study of yao-pkg 6.19.0:
    - Host requirement: Node >= 20 on the build machine; enhanced mode
@@ -122,15 +119,15 @@ porting order. Items move to "Done" as they land with parity tests.
    - After injection: Mach-O payload patch + ad-hoc re-sign (existing
      `macho.rs` covers this), Windows signature removal is N/A (yao
      leaves PE unsigned).
-4. **Misc**: prebuild-install `npm_config_<name>` env prefixing,
+2. **Misc**: prebuild-install `npm_config_<name>` env prefixing,
    `findCommonJunctionPoint` symlink change, JS `validatePkgConfig`
    unknown-key warnings/type wording, synthetic-`main` injection for
    exports-only packages, walker `unlikelyJavascript` exact-list parity
-   (Rust currently retags all non-JS blobs as content, a superset).
+   (Rust currently retags all non-JS blobs as content, a superset), and
+   any yao-pkg CHANGELOG-driven behavior fixes not covered above.
    Known pre-existing test flake: parallel lib tests that write-then-exec
-   helper scripts can hit a fork/exec text-busy race; does not reproduce
-   in isolated runs.: `compression:` info line for Zstd targets gating, yao-pkg
-    CHANGELOG-driven behavior fixes not covered above.
+   helper scripts can hit a fork/exec text-busy race; it does not
+   reproduce in isolated runs.
 
 ## Sources
 
