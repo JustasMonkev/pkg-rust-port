@@ -214,7 +214,19 @@ Initial Rust parity order:
 
 ## Behavior Fixes
 
-No intentional JS behavior fixes identified yet. Add entries here only when a JS bug is verified against tests and the intended behavior is ported instead.
+Add entries here only when a JS bug is verified against tests and the intended behavior is ported instead.
+
+- yao-pkg 6.19.0 marks only transformed `.mjs` files with `wasTransformed`, so a
+  transformed `"type": "module"` `.js` file importing `./dep.mjs` keeps
+  `require('./dep.mjs')` while the packer renames the dependency snapshot to
+  `dep.js`, breaking runtime resolution. The Rust port marks every transformed
+  module for the require-path rewrite while keeping the packer rename gated on
+  the `.mjs` snapshot extension (verified by `transformed_type_module_js_rewrites_mjs_requires`
+  and a real-binary run).
+- Config `ignore` globs match both the absolute file path (yao-pkg picomatch
+  behavior) and the walk-root relative path, so package-relative patterns like
+  `dist/**` work without a leading `**/`. This is a deliberate superset of the
+  JS behavior.
 
 ## Post-Map Implementation Slices
 

@@ -868,3 +868,32 @@ fn top_level_ignore_patterns_skip_blob_and_content_stores() -> Result<(), Box<dy
     }));
     Ok(())
 }
+
+#[test]
+fn package_relative_ignore_patterns_match_without_leading_globstar()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = std::path::PathBuf::from("test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-code-1.js");
+    let package = pkg_rust::PackageJson::parse("{}")
+        .map_err(|error| pkg_rust::PkgError::Cli(error.to_string()))?;
+
+    let walked = pkg_rust::walk(
+        pkg_rust::Marker::new(package),
+        &entrypoint,
+        None,
+        pkg_rust::WalkerParams::new()
+            .with_root(&fixture_dir)
+            .with_ignore(["test-z-require-code-1.js"]),
+    )?;
+
+    let record = walked
+        .records
+        .iter()
+        .find(|(file, _)| file.ends_with(std::path::Path::new("test-z-require-code-1.js")))
+        .map(|(_, record)| record);
+    assert!(record.is_some_and(|record| {
+        !record.has_store(pkg_rust::StoreKind::Blob)
+            && !record.has_store(pkg_rust::StoreKind::Content)
+    }));
+    Ok(())
+}

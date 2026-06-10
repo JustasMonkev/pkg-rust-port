@@ -214,3 +214,63 @@ fn transformed_mjs_records_are_renamed_to_js_in_snapshot() -> Result<(), Box<dyn
     std::fs::remove_dir_all(&temp_root)?;
     Ok(())
 }
+
+#[test]
+fn transformed_type_module_js_rewrites_mjs_requires() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-esm-typemod-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root)?;
+    std::fs::write(temp_root.join("package.json"), r#"{"type":"module"}"#)?;
+    std::fs::write(
+        temp_root.join("index.js"),
+        "import { helper } from './dep.mjs';\nconsole.log(helper());\n",
+    )?;
+    std::fs::write(
+        temp_root.join("dep.mjs"),
+        "export function helper() { return 9; }\n",
+    )?;
+
+    let package = pkg_rust::PackageJson::parse(r#"{"type":"module"}"#)
+        .map_err(|error| pkg_rust::PkgError::Cli(error.to_string()))?;
+    let entrypoint = temp_root.join("index.js");
+    let walked = pkg_rust::walk(
+        pkg_rust::Marker::new(package),
+        &entrypoint,
+        None,
+        pkg_rust::WalkerParams::new().with_root(&temp_root),
+    )?;
+    let refined = pkg_rust::refine_walked(walked, &entrypoint, pkg_rust::PathStyle::Posix);
+    let packed = pkg_rust::pack(refined, true)?;
+
+    // The transformed .js entry keeps its name, while its .mjs dependency is
+    // renamed; the entry's require must point at the renamed snapshot.
+    assert!(packed.entrypoint.ends_with("index.js"));
+    assert!(
+        packed
+            .stripes
+            .iter()
+            .any(|stripe| stripe.snap.ends_with("dep.js")),
+        "dep.mjs should be renamed to dep.js in the snapshot"
+    );
+    let entry_blob = packed
+        .stripes
+        .iter()
+        .find(|stripe| {
+            stripe.snap.ends_with("index.js") && stripe.store == pkg_rust::StoreKind::Blob
+        })
+        .ok_or("missing transformed entry blob")?;
+    let body = String::from_utf8_lossy(
+        entry_blob
+            .buffer
+            .as_deref()
+            .ok_or("entry blob should carry a transformed buffer")?,
+    );
+    assert!(
+        body.contains(r#"require("./dep.js")"#),
+        "transformed body should require the renamed dependency: {body}"
+    );
+
+    std::fs::remove_dir_all(&temp_root)?;
+    Ok(())
+}

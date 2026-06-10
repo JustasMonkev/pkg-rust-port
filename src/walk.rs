@@ -842,9 +842,15 @@ impl WalkerState {
             }
             if transform.is_transformed {
                 body = transform.code;
-                if file.extension().is_some_and(|extension| extension == "mjs") {
-                    self.record_mut(file).was_transformed = true;
-                }
+                // BEHAVIOR FIX over yao-pkg: mark every transformed module,
+                // not only `.mjs` files. The flag gates the relative `.mjs`
+                // require-path rewrite below; a transformed `type: module`
+                // `.js` file importing `./dep.mjs` must also be rewritten to
+                // `./dep.js` because the packer renames the dependency's
+                // snapshot. The packer rename itself stays gated on the
+                // `.mjs` snapshot extension, so `.js` snapshots keep their
+                // names.
+                self.record_mut(file).was_transformed = true;
             }
         }
         self.record_mut(file).body = Some(body.as_bytes().to_vec());
@@ -1093,10 +1099,19 @@ impl WalkerState {
         if self.ignore.is_empty() {
             return false;
         }
-        let candidate = path_to_slash_string(file);
-        self.ignore
-            .iter()
-            .any(|pattern| path_pattern_matches(pattern, &candidate))
+        // Config `ignore` globs are usually written relative to the package
+        // (e.g. `dist/**`), while walker files are absolute. Match both the
+        // absolute path (yao-pkg picomatch behavior) and the walk-root
+        // relative path so package-relative patterns work without a leading
+        // `**/`.
+        let absolute = path_to_slash_string(file);
+        let relative = file.strip_prefix(&self.root).ok().map(path_to_slash_string);
+        self.ignore.iter().any(|pattern| {
+            path_pattern_matches(pattern, &absolute)
+                || relative
+                    .as_deref()
+                    .is_some_and(|candidate| path_pattern_matches(pattern, candidate))
+        })
     }
 
     fn append(&mut self, file: PathBuf, store: StoreKind, marker: Marker) {
