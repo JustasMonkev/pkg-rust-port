@@ -726,7 +726,16 @@ fn build_marker(
     config: Option<&PackageJson>,
 ) -> Result<Marker, PkgError> {
     if let Some(package) = input_package {
-        return Ok(Marker::with_package_path(package.clone(), input));
+        let mut package = package.clone();
+        if let Some(config) = config {
+            // A discovered config file replaces the package.json `pkg` field
+            // for walker options (scripts, assets, patches, deployFiles,
+            // dictionary), matching the precedence flag/target resolution
+            // already applies. `find_pkgrc` only looks in the package
+            // directory, so relative globs still resolve against the same base.
+            package.pkg = config.pkg.clone();
+        }
+        return Ok(Marker::with_package_path(package, input));
     }
     if let (Some(config_path), Some(config)) = (config_path, config) {
         return Ok(Marker::with_package_path(config.clone(), config_path));

@@ -659,3 +659,48 @@ fn discovered_pkgrc_targets_and_output_path_override_package_json()
     fs::remove_dir_all(temp_root)?;
     Ok(())
 }
+
+#[test]
+fn discovered_pkgrc_pkg_options_drive_walker_marker() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-marker-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(temp_root.join("data.txt"), "from-pkgrc\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"marker-demo","bin":"app.js","dependencies":{},"pkg":{"assets":"stale.txt","scripts":"stale.js"}}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"assets":"data.txt","deployFiles":["native.node"]}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.as_os_str()),
+    ])?;
+
+    // The walker reads assets/scripts/deployFiles from the marker package, so
+    // the discovered .pkgrc must replace the package.json `pkg` section there,
+    // not only in flag/target resolution.
+    let marker_pkg = plan.marker.package().pkg.as_ref().ok_or_else(|| {
+        PkgError::Cli("marker should carry the discovered pkgrc config".to_owned())
+    })?;
+    assert_eq!(marker_pkg.assets, serde_json::json!("data.txt"));
+    assert_eq!(marker_pkg.deploy_files, serde_json::json!(["native.node"]));
+    assert!(
+        marker_pkg.scripts.is_null(),
+        "stale package.json scripts should not leak into the marker: {:?}",
+        marker_pkg.scripts
+    );
+    // Package identity stays with the input package.json.
+    assert_eq!(plan.marker.package().name.as_deref(), Some("marker-demo"));
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
