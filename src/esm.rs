@@ -11,15 +11,15 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use swc_common::{FileName, GLOBALS, Globals, Mark, SourceMap, sync::Lrc};
-use swc_ecma_ast::{EsVersion, Module, ModuleDecl, ModuleItem, Program};
+use swc_ecma_ast::{Callee, EsVersion, Expr, Lit, Module, ModuleDecl, ModuleItem, Program, Str};
 use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, lexer::Lexer};
 use swc_ecma_transforms_base::fixer::fixer;
-use swc_ecma_transforms_base::helpers::{HELPERS, Helpers};
+use swc_ecma_transforms_base::helpers::{HELPERS, Helpers, inject_helpers};
 use swc_ecma_transforms_base::hygiene::hygiene;
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_module::common_js::{FeatureFlag, common_js};
 use swc_ecma_transforms_module::path::Resolver as ImportPathResolver;
-use swc_ecma_visit::{Visit, VisitWith};
+use swc_ecma_visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
 /// Result of attempting an ESM-to-CJS transformation.
 pub(crate) struct EsmTransform {
@@ -135,7 +135,7 @@ pub(crate) fn transform_esm_to_cjs(code: &str, filename: &Path) -> EsmTransform 
         code_to_transform = wrap_in_async_iife(code, &analysis.import_spans);
     }
 
-    match transform_module_source(&code_to_transform) {
+    match transform_module_source(&code_to_transform, filename.parent()) {
         Ok(output) => EsmTransform {
             code: output,
             is_transformed: true,
@@ -279,7 +279,98 @@ fn parse_esm_module(code: &str) -> Result<(Module, usize), String> {
     Ok((module, base_offset))
 }
 
-fn transform_module_source(code: &str) -> Result<String, String> {
+/// Rewrites bare specifiers that only resolve through the `import` exports
+/// condition (ESM-only packages) into relative paths before the CommonJS
+/// emit. The emit turns every import into `require()`, and Node's runtime
+/// resolver rejects such bare specifiers with `ERR_PACKAGE_PATH_NOT_EXPORTED`
+/// because the package exposes no `require` condition; the relative path
+/// loads the exact file the walker packages instead. Specifiers `require()`
+/// can already resolve are left untouched, so ordinary packages keep their
+/// bare form. Relative `.mjs` targets are later renamed to `.js` by the
+/// shared `rewrite_mjs_require_paths` pass, matching the packer's snapshot
+/// renames.
+struct EsmOnlySpecifierRewriter<'a> {
+    base_dir: &'a Path,
+}
+
+impl EsmOnlySpecifierRewriter<'_> {
+    fn rewrite(&self, source: &mut Str) {
+        let Some(specifier) = source.value.as_str() else {
+            return;
+        };
+        // Relative/absolute paths and scheme-prefixed specifiers (node:,
+        // file:, data:) are never exports-mapped package names.
+        if specifier.starts_with('.') || specifier.starts_with('/') || specifier.contains(':') {
+            return;
+        }
+        let Some(resolved) = crate::resolve::esm_only_import_resolution(specifier, self.base_dir)
+        else {
+            return;
+        };
+        // The resolution is canonicalized; canonicalize the base too so
+        // symlinked segments (macOS `/tmp`) don't poison the relative path.
+        let base_dir = self
+            .base_dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.base_dir.to_path_buf());
+        let Some(relative) = relative_specifier(&base_dir, &resolved) else {
+            return;
+        };
+        source.value = relative.into();
+        source.raw = None;
+    }
+}
+
+impl VisitMut for EsmOnlySpecifierRewriter<'_> {
+    fn visit_mut_import_decl(&mut self, node: &mut swc_ecma_ast::ImportDecl) {
+        self.rewrite(&mut node.src);
+    }
+
+    fn visit_mut_named_export(&mut self, node: &mut swc_ecma_ast::NamedExport) {
+        if let Some(src) = &mut node.src {
+            self.rewrite(src);
+        }
+    }
+
+    fn visit_mut_export_all(&mut self, node: &mut swc_ecma_ast::ExportAll) {
+        self.rewrite(&mut node.src);
+    }
+
+    fn visit_mut_call_expr(&mut self, node: &mut swc_ecma_ast::CallExpr) {
+        node.visit_mut_children_with(self);
+        if matches!(node.callee, Callee::Import(_))
+            && let Some(argument) = node.args.first_mut()
+            && argument.spread.is_none()
+            && let Expr::Lit(Lit::Str(source)) = &mut *argument.expr
+        {
+            self.rewrite(source);
+        }
+    }
+}
+
+/// Render `to` as a `require()`-style specifier relative to `from_dir`,
+/// using forward slashes (Node accepts them on every platform).
+fn relative_specifier(from_dir: &Path, to: &Path) -> Option<String> {
+    let from: Vec<_> = from_dir.components().collect();
+    let to_components: Vec<_> = to.components().collect();
+    let common = from
+        .iter()
+        .zip(&to_components)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut parts: Vec<&str> = vec![".."; from.len() - common];
+    for component in &to_components[common..] {
+        parts.push(component.as_os_str().to_str()?);
+    }
+    let joined = parts.join("/");
+    Some(if joined.starts_with("..") {
+        joined
+    } else {
+        format!("./{joined}")
+    })
+}
+
+fn transform_module_source(code: &str, base_dir: Option<&Path>) -> Result<String, String> {
     let cm: Lrc<SourceMap> = Default::default();
     let file = cm.new_source_file(FileName::Custom("module.js".into()).into(), code.to_owned());
     let lexer = Lexer::new(
@@ -301,6 +392,9 @@ fn transform_module_source(code: &str) -> Result<String, String> {
 
     let globals = Globals::new();
     let mut program = Program::Module(module);
+    if let Some(base_dir) = base_dir {
+        program.visit_mut_with(&mut EsmOnlySpecifierRewriter { base_dir });
+    }
     GLOBALS.set(&globals, || {
         // `false` inlines the interop helpers into the output, so the
         // transformed module stays self-contained like esbuild's CJS output.
@@ -319,6 +413,11 @@ fn transform_module_source(code: &str) -> Result<String, String> {
                     support_arrow: true,
                 },
             ));
+            // The interop helper calls emitted by `common_js` (for example
+            // `_interop_require_default`) are only references; this pass
+            // prepends their function definitions to keep the output
+            // self-contained.
+            program.mutate(inject_helpers(unresolved_mark));
             // hygiene + fixer finish the standard SWC pipeline: hygiene
             // resolves mark-based renames and fixer restores required
             // parentheses (e.g. `(0, _mod.fn)()`) before code generation.
@@ -416,6 +515,117 @@ mod tests {
                 .warning
                 .is_some_and(|warning| warning.contains("top-level await and export statements"))
         );
+    }
+
+    #[test]
+    fn default_import_inlines_interop_helper_definition() {
+        let result = transform_esm_to_cjs(
+            "import dep from 'fs';\nconsole.log(dep);\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(result.code.contains("_interop_require_default"));
+        assert!(
+            result.code.contains("function _interop_require_default"),
+            "interop helper definition must be inlined, not just referenced: {}",
+            result.code
+        );
+    }
+
+    #[test]
+    fn namespace_import_inlines_wildcard_helper_definition() {
+        let result = transform_esm_to_cjs(
+            "import * as ns from 'fs';\nconsole.log(ns);\n",
+            Path::new("/app/module.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(
+            result.code.contains("function _interop_require_wildcard"),
+            "wildcard helper definition must be inlined, not just referenced: {}",
+            result.code
+        );
+    }
+
+    #[test]
+    fn rewrites_bare_esm_only_imports_to_relative_paths() -> Result<(), std::io::Error> {
+        let root = std::env::temp_dir().join(format!("pkg-rust-esm-only-{}", std::process::id()));
+        let _ignored = std::fs::remove_dir_all(&root);
+        let package_dir = root.join("node_modules/esmpkg");
+        std::fs::create_dir_all(&package_dir)?;
+        std::fs::write(
+            package_dir.join("package.json"),
+            r#"{"name":"esmpkg","version":"1.0.0","exports":{".":{"import":"./index.mjs"}}}"#,
+        )?;
+        std::fs::write(
+            package_dir.join("index.mjs"),
+            "export const val = 1;\nexport default 2;\n",
+        )?;
+
+        let result = transform_esm_to_cjs(
+            "import dep, { val } from 'esmpkg';\nexport * from 'esmpkg';\nconst lazy = import('esmpkg');\nconsole.log(dep, val, lazy);\n",
+            &root.join("app.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(
+            !result.code.contains("require(\"esmpkg\")"),
+            "no bare require of the esm-only package may remain: {}",
+            result.code
+        );
+        assert!(
+            result
+                .code
+                .contains("require(\"./node_modules/esmpkg/index.mjs\")"),
+            "static, re-export, and dynamic imports should use the relative path: {}",
+            result.code
+        );
+        assert!(
+            !result.code.contains("import(\"esmpkg\")"),
+            "dynamic import should be rewritten too: {}",
+            result.code
+        );
+
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn keeps_require_resolvable_bare_specifiers() -> Result<(), std::io::Error> {
+        let root = std::env::temp_dir().join(format!("pkg-rust-esm-dual-{}", std::process::id()));
+        let _ignored = std::fs::remove_dir_all(&root);
+        let dual_dir = root.join("node_modules/dualpkg");
+        std::fs::create_dir_all(&dual_dir)?;
+        std::fs::write(
+            dual_dir.join("package.json"),
+            r#"{"name":"dualpkg","version":"1.0.0","exports":{".":{"require":"./index.cjs","import":"./index.mjs"}}}"#,
+        )?;
+        std::fs::write(dual_dir.join("index.cjs"), "module.exports = { val: 1 };\n")?;
+        std::fs::write(dual_dir.join("index.mjs"), "export const val = 1;\n")?;
+        let main_dir = root.join("node_modules/mainpkg");
+        std::fs::create_dir_all(&main_dir)?;
+        std::fs::write(
+            main_dir.join("package.json"),
+            r#"{"name":"mainpkg","version":"1.0.0","main":"index.js"}"#,
+        )?;
+        std::fs::write(main_dir.join("index.js"), "module.exports = { v: 2 };\n")?;
+
+        let result = transform_esm_to_cjs(
+            "import { val } from 'dualpkg';\nimport { v } from 'mainpkg';\nconsole.log(val, v);\n",
+            &root.join("app.mjs"),
+        );
+        assert!(result.is_transformed);
+        assert!(
+            result.code.contains("require(\"dualpkg\")"),
+            "dual packages stay require-resolvable and keep the bare form: {}",
+            result.code
+        );
+        assert!(
+            result.code.contains("require(\"mainpkg\")"),
+            "classic main-resolved packages keep the bare form: {}",
+            result.code
+        );
+
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
     }
 
     #[test]

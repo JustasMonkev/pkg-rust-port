@@ -85,7 +85,16 @@ porting order. Items move to "Done" as they land with parity tests.
   with the yao-pkg warning. Transformed `.mjs` records are marked
   `was_transformed`, relative `.mjs` require paths are rewritten to `.js`,
   and the packer renames transformed `.mjs` snapshots (including the
-  entrypoint) to `.js`.
+  entrypoint) to `.js`. Interop helper definitions (`_interop_require_default`
+  and friends) are injected inline via SWC's `inline-helpers` feature so the
+  CJS output is self-contained, matching esbuild's inlined helpers.
+  BEHAVIOR FIX over yao-pkg: bare specifiers that resolve only through the
+  `import` exports condition (ESM-only packages with no `require` condition)
+  are rewritten to relative paths during the transform. yao-pkg 6.20.0 leaves
+  them bare, so its packaged output throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  at runtime when an ESM module imports an ESM-only package; the Rust port
+  loads the same file the walker packages. Require-resolvable specifiers
+  (dual packages, classic `main` packages) keep their bare form.
 
 ## Backlog (porting order)
 

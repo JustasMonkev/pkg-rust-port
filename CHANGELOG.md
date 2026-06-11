@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed two ESM transform bugs: interop helpers (`_interop_require_default`
+  and friends) are now injected inline into transformed CommonJS output
+  (previously any ESM default/namespace import crashed packaged binaries
+  with `ReferenceError: _interop_require_default is not defined`), and bare
+  imports of ESM-only packages (exports with no `require` condition) are
+  rewritten to relative paths so runtime `require()` no longer throws
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`. The latter is a behavior fix over
+  yao-pkg, which fails the same way as of 6.20.0.
 - Retargeted the port from `vercel/pkg` 5.8.1 to the maintained fork
   `yao-pkg/pkg` 6.19.0 (see `YAO_PKG_PARITY.md` for the gap backlog).
 - Replaced the embedded runtime prelude with the yao-pkg 6.19.0 split prelude

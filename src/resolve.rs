@@ -240,6 +240,51 @@ fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<Resol
     None
 }
 
+/// Resolution for a bare specifier that is reachable only through the
+/// `import` exports condition. Returns the resolved ESM file when runtime
+/// `require()` of the bare specifier would throw
+/// `ERR_PACKAGE_PATH_NOT_EXPORTED` (the package has an `exports` field with
+/// no `require`-reachable target), and `None` whenever the bare specifier is
+/// require-resolvable as-is. The ESM transformer uses this to rewrite such
+/// specifiers to relative paths; the `is_esm_file` gate keeps the result
+/// aligned with the file `resolve_node_module` packages for the same
+/// specifier.
+pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Option<PathBuf> {
+    if !is_valid_package_name(request) {
+        return None;
+    }
+    let (package_name, subpath) = split_specifier(request)?;
+    for directory in ancestor_directories(basedir) {
+        let package_json = directory
+            .join("node_modules")
+            .join(&package_name)
+            .join("package.json");
+        if !package_json.is_file() {
+            continue;
+        }
+        let body = std::fs::read_to_string(&package_json).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&body).ok()?;
+        let exports = json.get("exports")?;
+        let package_root = package_json.parent()?;
+        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require")
+            && package_root.join(target.trim_start_matches("./")).is_file()
+        {
+            return None;
+        }
+        let target = resolve_exports_subpath(exports, &subpath, "import")?;
+        let full = package_root.join(target.trim_start_matches("./"));
+        if !full.is_file() {
+            return None;
+        }
+        let full = normalize(&full)?;
+        if !is_esm_file(&full) {
+            return None;
+        }
+        return Some(full);
+    }
+    None
+}
+
 /// Resolve one subpath through a package `exports` value for a condition set
 /// of `{condition, node, default}`, the same set `resolve.exports` uses.
 fn resolve_exports_subpath(

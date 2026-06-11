@@ -22,7 +22,10 @@ swc_common = "23.0.1"
 swc_ecma_ast = "25.0.0"
 swc_ecma_codegen = "28.0.1"
 swc_ecma_parser = "41.0.1"
-swc_ecma_transforms_base = "44.0.2"
+# `inline-helpers` makes `inject_helpers` prepend helper function
+# definitions instead of importing them from `@swc/helpers`, keeping
+# transformed ESM output self-contained inside packaged snapshots.
+swc_ecma_transforms_base = { version = "44.0.2", features = ["inline-helpers"] }
 swc_ecma_transforms_module = "49.0.0"
 swc_ecma_visit = "25.0.0"
 thiserror = "2.0"
