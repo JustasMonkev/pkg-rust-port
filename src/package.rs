@@ -151,7 +151,7 @@ pub fn build_package_with_provider(
     for planned in &plan.outputs {
         let binary = provider.binary_artifact_for(&planned.target)?;
         let (binary_bytes, binary_path) = binary.into_parts();
-        let fabricator_path = resolve_fabricator_binary(
+        let fabricator = resolve_fabricator_binary(
             plan,
             &planned.target,
             provider,
@@ -191,7 +191,7 @@ pub fn build_package_with_provider(
                 style: planned.path_style,
                 bakery: bakery_from_bakes(&plan.bakes),
                 bakes: &plan.bakes,
-                fabricator_path: fabricator_path.as_deref(),
+                fabricator_path: fabricator.as_ref().map(FabricatorBinary::as_path),
                 fallback_to_source: plan.fallback_to_source,
                 native_addons,
             },
@@ -410,7 +410,7 @@ fn resolve_fabricator_binary(
     provider: &impl TargetBinaryProvider,
     output_binary: &[u8],
     output_binary_path: Option<&Path>,
-) -> Result<Option<PathBuf>, PkgError> {
+) -> Result<Option<FabricatorBinary>, PkgError> {
     if !plan.bytecode {
         return Ok(None);
     }
@@ -426,12 +426,45 @@ fn resolve_fabricator_binary(
         Some(path) if looks_like_executable(&fabricator_bytes) => {
             prepare_fabricator_binary(&path, fabricator_target.platform).map(Some)
         }
-        _ => Ok(runnable_fabricator_path(output_binary, output_binary_path)),
+        _ => Ok(
+            runnable_fabricator_path(output_binary, output_binary_path).map(|path| {
+                FabricatorBinary {
+                    path,
+                    temporary: false,
+                }
+            }),
+        ),
+    }
+}
+
+/// A host-runnable fabricator binary. Temporary copies (the per-build ad-hoc
+/// signed macOS copy) are deleted on drop so they never accumulate in the
+/// shared cache directory; non-temporary paths point at cache or output
+/// artifacts that must outlive the build.
+struct FabricatorBinary {
+    path: PathBuf,
+    temporary: bool,
+}
+
+impl FabricatorBinary {
+    fn as_path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for FabricatorBinary {
+    fn drop(&mut self) {
+        if self.temporary {
+            let _ignored = fs::remove_file(&self.path);
+        }
     }
 }
 
 /// Prepare a fetched fabricator binary so the host can run it for bytecode.
-fn prepare_fabricator_binary(path: &Path, platform: Platform) -> Result<PathBuf, PkgError> {
+fn prepare_fabricator_binary(
+    path: &Path,
+    platform: Platform,
+) -> Result<FabricatorBinary, PkgError> {
     if platform == Platform::Macos {
         // macOS mandates signed executables, so ad-hoc sign a copy of the base
         // binary and fabricate bytecode with the signed copy.
@@ -443,13 +476,19 @@ fn prepare_fabricator_binary(path: &Path, platform: Platform) -> Result<PathBuf,
         })?;
         sign_macho_executable(&signed)?;
         plus_x(&signed)?;
-        return Ok(signed);
+        return Ok(FabricatorBinary {
+            path: signed,
+            temporary: true,
+        });
     }
 
     if platform != Platform::Win {
         plus_x(path)?;
     }
-    Ok(path.to_path_buf())
+    Ok(FabricatorBinary {
+        path: path.to_path_buf(),
+        temporary: false,
+    })
 }
 
 fn signed_fabricator_path(path: &Path) -> PathBuf {
