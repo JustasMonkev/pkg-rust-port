@@ -270,6 +270,114 @@ fn rejects_explicit_output_that_would_overwrite_input() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn zstd_compression_rejects_pre_node_22_15_targets() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-zstd-old-target");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let error = match plan_package([
+        OsString::from("--targets"),
+        OsString::from("node20-linux-x64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("Zstd with node20 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("Node.js >= 22.15")
+            && message.contains("node20-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+
+    // A mixed selection reports only the targets that cannot decompress Zstd.
+    let error = match plan_package([
+        OsString::from("--targets"),
+        OsString::from("node22-linux-x64,node16-win-x64,node18-macos-arm64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("Zstd with node16/node18 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("node16-win-x64")
+            && message.contains("node18-macos-arm64")
+            && !message.contains("node22-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn zstd_compression_plans_for_node_22_15_capable_targets() -> Result<(), Box<dyn std::error::Error>>
+{
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-zstd-capable");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node22-linux-x64,node24-win-x64,latest-macos-arm64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Zstd);
+    assert_eq!(plan.outputs.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn zstd_compression_from_config_rejects_pre_node_22_15_targets()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-zstd-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"compress":"Zstd","targets":["node18-linux-x64"]}"#,
+    )?;
+
+    let error = match plan_package([
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("config Zstd with node18 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("Node.js >= 22.15")
+            && message.contains("node18-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
 fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::temp_dir().join("pkg-rust-cli-plan-options");
     let output_text = output

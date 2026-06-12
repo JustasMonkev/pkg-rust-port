@@ -401,7 +401,7 @@ fn tag_from_version(version: &str) -> String {
     format!("v{major}.{minor}")
 }
 
-fn satisfying_node_version(node_range: &str) -> Result<&'static str, PkgError> {
+pub(crate) fn satisfying_node_version(node_range: &str) -> Result<&'static str, PkgError> {
     if node_range == "latest" {
         return SUPPORTED_NODE_VERSIONS
             .last()

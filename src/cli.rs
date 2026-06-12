@@ -513,6 +513,9 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     for target in &mut targets {
         target.force_build = cli.build;
     }
+    if compression == Compression::Zstd {
+        reject_zstd_incapable_targets(&targets)?;
+    }
     let outputs = plan_outputs(&output_base, &targets, auto_output, &entrypoint)?;
     let bakes = options_raw
         .unwrap_or_default()
@@ -901,6 +904,45 @@ fn resolve_targets(
     parse_targets(fallback, defaults)
         .map(|parsed| parsed.targets)
         .map_err(|error| PkgError::Cli(error.to_string()))
+}
+
+/// Fail planning when a Zstd build selects a target whose embedded Node cannot
+/// decompress it.
+///
+/// The runtime prelude decompresses Zstd payloads through `zlib.zstdDecompress*`,
+/// which Node.js added in 22.15. The packaged executable embeds its Node, so an
+/// older target cannot be repaired after the fact -- it would always throw the
+/// prelude's "requires Node.js >= 22.15" error at startup. Reject such plans
+/// here instead of producing an unusable executable.
+fn reject_zstd_incapable_targets(targets: &[NodeTarget]) -> Result<(), PkgError> {
+    let unsupported = targets
+        .iter()
+        .filter(|target| !node_range_supports_zstd(&target.node_range))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        Ok(())
+    } else {
+        Err(PkgError::Cli(format!(
+            "Zstd compression requires Node.js >= 22.15 in the produced executable (zlib.zstdDecompress); unsupported target(s): {}. Use node22 or newer targets, or --compress Brotli/GZip.",
+            unsupported.join(", ")
+        )))
+    }
+}
+
+/// Whether the pkg-fetch binary satisfying this node range ships
+/// `zlib.zstdDecompress*` (Node.js >= 22.15). Ranges that resolve to no
+/// supported version fail closed: such a target cannot be fetched anyway.
+fn node_range_supports_zstd(node_range: &str) -> bool {
+    const ZSTD_MIN_NODE: (u32, u32) = (22, 15);
+    crate::fetch::satisfying_node_version(node_range).is_ok_and(|version| {
+        let mut parts = version
+            .split('.')
+            .map(|part| part.parse::<u32>().unwrap_or(0));
+        let major = parts.next().unwrap_or(0);
+        let minor = parts.next().unwrap_or(0);
+        (major, minor) >= ZSTD_MIN_NODE
+    })
 }
 
 fn plan_outputs(
