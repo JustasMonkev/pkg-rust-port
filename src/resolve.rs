@@ -240,15 +240,22 @@ fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<Resol
     None
 }
 
-/// Resolution for a bare specifier that is reachable only through the
-/// `import` exports condition. Returns the resolved ESM file when runtime
-/// `require()` of the bare specifier would throw
-/// `ERR_PACKAGE_PATH_NOT_EXPORTED` (the package has an `exports` field with
-/// no `require`-reachable target), and `None` whenever the bare specifier is
-/// require-resolvable as-is. The ESM transformer uses this to rewrite such
-/// specifiers to relative paths; the `is_esm_file` gate keeps the result
-/// aligned with the file `resolve_node_module` packages for the same
-/// specifier.
+/// Resolution for a bare specifier whose runtime `require()` would fail
+/// against the packaged snapshot, returning the file the walker packages so
+/// the ESM transformer can rewrite the specifier to a relative path. Two
+/// shapes qualify:
+///
+/// - The package `exports` has no `require`-reachable target, so runtime
+///   resolution throws `ERR_PACKAGE_PATH_NOT_EXPORTED`; the `import`
+///   condition result is returned (gated on `is_esm_file` to stay aligned
+///   with what `resolve_node_module` packages).
+/// - The `require`-reachable target is an `.mjs` file. The packer renames
+///   transformed `.mjs` snapshots to `.js`, so runtime exports resolution
+///   would point at a file that no longer exists.
+///
+/// Every other shape returns `None` and keeps its bare form — including
+/// `.js` targets under `"type": "module"`, which snapshot as transformed
+/// CommonJS at their original path and load fine through the exports map.
 pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Option<PathBuf> {
     if !is_valid_package_name(request) {
         return None;
@@ -266,10 +273,14 @@ pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Optio
         let json: serde_json::Value = serde_json::from_str(&body).ok()?;
         let exports = json.get("exports")?;
         let package_root = package_json.parent()?;
-        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require")
-            && package_root.join(target.trim_start_matches("./")).is_file()
-        {
-            return None;
+        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require") {
+            let full = package_root.join(target.trim_start_matches("./"));
+            if full.is_file() {
+                if full.extension().and_then(|extension| extension.to_str()) == Some("mjs") {
+                    return normalize(&full);
+                }
+                return None;
+            }
         }
         let target = resolve_exports_subpath(exports, &subpath, "import")?;
         let full = package_root.join(target.trim_start_matches("./"));

@@ -607,9 +607,16 @@ mod tests {
             r#"{"name":"mainpkg","version":"1.0.0","main":"index.js"}"#,
         )?;
         std::fs::write(main_dir.join("index.js"), "module.exports = { v: 2 };\n")?;
+        let typemod_dir = root.join("node_modules/typemod");
+        std::fs::create_dir_all(&typemod_dir)?;
+        std::fs::write(
+            typemod_dir.join("package.json"),
+            r#"{"name":"typemod","version":"1.0.0","type":"module","exports":"./index.js"}"#,
+        )?;
+        std::fs::write(typemod_dir.join("index.js"), "export const t = 3;\n")?;
 
         let result = transform_esm_to_cjs(
-            "import { val } from 'dualpkg';\nimport { v } from 'mainpkg';\nconsole.log(val, v);\n",
+            "import { val } from 'dualpkg';\nimport { v } from 'mainpkg';\nimport { t } from 'typemod';\nconsole.log(val, v, t);\n",
             &root.join("app.mjs"),
         );
         assert!(result.is_transformed);
@@ -621,6 +628,47 @@ mod tests {
         assert!(
             result.code.contains("require(\"mainpkg\")"),
             "classic main-resolved packages keep the bare form: {}",
+            result.code
+        );
+        assert!(
+            result.code.contains("require(\"typemod\")"),
+            "`.js`-under-type-module exports targets snapshot in place and keep the bare form: {}",
+            result.code
+        );
+
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn rewrites_bare_imports_whose_require_target_is_mjs() -> Result<(), std::io::Error> {
+        let root = std::env::temp_dir().join(format!("pkg-rust-esm-reqmjs-{}", std::process::id()));
+        let _ignored = std::fs::remove_dir_all(&root);
+        let package_dir = root.join("node_modules/reqesm");
+        std::fs::create_dir_all(&package_dir)?;
+        std::fs::write(
+            package_dir.join("package.json"),
+            r#"{"name":"reqesm","version":"1.0.0","exports":{".":{"require":"./index.mjs","import":"./index.mjs"}}}"#,
+        )?;
+        std::fs::write(package_dir.join("index.mjs"), "export const a = 1;\n")?;
+
+        let result = transform_esm_to_cjs(
+            "import { a } from 'reqesm';\nconsole.log(a);\n",
+            &root.join("app.mjs"),
+        );
+        assert!(result.is_transformed);
+        // The packer renames the transformed `.mjs` snapshot to `.js`, so a
+        // bare require would resolve through exports to the missing `.mjs`.
+        assert!(
+            !result.code.contains("require(\"reqesm\")"),
+            "require-condition `.mjs` targets must not stay bare: {}",
+            result.code
+        );
+        assert!(
+            result
+                .code
+                .contains("require(\"./node_modules/reqesm/index.mjs\")"),
+            "the import should use the packaged file's relative path: {}",
             result.code
         );
 

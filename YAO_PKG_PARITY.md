@@ -88,13 +88,20 @@ porting order. Items move to "Done" as they land with parity tests.
   entrypoint) to `.js`. Interop helper definitions (`_interop_require_default`
   and friends) are injected inline via SWC's `inline-helpers` feature so the
   CJS output is self-contained, matching esbuild's inlined helpers.
-  BEHAVIOR FIX over yao-pkg: bare specifiers that resolve only through the
-  `import` exports condition (ESM-only packages with no `require` condition)
-  are rewritten to relative paths during the transform. yao-pkg 6.20.0 leaves
-  them bare, so its packaged output throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
-  at runtime when an ESM module imports an ESM-only package; the Rust port
-  loads the same file the walker packages. Require-resolvable specifiers
-  (dual packages, classic `main` packages) keep their bare form.
+  BEHAVIOR FIX over yao-pkg: bare specifiers whose runtime `require()` would
+  fail against the snapshot are rewritten to relative paths during the
+  transform. Two shapes qualify: packages reachable only through the
+  `import` exports condition (no `require` condition — runtime throws
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`), and packages whose require-reachable
+  exports target is an `.mjs` file (the packer renames the transformed
+  snapshot to `.js`, so runtime exports resolution points at a missing
+  file). yao-pkg 6.20.0 leaves both bare and its packaged output crashes at
+  startup; the Rust port loads the same file the walker packages.
+  Require-resolvable specifiers keep their bare form: dual packages,
+  classic `main` packages, and `.js`-under-`"type": "module"` exports
+  targets (which snapshot as transformed CommonJS at their original path
+  and load fine through the exports map — verified against the real
+  node22 runtime).
 
 ## Backlog (porting order)
 
