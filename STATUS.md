@@ -1740,3 +1740,51 @@ Shipped: added a gated `real_pkg_compare` integration harness that packages sele
 Verified: curl-seeded `/private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64` matched SHA `13cc043442af8f110836e7a4abcfc4ba5cf1d9568564485f018fd93d688291e1`; `PKG_RUST_REAL_PKG_COMPARE=1 PKG_RUST_REAL_PKG_BIN=/private/tmp/pkg-rust-real-compare/oracle/node_modules/.bin/pkg PKG_CACHE_PATH=/private/tmp/pkg-rust-real-compare/cache PKG_RUST_REAL_TARGET=node18-macos-x64 cargo test --locked --test real_pkg_compare -- --nocapture` passed for snapshot-path, module-parent, mountpoints, fs-runtime-layer-2, require-edge-cases, and readdir-bundled-dir. An empty-cache Rust CLI run verified the live reqwest downloader after sandbox network approval and produced a matching SHA/correct `42` executable. `--build` still reports the explicit external built artifact requirement at `/private/tmp/pkg-rust-real-compare/cache/v3.5/built-v18.15.0-macos-x64`.
 
 Next: keep the real pkg comparison gate opt-in because it needs network/cache/oracle setup. A plain `npm install pkg@5.8.1` installs nested `pkg-fetch@3.4.2`, so the v3.5/Node 18.15.0 cache comparison requires overriding that nested dependency to `pkg-fetch@3.5.2`.
+
+## 2026-06-09 - yao-pkg retarget: prelude + Zstd shipped
+
+Shipped: retargeted the parity oracle from vercel/pkg 5.8.1 to yao-pkg/pkg 6.19.0 and added `YAO_PKG_PARITY.md` as the gap backlog. Replaced the embedded prelude with the yao-pkg 6.19.0 `bootstrap.js` + `bootstrap-shared.js` pair (verbatim, SHA-pinned in `src/prelude_assets.rs`), updated `prelude_template` to the new packer wrapper with the `REQUIRE_SHARED` module IIFE and inline diagnostic snippet, and bumped the reported version to 6.19.0. Added `Compression::Zstd` end to end: parser aliases `zstd`/`zs`, enum index 3 for `%DOCOMPRESS%`, native Rust zstd payload encoding, and the yao-pkg invalid-compression wording.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline; new parity tests cover the wrapper shape, diagnostic injection, Zstd manifest accounting, and `%DOCOMPRESS%` rendering.
+
+Next: continue the `YAO_PKG_PARITY.md` backlog: external config file support (`-c/--config` + `.pkgrc` discovery + CLI>config>default flag resolution), then `--fallback-to-source` and the exports-aware resolver.
+
+Decisions made: the Rust producer encodes Zstd natively with libzstd instead of requiring a Node >= 22.15 build host the way the JS producer does; only the produced binary keeps the runtime Node >= 22.15 requirement. The debug diagnostic is now the yao-pkg inline packer snippet rather than the retired `prelude/diagnostic.js`.
+
+Blockers worked around: none.
+
+## 2026-06-09 - yao-pkg flags, pkg-fetch 3.6.3, and config files shipped
+
+Shipped: three more yao-pkg parity slices. `--fallback-to-source` ships plain source when bytecode fabrication fails (yao warning wording; fail-closed skip behavior retained without the flag) and `--signature` is accepted as the positive override. Binary fetching now targets `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`, yao-pkg release downloads, the 3.6.3 node version set, the 3.6.3 expected-SHA table, and the yao known-arch set. External config files now work end to end: `-c/--config` with JSON or node-evaluated JS modules, `.pkgrc`/`pkg.config.*` auto-discovery with the `Using config` notice and precedence warning, bare-config wrapping, and CLI > config > default flag resolution.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline, including new parity tests for fallback-to-source payloads, the pkg-fetch 3.6 cache matrix, pkgrc discovery/precedence, bare-config wrapping, missing-config wording, and node-evaluated JS configs.
+
+Next: continue the YAO_PKG_PARITY.md backlog with the exports-aware resolver, then the walker/detector deltas and ESM transformation.
+
+Decisions made: JS config modules are evaluated through the host `node` subprocess (the same external boundary as bytecode fabrication) instead of embedding a JS engine; config type validation keeps serde error wording for now instead of the JS `validatePkgConfig` messages.
+
+Blockers worked around: none.
+
+## 2026-06-09 - Resolver, walker deltas, dictionary, help, and ESM shipped
+
+Shipped: five more yao-pkg parity slices. Exports-field-aware resolution (require-then-import conditions, pattern subpaths, ESM-only gating). Non-ESM walker/detector deltas: literal dynamic `import()` detection, `.mjs` resolve extension, and top-level config `ignore` patterns. Dictionary sync (`sqlite3`, `thread-stream` + fixture). Help text updated to the yao-pkg surface. Producer placeholder discovery now skips apostrophe-quoted source literals (yao-pkg/pkg#86). ESM support landed end to end: SWC `common_js` transformation before detection/bytecode, async-IIFE wrapping for top-level await, `import.meta` rewriting, `.mjs` require-path rewriting, `was_transformed` records, and packer `.mjs` -> `.js` snapshot renames. SWC crates aligned on a single AST family (ast 25 / parser 41 / common 23).
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` green offline, including new parity tests for exports resolution, dynamic import detection, walker ignore, apostrophe placeholder skip, ESM unit transforms, and an end-to-end .mjs walk/refine/pack test.
+
+Next: SEA support is the last large backlog item; misc small items are listed in YAO_PKG_PARITY.md.
+
+Decisions made: the Rust port transforms ESM with SWC instead of an esbuild subprocess, keeping the toolchain native; SWC's native import.meta rewriting replaces the JS regex shim. Known pre-existing flake: parallel lib tests that write-then-exec helper scripts can hit a fork/exec text-busy race.
+
+Blockers worked around: the transform crates initially pulled a second SWC AST family; the existing parser pins were upgraded instead of carrying duplicate ASTs.
+
+## 2026-06-10 - Real-runtime validation against node22 and ESM codegen fix
+
+Shipped: validated the yao-pkg retarget end to end on this machine. Seeded the pkg-fetch v3.6 cache with the real `node-v22.22.3-linux-x64` release binary (SHA-256 matched the embedded 3.6.3 expected-hash table), then ran the full gated runtime smoke suite with `PKG_RUST_REAL_TARGET=node22-linux-x64`: all 33 tests pass, covering the new 6.19.0 prelude, Zstd/GZip/Brotli payloads, `.pkgrc` discovery, and ESM entrypoints executed as produced binaries. Fixed a real ESM bug the run exposed: the SWC pipeline was missing the `hygiene` and `fixer` passes, so `(0, _mod.fn)()` indirect calls lost their parentheses and corrupted argument lists; transformed output now goes through the full resolver/common_js/hygiene/fixer pipeline. Updated the write-guard smoke expectation to yao-pkg 6.19's node20+ contract (final `writeFileSync` surfaces ENOENT for the snapshot path).
+
+Verified: `PKG_RUST_REAL_CACHE=... PKG_RUST_REAL_TARGET=node22-linux-x64 cargo test --test runtime_smoke` is 33/33 green; offline `cargo test` (22 suites), clippy, and fmt remain green. Manual end-to-end runs confirmed `--compress Zstd` output executes on the node22 target and an `.mjs` entrypoint with top-level await and `import.meta.url` prints correct values.
+
+Next: SEA support remains the last large backlog item in YAO_PKG_PARITY.md; in-process release downloads fail in this sandbox because reqwest ignores the HTTP proxy that curl/npm honor, so the cache was seeded externally (real-machine downloads are unaffected).
+
+Decisions made: the test-80-compression fixture needs `minimist` and `chalk` installed locally (matching the JS repo where the suite resolves them from the repo root); its fixture .gitignore now also ignores node_modules.
+
+Blockers worked around: GitHub release downloads were seeded via curl due to the sandbox proxy; SHA verification still ran against the embedded expected-hash table.

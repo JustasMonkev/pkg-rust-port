@@ -210,6 +210,7 @@ supervisor
 svgo
 tabtab
 tesseract.js
+thread-stream
 throng
 time
 tinify

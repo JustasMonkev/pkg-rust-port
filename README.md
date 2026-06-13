@@ -125,6 +125,10 @@ PKG_RUST_REAL_CACHE=/private/tmp/pkg-rust-real-cache \
   cargo test --test runtime_smoke -- --nocapture
 ```
 
+The compression smoke installs the `test/test-80-compression` fixture's pinned
+npm dependencies on first run (and skips itself with a notice when npm or the
+network is unavailable).
+
 To compare selected fixtures against a real `pkg@5.8.1` oracle, seed
 `PKG_CACHE_PATH` with the same pkg-fetch base binary and point
 `PKG_RUST_REAL_PKG_BIN` at the oracle CLI:

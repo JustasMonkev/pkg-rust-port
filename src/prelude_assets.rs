@@ -1,34 +1,36 @@
 //! Runtime prelude assets embedded as Rust string constants.
 //!
-//! These are the original pkg 5.8.1 runtime prelude sources. They execute
+//! These are the yao-pkg/pkg 6.19.0 runtime prelude sources. They execute
 //! inside the packaged Node binary at runtime, so they remain JavaScript, but
 //! they are embedded here as Rust string data rather than separate `.js` files.
 //!
 //! # Provenance
 //!
-//! - Upstream: <https://github.com/vercel/pkg> tag `5.8.1`
+//! - Upstream: <https://github.com/yao-pkg/pkg> version `6.19.0`,
+//!   commit `546bbf02f1cff07527c770cc0853b0d9d586eac7`
 //! - `BOOTSTRAP_SOURCE` = `prelude/bootstrap.js`
-//!   SHA-256 `2996524fa0711d61874bc273ab8bd1739623d303858099f7ec67de8d145216c9`
-//! - `DIAGNOSTIC_SOURCE` = `prelude/diagnostic.js`
-//!   SHA-256 `e1bea496f7140aaf2909ff10b5af8519c5467f62b1af264475a4b1493dfb98f8`
+//!   SHA-256 `966695c6c7748d341502ca35d7fcabcaf870ba262baa4656b0379c971e0c97fa`
+//! - `BOOTSTRAP_SHARED_SOURCE` = `prelude/bootstrap-shared.js`
+//!   SHA-256 `bcde203c902e0cccc4dd18ea6f9c2d0f6c777f60000262d767a1528c62822874`
+//! - `DIAGNOSTIC_SOURCE` = the inline `diagnosticText` snippet from
+//!   `lib/packer.ts` at the same commit (yao-pkg replaced the separate
+//!   `prelude/diagnostic.js` file with this snippet, which calls
+//!   `REQUIRE_SHARED.installDiagnostic` from `bootstrap-shared.js`).
 //!
 //! The constants are verbatim copies (verified byte-identical to the hashes
 //! above) except that `%VERSION%` in the bootstrap is substituted at render
-//! time. To regenerate, fetch the two files at the tag above and re-embed them
-//! as raw string constants. Both sources are plain ASCII (no hidden or
+//! time. To regenerate, fetch the files at the commit above and re-embed them
+//! as raw string constants. The sources are UTF-8 text whose only non-ASCII
+//! characters are typographic punctuation inside comments (no hidden or
 //! bidirectional Unicode).
 
-/// pkg 5.8.1 `prelude/bootstrap.js`, still containing the `%VERSION%` token.
-pub(crate) const BOOTSTRAP_SOURCE: &str = r####"/* eslint-disable import/no-unresolved */
-/* eslint-disable global-require */
-/* eslint-disable no-underscore-dangle */
-/* eslint-disable prefer-rest-params */
-/* eslint-disable prefer-spread */
-
-/* global EXECPATH_FD */
+/// yao-pkg/pkg 6.19.0 `prelude/bootstrap.js`, still containing the
+/// `%VERSION%` token.
+pub(crate) const BOOTSTRAP_SOURCE: &str = r####"/* global EXECPATH_FD */
 /* global PAYLOAD_POSITION */
 /* global PAYLOAD_SIZE */
 /* global REQUIRE_COMMON */
+/* global REQUIRE_SHARED */
 /* global VIRTUAL_FILESYSTEM */
 /* global DEFAULT_ENTRYPOINT */
 /* global DICT */
@@ -43,16 +45,9 @@ const fs = require('fs');
 const { isRegExp } = require('util').types;
 const Module = require('module');
 const path = require('path');
-const { promisify, _extend } = require('util');
+const { promisify } = require('util');
 const { Script } = require('vm');
-const { tmpdir } = require('os');
 const util = require('util');
-const {
-  brotliDecompress,
-  brotliDecompressSync,
-  gunzip,
-  gunzipSync,
-} = require('zlib');
 
 const common = {};
 REQUIRE_COMMON(common);
@@ -77,9 +72,8 @@ const NODE_VERSION_MINOR = process.version.match(/^v\d+.(\d+)/)[1] | 0;
 // ENTRYPOINT //////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////
 
-// set ENTRYPOINT and ARGV0 here because
-// they can be altered during process run
-const ARGV0 = process.argv[0];
+// set ENTRYPOINT here because
+// it can be altered during process run
 const EXECPATH = process.execPath;
 let ENTRYPOINT = process.argv[1];
 
@@ -106,7 +100,7 @@ if (process.env.PKG_EXECPATH === EXECPATH) {
   process.argv[1] = DEFAULT_ENTRYPOINT;
 }
 
-[, ENTRYPOINT] = process.argv;
+[, ENTRYPOINT = DEFAULT_ENTRYPOINT] = process.argv;
 delete process.env.PKG_EXECPATH;
 
 // /////////////////////////////////////////////////////////////////
@@ -184,7 +178,7 @@ function copyInChunks(
   source,
   target,
   chunkSize = DEFAULT_COPY_CHUNK_SIZE,
-  fs_ = fs
+  fs_ = fs,
 ) {
   const sourceFile = fs_.openSync(source, 'r');
   const targetFile = fs_.openSync(target, 'w');
@@ -198,83 +192,6 @@ function copyInChunks(
 
   fs_.closeSync(sourceFile);
   fs_.closeSync(targetFile);
-}
-
-// TODO: replace this with fs.cpSync when we drop Node < 16
-function copyFolderRecursiveSync(source, target) {
-  // Build target folder
-  const targetFolder = path.join(target, path.basename(source));
-
-  // Check if target folder needs to be created or integrated
-  if (!fs.existsSync(targetFolder)) {
-    fs.mkdirSync(targetFolder);
-  }
-
-  // Copy
-  if (fs.lstatSync(source).isDirectory()) {
-    const files = fs.readdirSync(source);
-
-    for (const file of files) {
-      // Build source name
-      const curSource = path.join(source, file);
-
-      // Call this function recursively as long as source is a directory
-      if (fs.lstatSync(curSource).isDirectory()) {
-        copyFolderRecursiveSync(curSource, targetFolder);
-      } else {
-        // Current source is a file, it must be available on the real filesystem
-        // instead of the virtual snapshot file system to load it by process.dlopen.
-        //
-        // Before we try to copy we do some checks.
-        // See https://github.com/vercel/pkg/issues/1589 for more details.
-
-        // Build target file name
-        const curTarget = path.join(targetFolder, path.basename(curSource));
-
-        if (fs.existsSync(curTarget)) {
-          // Target file already exists, read source and target file...
-          const curSourceContent = fs.readFileSync(curSource, {
-            encoding: 'binary',
-          });
-          const curTargetContent = fs.readFileSync(curTarget, {
-            encoding: 'binary',
-          });
-
-          // ...and calculate checksum from source and target file
-          const curSourceHash = createHash('sha256')
-            .update(curSourceContent)
-            .digest('hex');
-          const curTargetHash = createHash('sha256')
-            .update(curTargetContent)
-            .digest('hex');
-
-          // If checksums are equal then there is nothing to do here
-          // ==> target already exists and is up-to-date
-          if (curSourceHash === curTargetHash) {
-            continue;
-          }
-        }
-
-        // Target must be copied because it either does not exist or is outdated.
-        // Due to the possibility that mutliple instances of this app start simultaneously,
-        // the copy action might fail. Only one starting instance gets write access.
-        //
-        // We don't catch any error here because it does not make sense to go ahead and to
-        // try to load the file while another instance has not yet finished the copy action.
-        // If the app start fails then the user should try to start the app later again.
-        // Unfortunately, we cannot implement delayed retries ourselves because process.dlopen
-        // is a synchronous function, promises are not supported.
-        fs.copyFileSync(curSource, curTarget);
-      }
-    }
-  }
-}
-
-function createDirRecursively(dir) {
-  if (!fs.existsSync(dir)) {
-    createDirRecursively(path.join(dir, '..'));
-    fs.mkdirSync(dir);
-  }
 }
 
 /*
@@ -382,7 +299,7 @@ const maxUplevels = xpdn.split(path.sep).length;
 function projectToFilesystem(f) {
   const relatives = [];
   relatives.push(
-    removeUplevels(path.relative(path.dirname(DEFAULT_ENTRYPOINT), f))
+    removeUplevels(path.relative(path.dirname(DEFAULT_ENTRYPOINT), f)),
   );
 
   if (relatives[0].slice(0, 'node_modules'.length) === 'node_modules') {
@@ -473,7 +390,7 @@ function readPayload(buffer, offset, length, position, callback) {
     offset,
     length,
     PAYLOAD_POSITION + position,
-    callback
+    callback,
   );
 }
 
@@ -483,7 +400,7 @@ function readPayloadSync(buffer, offset, length, position) {
     buffer,
     offset,
     length,
-    PAYLOAD_POSITION + position
+    PAYLOAD_POSITION + position,
   );
 }
 
@@ -493,7 +410,7 @@ function payloadCopyUni(
   targetStart,
   sourceStart,
   sourceEnd,
-  cb
+  cb,
 ) {
   const cb2 = cb || rethrow;
   if (sourceStart >= source[1]) return cb2(null, 0);
@@ -508,7 +425,7 @@ function payloadCopyUni(
       target,
       targetPos,
       targetEnd - targetPos,
-      payloadPos
+      payloadPos,
     );
   }
 }
@@ -531,7 +448,7 @@ function payloadCopyMany(source, target, targetStart, sourceStart, cb) {
       } else {
         return cb();
       }
-    }
+    },
   );
 }
 
@@ -544,7 +461,7 @@ function payloadCopyManySync(source, target, targetStart, sourceStart) {
       target,
       targetPos,
       targetEnd - targetPos,
-      payloadPos
+      payloadPos,
     );
     payloadPos += chunkSize;
     targetPos += chunkSize;
@@ -552,40 +469,29 @@ function payloadCopyManySync(source, target, targetStart, sourceStart) {
   }
 }
 
-const GZIP = 1;
-const BROTLI = 2;
+// Resolve decompressors once at module load: DOCOMPRESS is a compile-time
+// constant baked in by the packer, so the pick never varies across calls —
+// and if the runtime is missing a Zstd API the binary should fail at startup
+// rather than on the first snapshot read.
+const decompressAsync = REQUIRE_SHARED.pickDecompressorAsync(DOCOMPRESS);
+const decompressSync = REQUIRE_SHARED.pickDecompressorSync(DOCOMPRESS);
+
 function payloadFile(pointer, cb) {
   const target = Buffer.alloc(pointer[1]);
   payloadCopyMany(pointer, target, 0, 0, (error) => {
     if (error) return cb(error);
-    if (DOCOMPRESS === GZIP) {
-      gunzip(target, (error2, target2) => {
-        if (error2) return cb(error2);
-        cb(null, target2);
-      });
-    } else if (DOCOMPRESS === BROTLI) {
-      brotliDecompress(target, (error2, target2) => {
-        if (error2) return cb(error2);
-        cb(null, target2);
-      });
-    } else {
-      return cb(null, target);
-    }
+    if (!decompressAsync) return cb(null, target);
+    decompressAsync(target, (error2, target2) => {
+      if (error2) return cb(error2);
+      cb(null, target2);
+    });
   });
 }
 
 function payloadFileSync(pointer) {
   const target = Buffer.alloc(pointer[1]);
   payloadCopyManySync(pointer, target, 0, 0);
-  if (DOCOMPRESS === GZIP) {
-    const target1 = gunzipSync(target);
-    return target1;
-  }
-  if (DOCOMPRESS === BROTLI) {
-    const target1 = brotliDecompressSync(target);
-    return target1;
-  }
-  return target;
+  return decompressSync ? decompressSync(target) : target;
 }
 
 // /////////////////////////////////////////////////////////////////
@@ -593,24 +499,9 @@ function payloadFileSync(pointer) {
 // /////////////////////////////////////////////////////////////////
 
 (() => {
-  process.pkg = {};
+  REQUIRE_SHARED.setupProcessPkg(ENTRYPOINT, DEFAULT_ENTRYPOINT);
   process.versions.pkg = '%VERSION%';
   process.pkg.mount = createMountpoint;
-  process.pkg.entrypoint = ENTRYPOINT;
-  process.pkg.defaultEntrypoint = DEFAULT_ENTRYPOINT;
-})();
-
-// /////////////////////////////////////////////////////////////////
-// PATH.RESOLVE REPLACEMENT ////////////////////////////////////////
-// /////////////////////////////////////////////////////////////////
-
-(() => {
-  process.pkg.path = {};
-  process.pkg.path.resolve = function resolve() {
-    const args = cloneArgs(arguments);
-    args.unshift(path.dirname(ENTRYPOINT));
-    return path.resolve.apply(path, args);
-  };
 })();
 
 // /////////////////////////////////////////////////////////////////
@@ -677,7 +568,7 @@ function payloadFileSync(pointer) {
     const error = new Error(
       `${fileOrDirectory} '${stripSnapshot(path_)}' ` +
         `was not included into executable at compilation stage. ` +
-        `Please recompile adding it as asset or script.`
+        `Please recompile adding it as asset or script.`,
     );
     error.errno = -ENOENT;
     error.code = 'ENOENT';
@@ -802,7 +693,7 @@ function payloadFileSync(pointer) {
     if (insideMountpoint(path_)) {
       return ancestor.createReadStream.apply(
         fs,
-        translateNth(arguments, 0, path_)
+        translateNth(arguments, 0, path_),
       );
     }
     const stream = ancestor.createReadStream.apply(fs, arguments);
@@ -840,7 +731,7 @@ function payloadFileSync(pointer) {
     offset,
     length,
     position,
-    cb
+    cb,
   ) {
     if (DOCOMPRESS) {
       // note: source contains info about a compressed file and source[1] does not reflect
@@ -871,7 +762,7 @@ function payloadFileSync(pointer) {
           if (error) return cb(error);
           dock.position = p + bytesRead;
           cb(null, bytesRead, buffer2);
-        }
+        },
       );
     } else {
       const bytesRead = payloadCopyUni(
@@ -879,7 +770,7 @@ function payloadFileSync(pointer) {
         buffer,
         offset,
         p,
-        p + length
+        p + length,
       );
       dock.position = p + bytesRead;
       return bytesRead;
@@ -897,7 +788,7 @@ function payloadFileSync(pointer) {
           offset,
           length,
           position,
-          cb
+          cb,
         );
       }
       return ancestor.readSync(
@@ -905,21 +796,21 @@ function payloadFileSync(pointer) {
         buffer,
         offset,
         length,
-        position
+        position,
       );
     }
     const cb2 = cb || rethrow;
     if (offset < 0 && NODE_VERSION_MAJOR >= 14)
       return cb2(
         new Error(
-          `The value of "offset" is out of range. It must be >= 0. Received ${offset}`
-        )
+          `The value of "offset" is out of range. It must be >= 0. Received ${offset}`,
+        ),
       );
     if (offset < 0 && NODE_VERSION_MAJOR >= 10)
       return cb2(
         new Error(
-          `The value of "offset" is out of range. It must be >= 0 && <= ${buffer.length.toString()}. Received ${offset}`
-        )
+          `The value of "offset" is out of range. It must be >= 0 && <= ${buffer.length.toString()}. Received ${offset}`,
+        ),
       );
     if (offset < 0) return cb2(new Error('Offset is out of bounds'));
     if (offset >= buffer.length) return cb2(null, 0);
@@ -928,16 +819,16 @@ function payloadFileSync(pointer) {
         new Error(
           `The value of "length" is out of range. It must be <= ${(
             buffer.length - offset
-          ).toString()}. Received ${length.toString()}`
-        )
+          ).toString()}. Received ${length.toString()}`,
+        ),
       );
     if (offset + length > buffer.length && NODE_VERSION_MAJOR >= 10)
       return cb2(
         new Error(
           `The value of "length" is out of range. It must be >= 0 && <= ${(
             buffer.length - offset
-          ).toString()}. Received ${length.toString()}`
-        )
+          ).toString()}. Received ${length.toString()}`,
+        ),
       );
     if (offset + length > buffer.length)
       return cb2(new Error('Length extends beyond buffer'));
@@ -954,7 +845,7 @@ function payloadFileSync(pointer) {
         offset,
         length,
         position,
-        cb
+        cb,
       );
     return cb2(new Error('UNEXPECTED-15'));
   }
@@ -1075,19 +966,15 @@ function payloadFileSync(pointer) {
     if (entityBlob) {
       return cb2(null, Buffer.from('source-code-not-available'));
     }
-    // why return empty buffer?
-    // otherwise this error will arise:
-    // Error: UNEXPECTED-20
-    //     at readFileFromSnapshot (e:0)
-    //     at Object.fs.readFileSync (e:0)
-    //     at Object.Module._extensions..js (module.js:421:20)
-    //     at Module.load (module.js:357:32)
-    //     at Function.Module._load (module.js:314:12)
-    //     at Function.Module.runMain (e:0)
-    //     at startup (node.js:140:18)
-    //     at node.js:1001:3
-
-    return cb2(new Error('UNEXPECTED-20'));
+    return cb2(
+      new Error(
+        '[pkg] UNEXPECTED-20: no source or bytecode for ' +
+          path_ +
+          '. This usually means V8 bytecode generation failed during ' +
+          'packaging (e.g. cross-compilation without QEMU). Rebuild with ' +
+          '--fallback-to-source, --no-bytecode, or --sea to fix this.',
+      ),
+    );
   }
 
   fs.readFileSync = function readFileSync(path_, options_) {
@@ -1167,7 +1054,7 @@ function payloadFileSync(pointer) {
           callback(
             Object.assign(new Error('File already exists'), {
               code: 'EEXIST',
-            })
+            }),
           );
           return;
         }
@@ -1440,6 +1327,8 @@ function payloadFileSync(pointer) {
     delete s.isSocketValue;
     delete s.isSymbolicLinkValue;
 
+    s.isBlockDevice = noop;
+    s.isCharacterDevice = noop;
     s.isFile = function isFile() {
       return isFileValue;
     };
@@ -1452,9 +1341,7 @@ function payloadFileSync(pointer) {
     s.isSymbolicLink = function isSymbolicLink() {
       return isSymbolicLinkValue;
     };
-    s.isFIFO = function isFIFO() {
-      return false;
-    };
+    s.isFIFO = noop;
 
     return s;
   }
@@ -1650,7 +1537,7 @@ function payloadFileSync(pointer) {
   function mkdirFailInSnapshot(path_, cb) {
     const cb2 = cb || rethrow;
     return cb2(
-      new Error('Cannot mkdir in a snapshot. Try mountpoints instead.')
+      new Error('Cannot mkdir in a snapshot. Try mountpoints instead.'),
     );
   }
 
@@ -1702,7 +1589,7 @@ function payloadFileSync(pointer) {
       if (insideMountpoint(path_)) {
         return ancestor_promises.open.apply(
           this,
-          translateNth(arguments, 0, path_)
+          translateNth(arguments, 0, path_),
         );
       }
       const externalFile = uncompressExternallyPath(path_);
@@ -1720,7 +1607,7 @@ function payloadFileSync(pointer) {
       if (insideMountpoint(path_)) {
         return ancestor_promises.readFile.apply(
           this,
-          translateNth(arguments, 0, path_)
+          translateNth(arguments, 0, path_),
         );
       }
       const externalFile = uncompressExternallyPath(path_);
@@ -1731,7 +1618,7 @@ function payloadFileSync(pointer) {
     fs.promises.write = async function write(fd) {
       if (fd._pkg) {
         throw new Error(
-          `[PKG] Cannot write into Snapshot file : ${fd._pkg.file}`
+          `[PKG] Cannot write into Snapshot file : ${fd._pkg.file}`,
         );
       }
       return ancestor_promises.write.apply(this, arguments);
@@ -1743,12 +1630,16 @@ function payloadFileSync(pointer) {
     fs.promises.stat = util.promisify(fs.stat);
     fs.promises.lstat = util.promisify(fs.lstat);
 
-    /*
     fs.promises.read = util.promisify(fs.read);
     fs.promises.realpath = util.promisify(fs.realpath);
     fs.promises.fstat = util.promisify(fs.fstat);
+    fs.promises.statfs = util.promisify(fs.statfs);
     fs.promises.access = util.promisify(fs.access);
-  */
+
+    // TODO: all promises methods that try to edit files in snapshot should throw
+    // TODO implement missing methods
+    // fs.promises.readlink ?
+    // fs.promises.opendir ?
   }
 
   // ///////////////////////////////////////////////////////////////
@@ -1900,7 +1791,11 @@ function payloadFileSync(pointer) {
     im = require('internal/module');
     makeRequireFunction = im.makeRequireFunction;
   } else {
-    im = require('internal/modules/cjs/helpers');
+    if (NODE_VERSION_MAJOR < 18) {
+      im = require('internal/modules/cjs/helpers');
+    } else {
+      im = require('internal/modules/helpers');
+    }
     makeRequireFunction = im.makeRequireFunction;
     // TODO esm modules along with cjs
   }
@@ -1939,7 +1834,18 @@ function payloadFileSync(pointer) {
 
       const script = new Script(code, options);
       const wrapper = script.runInThisContext(options);
-      if (!wrapper) process.exit(4); // for example VERSION_MISMATCH
+      if (!wrapper) {
+        // V8 rejected the cached bytecode (typically because it was
+        // produced by a different V8 build — e.g. cross-platform
+        // bytecode fabrication). Previously pkg exited silently with
+        // code 4; surface a real error so the user knows what to do.
+        throw new Error(
+          `[pkg] V8 rejected the bytecode cache for ${filename_}. ` +
+            `This usually means the binary was built with mismatched ` +
+            `host/target V8 (cross-platform bytecode). Rebuild pkg with ` +
+            `--public-packages "*" --public or --sea to avoid bytecode.`,
+        );
+      }
       const dirname = path.dirname(filename_);
       const rqfn = makeRequireFunction(this);
       const args = [this.exports, rqfn, this, filename_, dirname];
@@ -2004,133 +1910,8 @@ function payloadFileSync(pointer) {
 // /////////////////////////////////////////////////////////////////
 // PATCH CHILD_PROCESS /////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////
-(() => {
-  const ancestor = {
-    spawn: childProcess.spawn,
-    spawnSync: childProcess.spawnSync,
-    execFile: childProcess.execFile,
-    execFileSync: childProcess.execFileSync,
-    exec: childProcess.exec,
-    execSync: childProcess.execSync,
-  };
 
-  function setOptsEnv(args) {
-    let pos = args.length - 1;
-    if (typeof args[pos] === 'function') pos -= 1;
-    if (typeof args[pos] !== 'object' || Array.isArray(args[pos])) {
-      pos += 1;
-      args.splice(pos, 0, {});
-    }
-    const opts = args[pos];
-    if (!opts.env) opts.env = _extend({}, process.env);
-    if (opts.env.PKG_EXECPATH === 'PKG_INVOKE_NODEJS') return;
-    opts.env.PKG_EXECPATH = EXECPATH;
-  }
-
-  function startsWith2(args, index, name, impostor) {
-    const qsName = `"${name} `;
-    if (args[index].slice(0, qsName.length) === qsName) {
-      args[index] = `"${impostor} ${args[index].slice(qsName.length)}`;
-      return true;
-    }
-    const sName = `${name} `;
-    if (args[index].slice(0, sName.length) === sName) {
-      args[index] = `${impostor} ${args[index].slice(sName.length)}`;
-      return true;
-    }
-    if (args[index] === name) {
-      args[index] = impostor;
-      return true;
-    }
-    return false;
-  }
-
-  function startsWith(args, index, name) {
-    const qName = `"${name}"`;
-    const qEXECPATH = `"${EXECPATH}"`;
-    const jsName = JSON.stringify(name);
-    const jsEXECPATH = JSON.stringify(EXECPATH);
-    return (
-      startsWith2(args, index, name, EXECPATH) ||
-      startsWith2(args, index, qName, qEXECPATH) ||
-      startsWith2(args, index, jsName, jsEXECPATH)
-    );
-  }
-
-  function modifyLong(args, index) {
-    if (!args[index]) return;
-    return (
-      startsWith(args, index, 'node') ||
-      startsWith(args, index, ARGV0) ||
-      startsWith(args, index, ENTRYPOINT) ||
-      startsWith(args, index, EXECPATH)
-    );
-  }
-
-  function modifyShort(args) {
-    if (!args[0]) return;
-    if (!Array.isArray(args[1])) {
-      args.splice(1, 0, []);
-    }
-    if (
-      args[0] === 'node' ||
-      args[0] === ARGV0 ||
-      args[0] === ENTRYPOINT ||
-      args[0] === EXECPATH
-    ) {
-      args[0] = EXECPATH;
-    } else {
-      for (let i = 1; i < args[1].length; i += 1) {
-        const mbc = args[1][i - 1];
-        if (mbc === '-c' || mbc === '/c') {
-          modifyLong(args[1], i);
-        }
-      }
-    }
-  }
-
-  childProcess.spawn = function spawn() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyShort(args);
-    return ancestor.spawn.apply(childProcess, args);
-  };
-
-  childProcess.spawnSync = function spawnSync() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyShort(args);
-    return ancestor.spawnSync.apply(childProcess, args);
-  };
-
-  childProcess.execFile = function execFile() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyShort(args);
-    return ancestor.execFile.apply(childProcess, args);
-  };
-
-  childProcess.execFileSync = function execFileSync() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyShort(args);
-    return ancestor.execFileSync.apply(childProcess, args);
-  };
-
-  childProcess.exec = function exec() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyLong(args, 0);
-    return ancestor.exec.apply(childProcess, args);
-  };
-
-  childProcess.execSync = function execSync() {
-    const args = cloneArgs(arguments);
-    setOptsEnv(args);
-    modifyLong(args, 0);
-    return ancestor.execSync.apply(childProcess, args);
-  };
-})();
+REQUIRE_SHARED.patchChildProcess(ENTRYPOINT);
 
 // /////////////////////////////////////////////////////////////////
 // PROMISIFY ///////////////////////////////////////////////////////
@@ -2185,7 +1966,7 @@ function payloadFileSync(pointer) {
           } else {
             resolve({ stdout, stderr });
           }
-        })
+        }),
       );
 
       return p;
@@ -2203,10 +1984,178 @@ function payloadFileSync(pointer) {
 // /////////////////////////////////////////////////////////////////
 // PATCH PROCESS ///////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////
-(() => {
-  const ancestor = {
-    dlopen: process.dlopen,
-  };
+
+REQUIRE_SHARED.patchDlopen(insideSnapshot);
+"####;
+
+/// yao-pkg/pkg 6.19.0 `prelude/bootstrap-shared.js`.
+pub(crate) const BOOTSTRAP_SHARED_SOURCE: &str = r####"'use strict';
+
+// Shared runtime utilities used by both the traditional bootstrap and
+// the SEA bootstrap.  Each consumer require()s or inlines this module.
+//
+// Traditional bootstrap: inlined via REQUIRE_COMMON (already has its
+//   own common.ts path helpers) — only calls the functions exported here.
+// SEA bootstrap: bundled by esbuild via require('./bootstrap-shared').
+
+var childProcess = require('child_process');
+var { createHash } = require('crypto');
+var fs = require('fs');
+var path = require('path');
+var zlib = require('zlib');
+var { homedir } = require('os');
+
+// /////////////////////////////////////////////////////////////////
+// COMPRESSION CODECS //////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////
+
+// Numeric codec ids. MUST stay in sync with lib/compress_type.ts.  Only
+// COMPRESS_NONE is re-exported because sea-vfs-setup reads it directly; the
+// pickDecompressor* helpers encapsulate the rest so no consumer needs to
+// know the numeric values.
+var COMPRESS_NONE = 0;
+var COMPRESS_GZIP = 1;
+var COMPRESS_BROTLI = 2;
+var COMPRESS_ZSTD = 3;
+
+// A SEA binary embeds Node.js, so the end user cannot "upgrade Node" — they
+// either need a re-packaged binary or a different codec.  Callers pass the
+// name of the missing zlib symbol for easier triage.
+function zstdMissingError(symbol) {
+  return new Error(
+    'pkg: Zstd compression requires Node.js >= 22.15 ' +
+      '(runtime missing zlib.' +
+      symbol +
+      '). Re-package this binary with pkg >= the version that embeds Node ' +
+      '22.15+, or contact the distributor for a --compress Brotli/GZip build.',
+  );
+}
+
+// Return the sync decompressor for the given codec id, or throw a
+// uniformly-worded error when the runtime is missing the Zstd API.
+function pickDecompressorSync(compression) {
+  switch (compression) {
+    case COMPRESS_NONE:
+      return null;
+    case COMPRESS_GZIP:
+      return zlib.gunzipSync;
+    case COMPRESS_BROTLI:
+      return zlib.brotliDecompressSync;
+    case COMPRESS_ZSTD:
+      if (typeof zlib.zstdDecompressSync !== 'function') {
+        throw zstdMissingError('zstdDecompressSync');
+      }
+      return zlib.zstdDecompressSync;
+    default:
+      throw new Error(
+        'pkg: unknown compression codec id ' + compression + ' in manifest',
+      );
+  }
+}
+
+// Async variant — `cb`-style zlib decompress fns for the payload pipeline.
+function pickDecompressorAsync(compression) {
+  switch (compression) {
+    case COMPRESS_NONE:
+      return null;
+    case COMPRESS_GZIP:
+      return zlib.gunzip;
+    case COMPRESS_BROTLI:
+      return zlib.brotliDecompress;
+    case COMPRESS_ZSTD:
+      if (typeof zlib.zstdDecompress !== 'function') {
+        throw zstdMissingError('zstdDecompress');
+      }
+      return zlib.zstdDecompress;
+    default:
+      throw new Error('pkg: unknown compression codec id ' + compression);
+  }
+}
+
+// /////////////////////////////////////////////////////////////////
+// NATIVE ADDON EXTRACTION /////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////
+
+// Recursively copy src -> dest. For existing destination files, compare
+// SHA-256 hashes and skip identical ones to avoid redundant writes.
+//
+// IMPORTANT: Always run the copy — do NOT guard with existsSync on the folder.
+// OS temp cleanup or antivirus can delete files inside the cache directory while
+// leaving the directory structure intact. An existsSync check on the directory
+// would pass, but the actual .node/.so files inside would be missing, causing
+// "module not found" crashes. This was deliberately established in vercel/pkg
+// PR #1492 after production incidents. Per-file SHA-256 checksums (PR #1611)
+// make this efficient — unchanged files are skipped.
+// See also: https://github.com/vercel/pkg/issues/1589
+function cpRecursive(src, dest) {
+  // lstatSync (not statSync) so we detect symlinks instead of following them.
+  // Following could recurse into the symlink target, loop forever, or copy
+  // unrelated content that lives outside the addon package tree.
+  var st = fs.lstatSync(src);
+
+  if (st.isSymbolicLink()) {
+    // Recreate the symlink at the destination instead of dereferencing it.
+    var target = fs.readlinkSync(src);
+    try {
+      fs.unlinkSync(dest);
+    } catch (_) {
+      /* dest may not exist */
+    }
+    try {
+      fs.symlinkSync(target, dest);
+      return;
+    } catch (e) {
+      // Windows requires admin privileges or developer mode to create
+      // symlinks. Fall back to copying the resolved target so native addon
+      // extraction still succeeds — the duplicated content is the lesser
+      // evil compared to a hard load failure.
+      if (e && (e.code === 'EPERM' || e.code === 'EACCES')) {
+        var resolved = path.isAbsolute(target)
+          ? target
+          : path.join(path.dirname(src), target);
+        cpRecursive(resolved, dest);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  if (st.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+    var entries = fs.readdirSync(src);
+    for (var i = 0; i < entries.length; i++) {
+      cpRecursive(path.join(src, entries[i]), path.join(dest, entries[i]));
+    }
+    return;
+  }
+
+  // Regular file: read via fs.readFileSync (VFS-routed when src is inside
+  // the snapshot), hash the Buffer, then write the same Buffer to the real
+  // disk via writeFileSync. We avoid copyFileSync because VFS module hooks
+  // intercept readFile but may not intercept copyFile — a copyFileSync from
+  // a snapshot path would fail to resolve the source in SEA mode.
+  var srcContent = fs.readFileSync(src);
+  if (fs.existsSync(dest)) {
+    var destContent = fs.readFileSync(dest);
+    var srcHash = createHash('sha256').update(srcContent).digest('hex');
+    var destHash = createHash('sha256').update(destContent).digest('hex');
+    if (srcHash === destHash) {
+      return;
+    }
+  }
+  fs.writeFileSync(dest, srcContent);
+}
+
+/**
+ * Patch process.dlopen to extract native addons from the snapshot to a
+ * cache directory on the real filesystem before loading them.
+ *
+ * @param {function} insideSnapshot  Returns true when a path is inside the virtual snapshot.
+ */
+function patchDlopen(insideSnapshot) {
+  var ancestor = process.dlopen;
+  var PKG_NATIVE_CACHE_BASE =
+    process.env.PKG_NATIVE_CACHE_PATH || path.join(homedir(), '.cache');
 
   function revertMakingLong(f) {
     if (/^\\\\\?\\/.test(f)) return f.slice(4);
@@ -2214,157 +2163,415 @@ function payloadFileSync(pointer) {
   }
 
   process.dlopen = function dlopen() {
-    const args = cloneArgs(arguments);
-    const modulePath = revertMakingLong(args[1]);
-    const moduleBaseName = path.basename(modulePath);
-    const moduleFolder = path.dirname(modulePath);
+    var args = Array.prototype.slice.call(arguments);
+    var modulePath = revertMakingLong(args[1]);
+    var moduleBaseName = path.basename(modulePath);
+    var moduleFolder = path.dirname(modulePath);
 
     if (insideSnapshot(modulePath)) {
-      const moduleContent = fs.readFileSync(modulePath);
+      var moduleContent = fs.readFileSync(modulePath);
+      var hash = createHash('sha256').update(moduleContent).digest('hex');
+      var tmpFolder = path.join(PKG_NATIVE_CACHE_BASE, 'pkg', hash);
 
-      // Node addon files and .so cannot be read with fs directly, they are loaded with process.dlopen which needs a filesystem path
-      // we need to write the file somewhere on disk first and then load it
-      // the hash is needed to be sure we reload the module in case it changes
-      const hash = createHash('sha256').update(moduleContent).digest('hex');
+      fs.mkdirSync(tmpFolder, { recursive: true });
 
-      // Example: /tmp/pkg/<hash>
-      const tmpFolder = path.join(tmpdir(), 'pkg', hash);
+      var parts = moduleFolder.split(path.sep);
+      var mIndex = parts.lastIndexOf('node_modules') + 1;
+      var newPath;
 
-      createDirRecursively(tmpFolder);
-
-      // Example: moduleFolder = /snapshot/appname/node_modules/sharp/build/Release
-      const parts = moduleFolder.split(path.sep);
-      const mIndex = parts.indexOf('node_modules') + 1;
-
-      let newPath;
-
-      // it's a node addon file contained in node_modules folder
-      // we copy the entire module folder in tmp folder
       if (mIndex > 0) {
-        // Example: modulePackagePath = sharp/build/Release
-        const modulePackagePath = parts.slice(mIndex).join(path.sep);
-        // Example: modulePkgFolder = /snapshot/appname/node_modules/sharp
-        const modulePkgFolder = parts.slice(0, mIndex + 1).join(path.sep);
+        // Addon inside node_modules — copy the entire package folder to
+        // preserve relative paths for statically linked addons (fix #1075)
+        var modulePackagePath = parts.slice(mIndex).join(path.sep);
+        var modulePkgFolder = parts.slice(0, mIndex + 1).join(path.sep);
+        var destFolder = path.join(tmpFolder, path.basename(modulePkgFolder));
 
-        // here we copy all files from the snapshot module folder to temporary folder
-        // we keep the module folder structure to prevent issues with modules that are statically
-        // linked using relative paths (Fix #1075)
-        copyFolderRecursiveSync(modulePkgFolder, tmpFolder);
+        cpRecursive(modulePkgFolder, destFolder);
 
-        // Example: /tmp/pkg/<hash>/sharp/build/Release/sharp.node
         newPath = path.join(tmpFolder, modulePackagePath, moduleBaseName);
       } else {
-        const tmpModulePath = path.join(tmpFolder, moduleBaseName);
+        var tmpModulePath = path.join(tmpFolder, moduleBaseName);
 
-        if (!fs.existsSync(tmpModulePath)) {
-          fs.copyFileSync(modulePath, tmpModulePath);
+        // Same rationale as above — always verify the file is present and up-to-date,
+        // never skip based on directory existence alone (see vercel/pkg PR #1492).
+        // Use writeFileSync with the already-read moduleContent instead of
+        // copyFileSync because VFS module hooks intercept readFile but may not
+        // intercept copyFile — copying a snapshot path via copyFileSync would
+        // fail to find the source in SEA mode.
+        if (fs.existsSync(tmpModulePath)) {
+          var dContent = fs.readFileSync(tmpModulePath);
+          var dHash = createHash('sha256').update(dContent).digest('hex');
+          if (hash !== dHash) {
+            fs.writeFileSync(tmpModulePath, moduleContent);
+          }
+        } else {
+          fs.writeFileSync(tmpModulePath, moduleContent);
         }
 
-        // load the copied file in the temporary folder
         newPath = tmpModulePath;
       }
 
-      // replace the path with the new module path
       args[1] = newPath;
     }
 
-    return ancestor.dlopen.apply(process, args);
+    return ancestor.apply(process, args);
   };
-})();
-"####;
+}
 
-/// pkg 5.8.1 `prelude/diagnostic.js`.
-pub(crate) const DIAGNOSTIC_SOURCE: &str = r####"/* eslint-disable global-require */
-/* eslint-disable no-console */
-/* global DICT */
+// /////////////////////////////////////////////////////////////////
+// CHILD_PROCESS PATCHING //////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////
 
-'use strict';
+/**
+ * Patch child_process so that spawning 'node' or the entrypoint from
+ * inside a packaged app correctly uses the executable path.
+ *
+ * @param {string} entrypoint  The snapshotified entrypoint path.
+ */
+function patchChildProcess(entrypoint) {
+  var EXECPATH = process.execPath;
+  var ARGV0 = process.argv[0];
 
-(function installDiagnostic() {
-  const fs = require('fs');
-  const path = require('path');
-  const win32 = process.platform === 'win32';
+  var ancestor = {
+    spawn: childProcess.spawn,
+    spawnSync: childProcess.spawnSync,
+    execFile: childProcess.execFile,
+    execFileSync: childProcess.execFileSync,
+    exec: childProcess.exec,
+    execSync: childProcess.execSync,
+  };
 
-  if (process.env.DEBUG_PKG === '2') {
-    console.log(Object.entries(DICT));
+  function cloneArgs(args_) {
+    return Array.prototype.slice.call(args_);
   }
+
+  function setOptsEnv(args) {
+    var pos = args.length - 1;
+    if (typeof args[pos] === 'function') pos -= 1;
+    if (typeof args[pos] !== 'object' || Array.isArray(args[pos])) {
+      pos += 1;
+      args.splice(pos, 0, {});
+    }
+    var opts = args[pos];
+    if (!opts.env) opts.env = Object.assign({}, process.env);
+    if (opts.env.PKG_EXECPATH !== undefined) return;
+    opts.env.PKG_EXECPATH = EXECPATH;
+  }
+
+  function startsWith2(args, index, name, impostor) {
+    var qsName = '"' + name + ' ';
+    if (args[index].slice(0, qsName.length) === qsName) {
+      args[index] = '"' + impostor + ' ' + args[index].slice(qsName.length);
+      return true;
+    }
+    var sName = name + ' ';
+    if (args[index].slice(0, sName.length) === sName) {
+      args[index] = impostor + ' ' + args[index].slice(sName.length);
+      return true;
+    }
+    if (args[index] === name) {
+      args[index] = impostor;
+      return true;
+    }
+    return false;
+  }
+
+  function startsWith(args, index, name) {
+    var qName = '"' + name + '"';
+    var qEXECPATH = '"' + EXECPATH + '"';
+    var jsName = JSON.stringify(name);
+    var jsEXECPATH = JSON.stringify(EXECPATH);
+    return (
+      startsWith2(args, index, name, EXECPATH) ||
+      startsWith2(args, index, qName, qEXECPATH) ||
+      startsWith2(args, index, jsName, jsEXECPATH)
+    );
+  }
+
+  function modifyLong(args, index) {
+    if (!args[index]) return;
+    return (
+      startsWith(args, index, 'node') ||
+      startsWith(args, index, ARGV0) ||
+      startsWith(args, index, entrypoint) ||
+      startsWith(args, index, EXECPATH)
+    );
+  }
+
+  function modifyShort(args) {
+    if (!args[0]) return;
+    if (!Array.isArray(args[1])) {
+      args.splice(1, 0, []);
+    }
+    if (
+      args[0] === 'node' ||
+      args[0] === ARGV0 ||
+      args[0] === entrypoint ||
+      args[0] === EXECPATH
+    ) {
+      args[0] = EXECPATH;
+    } else {
+      for (var i = 1; i < args[1].length; i += 1) {
+        var mbc = args[1][i - 1];
+        if (mbc === '-c' || mbc === '/c') {
+          modifyLong(args[1], i);
+        }
+      }
+    }
+  }
+
+  childProcess.spawn = function spawn() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyShort(args);
+    return ancestor.spawn.apply(childProcess, args);
+  };
+
+  childProcess.spawnSync = function spawnSync() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyShort(args);
+    return ancestor.spawnSync.apply(childProcess, args);
+  };
+
+  childProcess.execFile = function execFile() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyShort(args);
+    return ancestor.execFile.apply(childProcess, args);
+  };
+
+  childProcess.execFileSync = function execFileSync() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyShort(args);
+    return ancestor.execFileSync.apply(childProcess, args);
+  };
+
+  childProcess.exec = function exec() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyLong(args, 0);
+    return ancestor.exec.apply(childProcess, args);
+  };
+
+  childProcess.execSync = function execSync() {
+    var args = cloneArgs(arguments);
+    setOptsEnv(args);
+    modifyLong(args, 0);
+    return ancestor.execSync.apply(childProcess, args);
+  };
+}
+
+// /////////////////////////////////////////////////////////////////
+// PROCESS.PKG SETUP ///////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////
+
+/**
+ * Set up the process.pkg compatibility object.
+ *
+ * @param {string} entrypoint  The snapshotified entrypoint path.
+ */
+function setupProcessPkg(entrypoint, defaultEntrypoint) {
+  process.pkg = {
+    entrypoint: entrypoint,
+    defaultEntrypoint:
+      defaultEntrypoint !== undefined ? defaultEntrypoint : entrypoint,
+    path: {
+      resolve: function () {
+        var args = [path.dirname(entrypoint)];
+        for (var i = 0; i < arguments.length; i++) {
+          args.push(arguments[i]);
+        }
+        return path.resolve.apply(path, args);
+      },
+    },
+  };
+}
+
+// /////////////////////////////////////////////////////////////////
+// RUNTIME DIAGNOSTICS /////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////
+
+function humanSize(bytes) {
+  var sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+
+  if (bytes === 0) return 'n/a';
+
+  var i = Math.floor(Math.log(bytes) / Math.log(1024));
+
+  if (i === 0) return bytes + ' ' + sizes[i];
+
+  return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
+}
+
+/**
+ * Install runtime diagnostics triggered by the DEBUG_PKG environment
+ * variable.  Works identically in both traditional and SEA modes.
+ *
+ *   DEBUG_PKG=1  — dump the virtual file system tree and oversized files
+ *   DEBUG_PKG=2  — also wrap every fs/fs.promises call with console.log
+ *
+ * Note: DEBUG_PKG requires the binary to be built with --debug / -d.
+ *
+ * Additionally, for SEA binaries (any build, not just --debug):
+ *
+ *   DEBUG_PKG_PERF=1  — print VFS performance report at startup showing
+ *                        phase timings (manifest parse, module loading, etc.)
+ *                        and provider counters (files loaded, stat calls, etc.)
+ *
+ * @param {string} snapshotPrefix  The snapshot mount prefix ('/snapshot' or 'C:\\snapshot').
+ */
+function installDiagnostic(snapshotPrefix) {
+  if (!process.env.DEBUG_PKG) return;
+
+  var sizeLimit = process.env.SIZE_LIMIT_PKG
+    ? parseInt(process.env.SIZE_LIMIT_PKG, 10)
+    : 5 * 1024 * 1024;
+  var folderLimit = process.env.FOLDER_LIMIT_PKG
+    ? parseInt(process.env.FOLDER_LIMIT_PKG, 10)
+    : 10 * 1024 * 1024;
+
+  var overSized = [];
+
   function dumpLevel(filename, level, tree) {
-    let totalSize = 0;
-    const d = fs.readdirSync(filename);
-    for (let j = 0; j < d.length; j += 1) {
-      const f = path.join(filename, d[j]);
-      const realPath = fs.realpathSync(f);
-      const isSymbolicLink2 = f !== realPath;
+    var totalSize = 0;
+    var d = fs.readdirSync(filename);
+    for (var j = 0; j < d.length; j += 1) {
+      var f = path.join(filename, d[j]);
+      var realPath;
+      try {
+        realPath = fs.realpathSync(f);
+      } catch (_) {
+        realPath = f;
+      }
+      var isSymbolicLink = f !== realPath;
 
-      const s = fs.statSync(f);
-      totalSize += s.size;
+      var s = fs.statSync(f);
 
-      if (s.isDirectory() && !isSymbolicLink2) {
-        const tree1 = [];
-        totalSize += dumpLevel(f, level + 1, tree1);
-        const str =
+      if (s.isDirectory() && !isSymbolicLink) {
+        var tree1 = [];
+        var startIndex = overSized.length;
+        var folderSize = dumpLevel(f, level + 1, tree1);
+        totalSize += folderSize;
+        var str =
           (' '.padStart(level * 2, ' ') + d[j]).padEnd(40, ' ') +
-          (totalSize.toString().padStart(10, ' ') +
-            (isSymbolicLink2 ? `=> ${realPath}` : ' '));
+          (humanSize(folderSize).padStart(10, ' ') +
+            (isSymbolicLink ? '=> ' + realPath : ' '));
         tree.push(str);
-        tree1.forEach((x) => tree.push(x));
+        tree1.forEach(function (x) {
+          tree.push(x);
+        });
+
+        if (folderSize > folderLimit) {
+          overSized.splice(startIndex, 0, str);
+        }
       } else {
-        const str =
+        totalSize += s.size;
+        var str2 =
           (' '.padStart(level * 2, ' ') + d[j]).padEnd(40, ' ') +
-          (s.size.toString().padStart(10, ' ') +
-            (isSymbolicLink2 ? `=> ${realPath}` : ' '));
-        tree.push(str);
+          (humanSize(s.size).padStart(10, ' ') +
+            (isSymbolicLink ? '=> ' + realPath : ' '));
+
+        if (s.size > sizeLimit) {
+          overSized.push(str2);
+        }
+
+        tree.push(str2);
       }
     }
     return totalSize;
   }
+
   function wrap(obj, name) {
-    const f = fs[name];
-    obj[name] = (...args) => {
-      const args1 = Object.values(args);
+    var f = obj[name];
+    if (typeof f !== 'function') return;
+    obj[name] = function () {
+      var args1 = Array.prototype.slice.call(arguments);
       console.log(
-        `fs.${name}`,
-        args1.filter((x) => typeof x === 'string')
+        'fs.' + name,
+        args1.filter(function (x) {
+          return typeof x === 'string';
+        }),
       );
       return f.apply(this, args1);
     };
   }
-  if (process.env.DEBUG_PKG) {
-    console.log('------------------------------- virtual file system');
-    const startFolder = win32 ? 'C:\\snapshot' : '/snapshot';
-    console.log(startFolder);
 
-    const tree = [];
-    const totalSize = dumpLevel(startFolder, 1, tree);
-    console.log(tree.join('\n'));
+  console.log('------------------------------- virtual file system');
+  console.log(snapshotPrefix);
 
-    console.log('Total size = ', totalSize);
-    if (process.env.DEBUG_PKG === '2') {
-      wrap(fs, 'openSync');
-      wrap(fs, 'open');
-      wrap(fs, 'readSync');
-      wrap(fs, 'read');
-      wrap(fs, 'writeSync');
-      wrap(fs, 'write');
-      wrap(fs, 'closeSync');
-      wrap(fs, 'readFileSync');
-      wrap(fs, 'close');
-      wrap(fs, 'readFile');
-      wrap(fs, 'readdirSync');
-      wrap(fs, 'readdir');
-      wrap(fs, 'realpathSync');
-      wrap(fs, 'realpath');
-      wrap(fs, 'statSync');
-      wrap(fs, 'stat');
-      wrap(fs, 'lstatSync');
-      wrap(fs, 'lstat');
-      wrap(fs, 'fstatSync');
-      wrap(fs, 'fstat');
-      wrap(fs, 'existsSync');
-      wrap(fs, 'exists');
-      wrap(fs, 'accessSync');
-      wrap(fs, 'access');
+  var tree = [];
+  var totalSize = dumpLevel(snapshotPrefix, 1, tree);
+  console.log(tree.join('\n'));
+  console.log('Total size = ', humanSize(totalSize));
+
+  if (overSized.length > 0) {
+    console.log('------------------------------- oversized files');
+    console.log(overSized.join('\n'));
+  }
+
+  if (process.env.DEBUG_PKG === '2') {
+    wrap(fs, 'openSync');
+    wrap(fs, 'open');
+    wrap(fs, 'readSync');
+    wrap(fs, 'read');
+    wrap(fs, 'readFile');
+    wrap(fs, 'writeSync');
+    wrap(fs, 'write');
+    wrap(fs, 'closeSync');
+    wrap(fs, 'readFileSync');
+    wrap(fs, 'close');
+    wrap(fs, 'readdirSync');
+    wrap(fs, 'readdir');
+    wrap(fs, 'realpathSync');
+    wrap(fs, 'realpath');
+    wrap(fs, 'statSync');
+    wrap(fs, 'stat');
+    wrap(fs, 'lstatSync');
+    wrap(fs, 'lstat');
+    wrap(fs, 'fstatSync');
+    wrap(fs, 'fstat');
+    wrap(fs, 'existsSync');
+    wrap(fs, 'exists');
+    wrap(fs, 'accessSync');
+    wrap(fs, 'access');
+
+    if (fs.promises) {
+      wrap(fs.promises, 'open');
+      wrap(fs.promises, 'read');
+      wrap(fs.promises, 'readFile');
+      wrap(fs.promises, 'write');
+      wrap(fs.promises, 'readdir');
+      wrap(fs.promises, 'realpath');
+      wrap(fs.promises, 'stat');
+      wrap(fs.promises, 'lstat');
+      wrap(fs.promises, 'access');
+      wrap(fs.promises, 'copyFile');
     }
   }
+}
+
+module.exports = {
+  patchDlopen: patchDlopen,
+  patchChildProcess: patchChildProcess,
+  setupProcessPkg: setupProcessPkg,
+  installDiagnostic: installDiagnostic,
+  COMPRESS_NONE: COMPRESS_NONE,
+  pickDecompressorSync: pickDecompressorSync,
+  pickDecompressorAsync: pickDecompressorAsync,
+};
+"####;
+
+/// yao-pkg/pkg 6.19.0 debug diagnostic snippet (`diagnosticText` in
+/// `lib/packer.ts`), injected after the bootstrap when `--debug` is set.
+pub(crate) const DIAGNOSTIC_SOURCE: &str = r####"
+(function() {
+  if (process.env.DEBUG_PKG === '2') {
+    console.log('------------------------------- path dictionary');
+    console.log(Object.entries(DICT));
+  }
+  var snapshotPrefix = process.platform === 'win32' ? 'C:\\snapshot' : '/snapshot';
+  REQUIRE_SHARED.installDiagnostic(snapshotPrefix);
 })();
 "####;

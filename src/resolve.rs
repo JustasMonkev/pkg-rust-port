@@ -33,7 +33,13 @@ impl ResolveOptions {
     pub fn new(basedir: impl Into<PathBuf>) -> Self {
         Self {
             basedir: basedir.into(),
-            extensions: vec![".js".to_owned(), ".json".to_owned(), ".node".to_owned()],
+            // yao-pkg MODULE_RESOLVE_EXTENSIONS: ['.js', '.json', '.node', '.mjs'].
+            extensions: vec![
+                ".js".to_owned(),
+                ".json".to_owned(),
+                ".node".to_owned(),
+                ".mjs".to_owned(),
+            ],
         }
     }
 }
@@ -140,6 +146,15 @@ fn package_main(package_path: &Path) -> Option<String> {
 }
 
 fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<ResolvedModule> {
+    // JS `follow`: bare specifiers try exports-field (ESM-style) resolution
+    // first, but the result is only used when it lands on an actual ESM file;
+    // CommonJS packages keep flowing through classic `main`/index resolution.
+    if is_valid_package_name(request)
+        && let Some(resolved) = resolve_with_exports(request, options)
+        && is_esm_file(&resolved.path)
+    {
+        return Some(resolved);
+    }
     for directory in ancestor_directories(&options.basedir) {
         let candidate = directory.join("node_modules").join(request);
         if let Some(resolved) = resolve_as_path(&candidate, options) {
@@ -147,6 +162,232 @@ fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<Resolv
         }
     }
     None
+}
+
+/// JS `follow.isValidPackageName`: lowercase npm package-name shape, with
+/// scoped-package support. Generated aliases like `connectNonLiteral` fail
+/// this check and skip exports resolution entirely.
+fn is_valid_package_name(specifier: &str) -> bool {
+    fn valid_segment(segment: &str) -> bool {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || "_.-".contains(ch))
+    }
+
+    if let Some(scoped) = specifier.strip_prefix('@') {
+        let mut parts = scoped.split('/');
+        let scope = parts.next().unwrap_or_default();
+        let Some(name) = parts.next() else {
+            return false;
+        };
+        return valid_segment(scope) && valid_segment(name);
+    }
+    let package_name = specifier.split('/').next().unwrap_or_default();
+    valid_segment(package_name)
+}
+
+/// Split a bare specifier into package name and exports subpath
+/// (`"."` or `"./<rest>"`), mirroring JS `tryResolveESM`.
+fn split_specifier(specifier: &str) -> Option<(String, String)> {
+    if let Some(scoped) = specifier.strip_prefix('@') {
+        let mut parts = scoped.splitn(3, '/');
+        let scope = parts.next()?;
+        let name = parts.next()?;
+        let package_name = format!("@{scope}/{name}");
+        let subpath = match parts.next() {
+            Some(rest) => format!("./{rest}"),
+            None => ".".to_owned(),
+        };
+        return Some((package_name, subpath));
+    }
+    match specifier.split_once('/') {
+        Some((name, rest)) => Some((name.to_owned(), format!("./{rest}"))),
+        None => Some((specifier.to_owned(), ".".to_owned())),
+    }
+}
+
+/// Resolve a bare specifier through the target package's `exports` field,
+/// trying the `require` condition first and falling back to `import` for
+/// ESM-only packages (JS `resolveWithExports`).
+fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<ResolvedModule> {
+    let (package_name, subpath) = split_specifier(request)?;
+    for directory in ancestor_directories(&options.basedir) {
+        let package_json = directory
+            .join("node_modules")
+            .join(&package_name)
+            .join("package.json");
+        if !package_json.is_file() {
+            continue;
+        }
+        let body = std::fs::read_to_string(&package_json).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&body).ok()?;
+        let exports = json.get("exports")?;
+        let package_root = package_json.parent()?;
+        for condition in ["require", "import"] {
+            if let Some(target) = resolve_exports_subpath(exports, &subpath, condition) {
+                let full = package_root.join(target.trim_start_matches("./"));
+                if full.is_file() {
+                    return Some(ResolvedModule {
+                        path: normalize(&full)?,
+                        package_json: normalize(&package_json),
+                    });
+                }
+            }
+        }
+        return None;
+    }
+    None
+}
+
+/// Resolution for a bare specifier whose runtime `require()` would fail
+/// against the packaged snapshot, returning the file the walker packages so
+/// the ESM transformer can rewrite the specifier to a relative path. Two
+/// shapes qualify:
+///
+/// - The package `exports` has no `require`-reachable target, so runtime
+///   resolution throws `ERR_PACKAGE_PATH_NOT_EXPORTED`; the `import`
+///   condition result is returned (gated on `is_esm_file` to stay aligned
+///   with what `resolve_node_module` packages).
+/// - The `require`-reachable target is an `.mjs` file. The packer renames
+///   transformed `.mjs` snapshots to `.js`, so runtime exports resolution
+///   would point at a file that no longer exists.
+///
+/// Every other shape returns `None` and keeps its bare form — including
+/// `.js` targets under `"type": "module"`, which snapshot as transformed
+/// CommonJS at their original path and load fine through the exports map.
+pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Option<PathBuf> {
+    if !is_valid_package_name(request) {
+        return None;
+    }
+    let (package_name, subpath) = split_specifier(request)?;
+    for directory in ancestor_directories(basedir) {
+        let package_json = directory
+            .join("node_modules")
+            .join(&package_name)
+            .join("package.json");
+        if !package_json.is_file() {
+            continue;
+        }
+        let body = std::fs::read_to_string(&package_json).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&body).ok()?;
+        let exports = json.get("exports")?;
+        let package_root = package_json.parent()?;
+        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require") {
+            let full = package_root.join(target.trim_start_matches("./"));
+            if full.is_file() {
+                if full.extension().and_then(|extension| extension.to_str()) == Some("mjs") {
+                    return normalize(&full);
+                }
+                return None;
+            }
+        }
+        let target = resolve_exports_subpath(exports, &subpath, "import")?;
+        let full = package_root.join(target.trim_start_matches("./"));
+        if !full.is_file() {
+            return None;
+        }
+        let full = normalize(&full)?;
+        if !is_esm_file(&full) {
+            return None;
+        }
+        return Some(full);
+    }
+    None
+}
+
+/// Resolve one subpath through a package `exports` value for a condition set
+/// of `{condition, node, default}`, the same set `resolve.exports` uses.
+fn resolve_exports_subpath(
+    exports: &serde_json::Value,
+    subpath: &str,
+    condition: &str,
+) -> Option<String> {
+    let subpath_map = exports
+        .as_object()
+        .filter(|map| !map.is_empty() && map.keys().all(|key| key.starts_with('.')));
+    let Some(map) = subpath_map else {
+        // Shorthand: the whole value describes the "." subpath.
+        if subpath == "." {
+            return resolve_exports_target(exports, condition, None);
+        }
+        return None;
+    };
+
+    if let Some(target) = map.get(subpath) {
+        return resolve_exports_target(target, condition, None);
+    }
+
+    // Pattern subpaths: `./prefix*suffix`, longest prefix wins.
+    let mut best: Option<(usize, &str, &serde_json::Value)> = None;
+    for (key, value) in map {
+        let Some((prefix, suffix)) = key.split_once('*') else {
+            continue;
+        };
+        if subpath.starts_with(prefix)
+            && subpath.len() >= prefix.len() + suffix.len()
+            && subpath.ends_with(suffix)
+            && best.is_none_or(|(len, _, _)| prefix.len() > len)
+        {
+            let capture = &subpath[prefix.len()..subpath.len() - suffix.len()];
+            best = Some((prefix.len(), capture, value));
+        }
+    }
+    let (_, capture, value) = best?;
+    resolve_exports_target(value, condition, Some(capture))
+}
+
+fn resolve_exports_target(
+    target: &serde_json::Value,
+    condition: &str,
+    capture: Option<&str>,
+) -> Option<String> {
+    match target {
+        serde_json::Value::String(value) => Some(match capture {
+            Some(capture) => value.replace('*', capture),
+            None => value.clone(),
+        }),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .find_map(|item| resolve_exports_target(item, condition, capture)),
+        serde_json::Value::Object(map) => map.iter().find_map(|(key, value)| {
+            if key == condition || key == "node" || key == "default" {
+                resolve_exports_target(value, condition, capture)
+            } else {
+                None
+            }
+        }),
+        _ => None,
+    }
+}
+
+/// JS `common.isESMFile`: `.mjs` is ESM, `.cjs` is CJS, `.js` follows the
+/// nearest `package.json` `"type": "module"` marker.
+fn is_esm_file(path: &Path) -> bool {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    match extension {
+        Some("mjs") => return true,
+        Some("cjs") => return false,
+        Some("js") => {}
+        _ => return false,
+    }
+    let mut current = path.parent();
+    while let Some(directory) = current {
+        let package_json = directory.join("package.json");
+        if package_json.is_file() {
+            return std::fs::read_to_string(&package_json)
+                .ok()
+                .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok())
+                .and_then(|json| {
+                    json.get("type")
+                        .and_then(|value| value.as_str())
+                        .map(|value| value == "module")
+                })
+                .unwrap_or(false);
+        }
+        current = directory.parent();
+    }
+    false
 }
 
 fn ancestor_directories(start: &Path) -> Vec<PathBuf> {

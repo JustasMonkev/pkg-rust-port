@@ -55,9 +55,12 @@ fn filesystem_write_guard_fixture_runs_when_real_cache_is_configured()
         return Ok(());
     };
 
+    // yao-pkg 6.19 expectation: on node20+ targets the final writeFileSync
+    // surfaces ENOENT for the snapshot path instead of the write-guard
+    // wording (see the FIXME in yao-pkg test-50-fs-runtime-layer-3/main.js).
     assert_eq!(
         String::from_utf8_lossy(&run_result.run.stdout),
-        "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nCannot write to packaged file\nundefined\n"
+        "true\nfalse\nCannot write to packaged file\ntrue\nclosed\nfalse\nCannot write to packaged file\nCannot write to packaged file\nundefined\nENOENT: no such file or directory, open '/snapshot/test-50-fs-runtime-layer-3/test-z-asset.css'\nundefined\n"
     );
     Ok(())
 }
@@ -197,6 +200,9 @@ fn compression_fixture_runs_when_real_cache_is_configured() -> Result<(), Box<dy
 {
     let fixture_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/test-80-compression");
+    if !ensure_compression_fixture_deps(&fixture_dir)? {
+        return Ok(());
+    }
     for (name, algorithm, cli_label) in [
         ("compression-none", "None", None),
         ("compression-gzip", "GZip", Some("compression:  GZip")),
@@ -2052,9 +2058,9 @@ fn package_and_run_real_fixture_with_options(
     } else {
         real_output_path(name)
     };
-    let package_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
+    let package_child = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(fixture_dir)
-        .env("PKG_CACHE_PATH", cache_root)
+        .env("PKG_CACHE_PATH", &cache_root)
         .envs(options.package_env.iter().copied())
         .args(options.package_args)
         .arg("--target")
@@ -2062,13 +2068,18 @@ fn package_and_run_real_fixture_with_options(
         .arg("--output")
         .arg(&output)
         .arg(input)
-        .output()?;
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let package_pid = package_child.id();
+    let package_result = package_child.wait_with_output()?;
     assert!(
         package_result.status.success(),
         "pkg CLI failed: {}{}",
         String::from_utf8_lossy(&package_result.stdout),
         String::from_utf8_lossy(&package_result.stderr)
     );
+    assert_no_leaked_fabricator_temps(Path::new(&cache_root), package_pid);
 
     if let Some(prepare_output_dir) = options.prepare_output_dir {
         let output_dir = output
@@ -2120,6 +2131,70 @@ fn package_and_run_real_fixture_with_options(
         package: package_result,
         run: run_result,
     }))
+}
+
+/// Ensure the compression fixture's npm dependencies are present.
+///
+/// Upstream pkg resolved `minimist`/`chalk` from the JS repo's own root
+/// `node_modules`; this port has no root npm tree, so the fixture carries its
+/// own `package.json` (pinned, chalk on the CommonJS 4.x line because the
+/// fixture uses `require`) and the gitignored `node_modules` is populated on
+/// demand. Returns `false` (skip) when npm or the network is unavailable.
+fn ensure_compression_fixture_deps(fixture_dir: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    if fixture_dir.join("node_modules/minimist").is_dir()
+        && fixture_dir.join("node_modules/chalk").is_dir()
+    {
+        return Ok(true);
+    }
+    let status = Command::new("npm")
+        .current_dir(fixture_dir)
+        .args(["install", "--no-package-lock", "--no-audit", "--no-fund"])
+        .status();
+    if matches!(&status, Ok(exit) if exit.success())
+        && fixture_dir.join("node_modules/minimist").is_dir()
+        && fixture_dir.join("node_modules/chalk").is_dir()
+    {
+        return Ok(true);
+    }
+    eprintln!(
+        "skipping compression smoke: could not install fixture deps ({status:?}); \
+         run `npm install` in {} to enable",
+        fixture_dir.display()
+    );
+    Ok(false)
+}
+
+/// Assert the pkg CLI invocation left no ad-hoc signed fabricator copy behind.
+///
+/// On macOS each build signs a `fetched-*-signed-<pid>-<nonce>` copy of the
+/// fabricator binary for bytecode generation and must delete it afterwards.
+/// The temp name embeds the CLI's pid, so scanning for that pid stays accurate
+/// when gated tests run in parallel against the shared real cache.
+fn assert_no_leaked_fabricator_temps(cache_root: &Path, package_pid: u32) {
+    let marker = format!("-signed-{package_pid}-");
+    let mut leaked = Vec::new();
+    let mut pending = vec![cache_root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(&marker))
+            {
+                leaked.push(path);
+            }
+        }
+    }
+    assert!(
+        leaked.is_empty(),
+        "pkg CLI leaked signed fabricator temp files in the cache: {leaked:?}"
+    );
 }
 
 struct PackageRun {

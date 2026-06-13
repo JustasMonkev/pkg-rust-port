@@ -114,3 +114,34 @@ fn detect_finds_spawn_child_require_resolve() -> Result<(), PkgError> {
     )));
     Ok(())
 }
+
+#[test]
+fn detect_finds_literal_dynamic_import() -> Result<(), PkgError> {
+    let source = r#"
+async function load() {
+  const chunk = await import('./chunk-a.js');
+  const pkg = await import('lazy-pkg');
+  const skipped = await import(someVariable);
+  return [chunk, pkg, skipped];
+}
+"#;
+    let uses = detect(source)?;
+
+    assert!(uses.iter().any(|detected| matches!(
+        &detected.kind,
+        DetectionKind::Successful(derivative)
+            if derivative.alias == "./chunk-a.js"
+                && derivative.alias_kind == AliasKind::Resolvable
+                && derivative.debug_line == r#"import("./chunk-a.js")"#
+    )));
+    assert!(uses.iter().any(|detected| matches!(
+        &detected.kind,
+        DetectionKind::Successful(derivative) if derivative.alias == "lazy-pkg"
+    )));
+    // `import(<non-literal>)` is not a successful derivative.
+    assert!(!uses.iter().any(|detected| matches!(
+        &detected.kind,
+        DetectionKind::Successful(derivative) if derivative.alias.contains("someVariable")
+    )));
+    Ok(())
+}

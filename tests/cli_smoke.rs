@@ -308,21 +308,24 @@ fn cli_help_matches_js_help_text() -> TestResult {
     // Flag descriptions ported verbatim from JS help.ts.
     for fragment in [
         "comma-separated list of targets (see examples)",
-        "package.json or any json file with top-level config",
+        "file with top-level config",
         "bake v8 options into executable to run with them on",
         "don't download prebuilt base binaries, build them",
         "speed up and disclose the sources of top-level project",
         "force specified packages to be considered public",
         "skip bytecode generation and include source files as plain js",
-        "[default=None] compression algorithm = Brotli or GZip",
+        "ship it as plain source instead of skipping it",
+        "compression algorithm = Brotli, GZip, or Zstd",
     ] {
         assert!(help.contains(fragment), "help missing {fragment:?}");
     }
 
     // Examples section ported from JS help.ts.
     assert!(help.contains("Examples:"));
-    assert!(help.contains("$ pkg -t node12-linux,node14-linux,node14-win index.js"));
+    assert!(help.contains("$ pkg -t node22-linux,node24-linux,node24-win index.js"));
     assert!(help.contains("$ pkg --compress GZip index.js"));
+    assert!(help.contains("$ pkg --compress Zstd index.js"));
+    assert!(help.contains("CLI flags override config values."));
     Ok(())
 }
 
@@ -378,8 +381,8 @@ fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
         &output,
         [
             "Error!",
-            "Invalid compression algorithm Crap",
-            "should be None, Brotli or Gzip",
+            "Invalid compression algorithm \"Crap\"",
+            "accepted: None/none, Brotli/br, GZip/gz/gzip, or Zstd/zs/zstd",
         ],
     );
     Ok(())

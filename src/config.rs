@@ -160,9 +160,60 @@ pub struct PkgConfig {
     /// Files that cannot be embedded and must be deployed with the executable.
     #[serde(default)]
     pub deploy_files: Value,
+    /// Glob patterns for files excluded from the package (yao-pkg `ignore`).
+    #[serde(default)]
+    pub ignore: Value,
     /// Extra dictionary entries.
     #[serde(default)]
     pub dictionary: Map<String, Value>,
+    /// Config-file equivalent of `--debug`.
+    pub debug: Option<bool>,
+    /// Config-file equivalent of `--compress`.
+    pub compress: Option<String>,
+    /// Config-file equivalent of `--no-bytecode` (as `bytecode: false`).
+    pub bytecode: Option<bool>,
+    /// Config-file equivalent of `--no-native-build` (as `nativeBuild: false`).
+    pub native_build: Option<bool>,
+    /// Config-file equivalent of `--no-signature` (as `signature: false`).
+    pub signature: Option<bool>,
+    /// Config-file equivalent of `--fallback-to-source`.
+    pub fallback_to_source: Option<bool>,
+    /// Config-file equivalent of `--public`.
+    pub public: Option<bool>,
+    /// Config-file equivalent of `--public-packages`.
+    pub public_packages: Option<StringOrList>,
+    /// Config-file equivalent of `--no-dict` (as `noDictionary`).
+    pub no_dictionary: Option<StringOrList>,
+    /// Config-file equivalent of `--options` (baked v8 options).
+    pub options: Option<StringOrList>,
+}
+
+/// Config value accepted as either a comma-joined string or a string list.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(untagged)]
+pub enum StringOrList {
+    /// `"a,b"` form.
+    String(String),
+    /// `["a", "b"]` form.
+    List(Vec<String>),
+}
+
+impl StringOrList {
+    /// Flatten into a comma-joined string, the shape CLI list flags use.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let list = pkg_rust::StringOrList::List(vec!["a".into(), "b".into()]);
+    /// assert_eq!(list.to_comma_joined(), "a,b");
+    /// ```
+    #[must_use]
+    pub fn to_comma_joined(&self) -> String {
+        match self {
+            Self::String(value) => value.clone(),
+            Self::List(values) => values.join(","),
+        }
+    }
 }
 
 impl PkgConfig {

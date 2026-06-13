@@ -9,7 +9,7 @@ use pkg_rust::{PKG_VERSION, prelude_template};
 fn prelude_injects_pkg_version_for_process_versions() {
     let template = prelude_template(false);
 
-    assert_eq!(PKG_VERSION, "5.8.1");
+    assert_eq!(PKG_VERSION, "6.19.0");
     assert!(template.contains(&format!("process.versions.pkg = '{PKG_VERSION}';")));
     assert!(!template.contains("process.versions.pkg = '%VERSION%';"));
 }
@@ -19,11 +19,14 @@ fn prelude_template_matches_packer_wrapper_shape() {
     let template = prelude_template(false);
 
     assert!(template.starts_with(
-        "return (function (REQUIRE_COMMON, VIRTUAL_FILESYSTEM, DEFAULT_ENTRYPOINT, SYMLINKS, DICT, DOCOMPRESS)"
+        "return (function (REQUIRE_COMMON, REQUIRE_SHARED, VIRTUAL_FILESYSTEM, DEFAULT_ENTRYPOINT, SYMLINKS, DICT, DOCOMPRESS)"
     ));
     assert!(template.contains("const common = {};"));
     assert!(template.contains("REQUIRE_COMMON(common);"));
     assert!(template.contains("exports.STORE_BLOB = 0;"));
+    assert!(template.contains("(function () { var module = { exports: {} };"));
+    assert!(template.contains("return module.exports; })(),"));
+    assert!(template.contains("pickDecompressorSync"));
     assert!(template.contains("%VIRTUAL_FILESYSTEM%"));
     assert!(template.contains("%DEFAULT_ENTRYPOINT%"));
     assert!(template.contains("%SYMLINKS%"));
@@ -36,6 +39,13 @@ fn prelude_template_matches_packer_wrapper_shape() {
 fn debug_prelude_includes_diagnostic_runtime() {
     let template = prelude_template(true);
 
-    assert!(template.contains("function installDiagnostic()"));
-    assert!(template.contains("virtual file system"));
+    assert!(template.contains("REQUIRE_SHARED.installDiagnostic(snapshotPrefix);"));
+    assert!(template.contains("------------------------------- path dictionary"));
+}
+
+#[test]
+fn release_prelude_omits_diagnostic_runtime() {
+    let template = prelude_template(false);
+
+    assert!(!template.contains("REQUIRE_SHARED.installDiagnostic(snapshotPrefix);"));
 }

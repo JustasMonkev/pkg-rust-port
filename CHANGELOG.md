@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- Fixed two ESM transform bugs: interop helpers (`_interop_require_default`
+  and friends) are now injected inline into transformed CommonJS output
+  (previously any ESM default/namespace import crashed packaged binaries
+  with `ReferenceError: _interop_require_default is not defined`), and bare
+  imports that runtime `require()` cannot load — ESM-only packages without
+  a `require` exports condition, and packages whose require-reachable
+  exports target is an `.mjs` file that the packer renames — are rewritten
+  to relative paths pointing at the packaged file. Both rewrites are
+  behavior fixes over yao-pkg, which crashes the same way as of 6.20.0.
+- Retargeted the port from `vercel/pkg` 5.8.1 to the maintained fork
+  `yao-pkg/pkg` 6.19.0 (see `YAO_PKG_PARITY.md` for the gap backlog).
+- Replaced the embedded runtime prelude with the yao-pkg 6.19.0 split prelude
+  (`bootstrap.js` + `bootstrap-shared.js`), including the `REQUIRE_SHARED`
+  wrapper parameter and the inline debug diagnostic that calls
+  `REQUIRE_SHARED.installDiagnostic`. Version reporting and
+  `process.versions.pkg` are now `6.19.0`.
+- Added ESM support: ESM modules transform to CommonJS through SWC before
+  bytecode compilation, with async-IIFE wrapping for top-level await,
+  `import.meta` rewriting, `.mjs` require-path rewriting, and packer
+  renaming of transformed `.mjs` snapshots to `.js`.
+- Added exports-field-aware module resolution for ESM packages, literal
+  dynamic `import()` detection, `.mjs` resolve extensions, and top-level
+  config `ignore` patterns.
+- Added external config file support: `-c/--config` with JSON and JS config
+  modules, `.pkgrc`/`pkg.config.*` auto-discovery, bare-config wrapping, and
+  CLI > config > default resolution for build-shaping flags.
+- Added `--fallback-to-source` and the `--signature` positive flag, plus the
+  hidden positive/negative pairs for config-overridable boolean flags.
+- Retargeted binary fetching to `@yao-pkg/pkg-fetch` 3.6.3 (cache tag `v3.6`,
+  node 16.20.2/18.20.8/20.20.2/22.22.3/24.15.0/26.2.0, new expected-SHA
+  table, new arch tokens).
+- Added Zstd payload compression (`--compress Zstd|zs|zstd`, enum index 3)
+  with native Rust encoding at libzstd default level. Produced binaries
+  require target Node >= 22.15 to decompress (enforced by the runtime
+  prelude). Updated the invalid-algorithm error to the yao-pkg wording.
 - Started the Rust rewrite of `pkg` under `rust-port`.
 - Added typed public APIs for compression, stores, aliases, targets, package
   config, walking, packing, producing executable images, and cache-backed target

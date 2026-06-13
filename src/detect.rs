@@ -612,6 +612,16 @@ fn successful(expr: &Expr, include_invalid_second: bool) -> Option<DetectionKind
         }));
     }
 
+    if let Some(alias) = dynamic_import(expr) {
+        return Some(DetectionKind::Successful(Derivative {
+            debug_line: format!(r#"import("{alias}")"#),
+            alias,
+            alias_kind: AliasKind::Resolvable,
+            must_exclude: false,
+            may_exclude: false,
+        }));
+    }
+
     if let Some(alias) = path_join_dirname(expr) {
         return Some(DetectionKind::Successful(Derivative {
             debug_line: format!(r#"path.join(__dirname, "{alias}")"#),
@@ -694,6 +704,17 @@ fn malformed_require_like(expr: &Expr, kind: RequireKind) -> Option<&Expr> {
         return None;
     }
     call.args.first().map(|arg| arg.expr.as_ref())
+}
+
+/// JS `visitorDynamicImport`: a literal `import("specifier")` call is walked
+/// like a static import so bundler-emitted chunk splits get bundled.
+fn dynamic_import(expr: &Expr) -> Option<String> {
+    let call = call_expr(expr)?;
+    if !matches!(call.callee, Callee::Import(_)) {
+        return None;
+    }
+    let first = call.args.first()?;
+    literal_value(&first.expr)
 }
 
 fn path_join_dirname(expr: &Expr) -> Option<String> {

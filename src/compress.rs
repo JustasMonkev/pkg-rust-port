@@ -11,6 +11,11 @@ pub enum Compression {
     Gzip,
     /// Compress payload entries with Brotli.
     Brotli,
+    /// Compress payload entries with Zstandard.
+    ///
+    /// The packaged executable decompresses through Node's zlib Zstd
+    /// bindings, so the target Node version must be 22.15 or newer.
+    Zstd,
 }
 
 impl Compression {
@@ -20,6 +25,7 @@ impl Compression {
     ///
     /// ```
     /// assert_eq!(pkg_rust::Compression::Brotli.as_index(), 2);
+    /// assert_eq!(pkg_rust::Compression::Zstd.as_index(), 3);
     /// ```
     #[must_use]
     pub const fn as_index(self) -> u8 {
@@ -27,6 +33,7 @@ impl Compression {
             Self::None => 0,
             Self::Gzip => 1,
             Self::Brotli => 2,
+            Self::Zstd => 3,
         }
     }
 
@@ -43,6 +50,7 @@ impl Compression {
             Self::None => "None",
             Self::Gzip => "GZip",
             Self::Brotli => "Brotli",
+            Self::Zstd => "Zstd",
         }
     }
 }
@@ -55,6 +63,7 @@ impl FromStr for Compression {
             "none" => Ok(Self::None),
             "gzip" | "gz" => Ok(Self::Gzip),
             "brotli" | "br" => Ok(Self::Brotli),
+            "zstd" | "zs" => Ok(Self::Zstd),
             _ => Err(CompressionParseError {
                 value: value.to_owned(),
             }),
@@ -64,7 +73,9 @@ impl FromStr for Compression {
 
 /// Error returned when a compression name is not supported.
 #[derive(Debug, Error, Eq, PartialEq)]
-#[error("Invalid compression algorithm {value} ( should be None, Brotli or Gzip)")]
+#[error(
+    "Invalid compression algorithm \"{value}\" (accepted: None/none, Brotli/br, GZip/gz/gzip, or Zstd/zs/zstd)"
+)]
 pub struct CompressionParseError {
     value: String,
 }

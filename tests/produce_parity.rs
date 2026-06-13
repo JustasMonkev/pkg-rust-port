@@ -106,6 +106,36 @@ fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
 }
 
 #[test]
+fn zstd_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
+    let entrypoint = fixture_dir.join("test-z-require-content.css");
+    let walked = walk(
+        empty_marker()?,
+        &entrypoint,
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+    let refined = refine_walked(walked, &entrypoint, PathStyle::Posix);
+    let packed = pack(refined, false)?;
+    let manifest = produce_manifest(packed, Compression::Zstd, PathStyle::Posix)?;
+
+    assert_eq!(manifest.compression, Compression::Zstd);
+    assert!(manifest.payload_size > 0);
+    assert!(manifest.vfs.keys().any(|key| key.starts_with("0/1/")));
+    Ok(())
+}
+
+#[test]
+fn zstd_prelude_renders_docompress_index() -> Result<(), PkgError> {
+    let packed = packed_content_and_stat("/test-x-index.js", b"console.log('hi');");
+    let manifest = produce_manifest(packed, Compression::Zstd, PathStyle::Posix)?;
+    let rendered = render_prelude("%DOCOMPRESS%", &manifest)?;
+
+    assert_eq!(rendered, "3");
+    Ok(())
+}
+
+#[test]
 fn renders_prelude_placeholders_from_manifest() -> Result<(), PkgError> {
     let packed = packed_content_and_stat("/test-x-index.js", b"console.log('hi');");
     let manifest = produce_manifest(packed, Compression::None, PathStyle::Posix)?;
@@ -223,6 +253,31 @@ fn write_executable_image_errors_without_blob_fabricator() -> Result<(), Box<dyn
         matches!(error, Some(PkgError::Pack(message)) if message.contains("bytecode fabricator executable path is required"))
     );
     assert!(!output.exists());
+    Ok(())
+}
+
+#[test]
+fn placeholder_discovery_skips_apostrophe_quoted_source_literal() -> Result<(), PkgError> {
+    // yao-pkg/pkg#86: a quoted occurrence of the placeholder text inside the
+    // binary's embedded source must not shadow the real injection site.
+    let mut binary = Vec::new();
+    binary.extend_from_slice(b"var s = '// PAYLOAD_POSITION //';");
+    let quoted_position = binary
+        .windows(b"// PAYLOAD_POSITION //".len())
+        .position(|window| window == b"// PAYLOAD_POSITION //")
+        .ok_or_else(|| PkgError::Pack("missing quoted occurrence".to_owned()))?;
+    binary.extend_from_slice(b"real:");
+    let real_position = binary.len();
+    binary.extend_from_slice(b"// PAYLOAD_POSITION //");
+    binary.extend_from_slice(&bakery_placeholder());
+    binary.extend_from_slice(b"// PAYLOAD_SIZE //// PRELUDE_POSITION //// PRELUDE_SIZE //");
+
+    let placeholders = discover_placeholders(&binary);
+    let payload_position = placeholders
+        .payload_position
+        .ok_or_else(|| PkgError::Pack("payload position placeholder missing".to_owned()))?;
+    assert_eq!(payload_position.position, real_position);
+    assert_ne!(payload_position.position, quoted_position);
     Ok(())
 }
 
