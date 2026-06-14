@@ -857,6 +857,7 @@ pub(crate) fn run_sea(plan: &PackagePlan, log: &dyn Fn(&str)) -> Result<(), PkgE
     // downloading, generating a blob, and only then erroring on the macOS/Windows
     // injectors. (PR #6 review P1.)
     validate_sea_targets(&targets)?;
+    reject_sea_force_build(&targets)?;
     let resolved_versions = targets
         .iter()
         .map(resolve_target_node_version)
@@ -890,6 +891,24 @@ fn validate_sea_targets(targets: &[NodeTarget]) -> Result<(), PkgError> {
              (macOS and Windows SEA injection is the next slice).",
             unsupported.join(", ")
         )));
+    }
+    Ok(())
+}
+
+/// Reject `--build`/`-b` for SEA targets.
+///
+/// `--build` means "don't download prebuilt base binaries, build them", but SEA
+/// downloads official Node.js binaries from nodejs.org and has no source-build
+/// path (yao-pkg's SEA likewise never honors it). Rather than silently ignoring
+/// the flag and downloading a prebuilt base, fail closed. (PR #6 review.)
+fn reject_sea_force_build(targets: &[NodeTarget]) -> Result<(), PkgError> {
+    if targets.iter().any(|target| target.force_build) {
+        return Err(PkgError::Sea(
+            "SEA mode does not support --build (-b): SEA builds download official \
+             Node.js binaries from nodejs.org and have no source-build path. \
+             Remove --build to create a SEA executable."
+                .to_owned(),
+        ));
     }
     Ok(())
 }
@@ -1317,6 +1336,20 @@ mod tests {
         assert!(matches!(
             validate_sea_targets(&targets("node22-alpine-x64")?),
             Err(PkgError::Sea(message)) if message == "Unsupported OS: alpine"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_build_flag_for_sea() -> Result<(), TargetParseError> {
+        let mut list = targets("node22-linux-x64")?;
+        assert!(reject_sea_force_build(&list).is_ok());
+        for target in &mut list {
+            target.force_build = true;
+        }
+        assert!(matches!(
+            reject_sea_force_build(&list),
+            Err(PkgError::Sea(message)) if message.contains("does not support --build")
         ));
         Ok(())
     }
