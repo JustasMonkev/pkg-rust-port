@@ -273,11 +273,12 @@ fn resolve_target_node_version(target: &NodeTarget) -> Result<String, PkgError> 
 
 /// Resolve the latest `vX.Y.Z` covering a partial range (`getNodeVersion`).
 fn get_node_version(os: &str, arch: &str, node_version: &str) -> Result<String, PkgError> {
-    if !sea_validate_node_version_format(node_version) {
+    let latest = node_version == "latest";
+    if !latest && !sea_validate_node_version_format(node_version) {
         return Err(PkgError::Sea("Invalid node version format".to_owned()));
     }
     let parts: Vec<&str> = node_version.split('.').collect();
-    if parts.len() == 3 {
+    if !latest && parts.len() == 3 {
         return Ok(format!("v{node_version}"));
     }
 
@@ -296,12 +297,11 @@ fn get_node_version(os: &str, arch: &str, node_version: &str) -> Result<String, 
         .map_err(|source| PkgError::Sea(format!("Failed to fetch node versions: {source}")))?;
 
     let node_os = if os == "darwin" { "osx" } else { os };
-    let prefix = format!("v{node_version}");
     let file_prefix = format!("{node_os}-{arch}");
     versions
         .iter()
         .find(|entry| {
-            entry.version.starts_with(&prefix)
+            node_version_matches_request(&entry.version, node_version)
                 && entry
                     .files
                     .iter()
@@ -315,6 +315,10 @@ fn get_node_version(os: &str, arch: &str, node_version: &str) -> Result<String, 
 struct NodeIndexEntry {
     version: String,
     files: Vec<String>,
+}
+
+fn node_version_matches_request(entry_version: &str, node_version: &str) -> bool {
+    node_version == "latest" || entry_version.starts_with(&format!("v{node_version}"))
 }
 
 /// Download `url` to `path`, streaming the body to disk.
@@ -588,13 +592,6 @@ fn pick_blob_generator_binary_for_version(
     target_version: &str,
     log: &dyn Fn(&str),
 ) -> Result<PathBuf, PkgError> {
-    if let Some(index) =
-        sea_pick_matching_host_target_index(Platform::host(), Arch::host(), targets)
-        && let Some(path) = node_paths.get(index)
-    {
-        return Ok(path.clone());
-    }
-
     let host_version = host_node_version();
     if host_version.as_deref() == Some(target_version)
         && let Ok(path) = which_node()
@@ -602,6 +599,32 @@ fn pick_blob_generator_binary_for_version(
         // JS uses process.execPath (the Node running pkg). pkg-rust is not Node,
         // so the version-matched host `node` on PATH is the generator.
         return Ok(path);
+    }
+
+    if let Some(index) =
+        sea_pick_matching_host_target_index(Platform::host(), Arch::host(), targets)
+        && let Some(target) = targets.get(index)
+        && can_run_downloaded_target_on_host(
+            target,
+            Platform::host(),
+            Arch::host(),
+            host_uses_musl(),
+        )
+        && let Some(path) = node_paths.get(index)
+    {
+        return Ok(path.clone());
+    }
+
+    if host_uses_musl() {
+        return Err(PkgError::Sea(format!(
+            "Cannot generate SEA blob: host node {} differs from target {} and \
+             official linux Node archives are glibc-linked, so they are not used \
+             as generators on musl/Alpine hosts. Install node {} locally and run \
+             the build again.",
+            host_version.as_deref().unwrap_or("(absent)"),
+            target_version,
+            target_version,
+        )));
     }
 
     // No host-matching target and no version-matched host node: download a
@@ -636,6 +659,33 @@ fn pick_blob_generator_binary_for_version(
             target_version,
         ))
     })
+}
+
+fn can_run_downloaded_target_on_host(
+    target: &NodeTarget,
+    host_platform: Platform,
+    host_arch: Arch,
+    host_uses_musl: bool,
+) -> bool {
+    target.platform == host_platform
+        && target.arch == host_arch
+        && !(host_uses_musl && target.platform == Platform::Linux)
+}
+
+fn host_uses_musl() -> bool {
+    if cfg!(target_env = "musl") {
+        return true;
+    }
+    Command::new("ldd")
+        .arg("--version")
+        .output()
+        .ok()
+        .map(|output| {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            stdout.contains("musl") || stderr.contains("musl")
+        })
+        .unwrap_or(false)
 }
 
 /// Resolve a `node` executable from `PATH`.
@@ -828,13 +878,7 @@ fn run_simple_sea(
             let version_label = version.trim_start_matches('v');
             let blob_path = tmp_dir.join(format!("sea-prep-{version_label}.blob"));
             let config_path = tmp_dir.join(format!("sea-config-{version_label}.json"));
-            let sea_config = serde_json::json!({
-                "main": entrypoint,
-                "output": blob_path,
-                "disableExperimentalSEAWarning": true,
-                "useSnapshot": false,
-                "useCodeCache": false,
-            });
+            let sea_config = simple_sea_config(entrypoint, &blob_path)?;
             log(&format!(
                 "Creating sea-config.json file for node {version}..."
             ));
@@ -903,6 +947,63 @@ fn group_indices_by_version(resolved_targets: &[ResolvedSeaTarget]) -> Vec<(Stri
         }
     }
     groups
+}
+
+fn simple_sea_config(entrypoint: &Path, blob_path: &Path) -> Result<serde_json::Value, PkgError> {
+    let mut config = serde_json::json!({
+        "main": entrypoint,
+        "output": blob_path,
+        "disableExperimentalSEAWarning": true,
+        "useSnapshot": false,
+        "useCodeCache": false,
+    });
+    if simple_sea_main_format(entrypoint)? == Some("module")
+        && let Some(object) = config.as_object_mut()
+    {
+        object.insert(
+            "mainFormat".to_owned(),
+            serde_json::Value::String("module".to_owned()),
+        );
+    }
+    Ok(config)
+}
+
+fn simple_sea_main_format(entrypoint: &Path) -> Result<Option<&'static str>, PkgError> {
+    if entrypoint.extension().and_then(|ext| ext.to_str()) == Some("mjs") {
+        return Ok(Some("module"));
+    }
+    if entrypoint.extension().and_then(|ext| ext.to_str()) != Some("js") {
+        return Ok(None);
+    }
+    let Some(package_path) = nearest_package_json(entrypoint) else {
+        return Ok(None);
+    };
+    let content = fs::read_to_string(&package_path).map_err(|source| PkgError::Io {
+        path: package_path.display().to_string(),
+        source,
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&content).map_err(|source| {
+        PkgError::Sea(format!(
+            "failed to read package type from {}: {source}",
+            package_path.display()
+        ))
+    })?;
+    Ok(value
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|module_type| module_type == "module")
+        .then_some("module"))
+}
+
+fn nearest_package_json(entrypoint: &Path) -> Option<PathBuf> {
+    let mut current = entrypoint.parent()?;
+    loop {
+        let candidate = current.join("package.json");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        current = current.parent()?;
+    }
 }
 
 /// Create a unique SEA temp directory (`withSeaTmpDir`, without the `chdir`).
@@ -995,6 +1096,13 @@ mod tests {
         assert!(!sea_validate_node_version_format("160"));
         assert!(!sea_validate_node_version_format(""));
         assert!(!sea_validate_node_version_format("16."));
+    }
+
+    #[test]
+    fn latest_node_range_matches_any_dist_index_version() {
+        assert!(node_version_matches_request("v24.11.1", "latest"));
+        assert!(node_version_matches_request("v22.22.3", "22"));
+        assert!(!node_version_matches_request("v24.11.1", "22"));
     }
 
     #[test]
@@ -1091,6 +1199,60 @@ mod tests {
             ),
             Ok(path) if path == Path::new("/cache/host-node")
         ));
+    }
+
+    #[test]
+    fn generator_does_not_reuse_glibc_linux_target_on_musl_host() {
+        let target = NodeTarget {
+            node_range: "node22".to_owned(),
+            platform: Platform::Linux,
+            arch: Arch::X64,
+            force_build: false,
+        };
+
+        assert!(!can_run_downloaded_target_on_host(
+            &target,
+            Platform::Linux,
+            Arch::X64,
+            true,
+        ));
+        assert!(can_run_downloaded_target_on_host(
+            &target,
+            Platform::Linux,
+            Arch::X64,
+            false,
+        ));
+    }
+
+    #[test]
+    fn simple_sea_config_marks_esm_entrypoints_as_modules() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let dir = unique_tmp("esm-format");
+        fs::create_dir_all(&dir)?;
+        let mjs_entry = dir.join("index.mjs");
+        fs::write(&mjs_entry, "import fs from 'node:fs';")?;
+        let config = simple_sea_config(&mjs_entry, &dir.join("sea.blob"))?;
+        assert_eq!(
+            config.get("mainFormat").and_then(serde_json::Value::as_str),
+            Some("module")
+        );
+
+        let js_entry = dir.join("index.js");
+        fs::write(&js_entry, "import fs from 'node:fs';")?;
+        fs::write(dir.join("package.json"), r#"{"type":"module"}"#)?;
+        let config = simple_sea_config(&js_entry, &dir.join("sea-js.blob"))?;
+        assert_eq!(
+            config.get("mainFormat").and_then(serde_json::Value::as_str),
+            Some("module")
+        );
+
+        let cjs_entry = dir.join("index.cjs");
+        fs::write(&cjs_entry, "require('node:fs');")?;
+        let config = simple_sea_config(&cjs_entry, &dir.join("sea-cjs.blob"))?;
+        assert_eq!(config.get("mainFormat"), None);
+
+        let _ = fs::remove_dir_all(&dir);
+        Ok(())
     }
 
     #[test]
