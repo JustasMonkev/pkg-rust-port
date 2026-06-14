@@ -878,7 +878,7 @@ fn run_simple_sea(
             let version_label = version.trim_start_matches('v');
             let blob_path = tmp_dir.join(format!("sea-prep-{version_label}.blob"));
             let config_path = tmp_dir.join(format!("sea-config-{version_label}.json"));
-            let sea_config = simple_sea_config(entrypoint, &blob_path)?;
+            let sea_config = simple_sea_config(entrypoint, &blob_path, &plan.bakes)?;
             log(&format!(
                 "Creating sea-config.json file for node {version}..."
             ));
@@ -949,7 +949,11 @@ fn group_indices_by_version(resolved_targets: &[ResolvedSeaTarget]) -> Vec<(Stri
     groups
 }
 
-fn simple_sea_config(entrypoint: &Path, blob_path: &Path) -> Result<serde_json::Value, PkgError> {
+fn simple_sea_config(
+    entrypoint: &Path,
+    blob_path: &Path,
+    bakes: &[String],
+) -> Result<serde_json::Value, PkgError> {
     let mut config = serde_json::json!({
         "main": entrypoint,
         "output": blob_path,
@@ -957,6 +961,11 @@ fn simple_sea_config(entrypoint: &Path, blob_path: &Path) -> Result<serde_json::
         "useSnapshot": false,
         "useCodeCache": false,
     });
+    if !bakes.is_empty()
+        && let Some(object) = config.as_object_mut()
+    {
+        object.insert("execArgv".to_owned(), serde_json::json!(bakes));
+    }
     if simple_sea_main_format(entrypoint)? == Some("module")
         && let Some(object) = config.as_object_mut()
     {
@@ -1231,7 +1240,7 @@ mod tests {
         fs::create_dir_all(&dir)?;
         let mjs_entry = dir.join("index.mjs");
         fs::write(&mjs_entry, "import fs from 'node:fs';")?;
-        let config = simple_sea_config(&mjs_entry, &dir.join("sea.blob"))?;
+        let config = simple_sea_config(&mjs_entry, &dir.join("sea.blob"), &[])?;
         assert_eq!(
             config.get("mainFormat").and_then(serde_json::Value::as_str),
             Some("module")
@@ -1240,7 +1249,7 @@ mod tests {
         let js_entry = dir.join("index.js");
         fs::write(&js_entry, "import fs from 'node:fs';")?;
         fs::write(dir.join("package.json"), r#"{"type":"module"}"#)?;
-        let config = simple_sea_config(&js_entry, &dir.join("sea-js.blob"))?;
+        let config = simple_sea_config(&js_entry, &dir.join("sea-js.blob"), &[])?;
         assert_eq!(
             config.get("mainFormat").and_then(serde_json::Value::as_str),
             Some("module")
@@ -1248,8 +1257,36 @@ mod tests {
 
         let cjs_entry = dir.join("index.cjs");
         fs::write(&cjs_entry, "require('node:fs');")?;
-        let config = simple_sea_config(&cjs_entry, &dir.join("sea-cjs.blob"))?;
+        let config = simple_sea_config(&cjs_entry, &dir.join("sea-cjs.blob"), &[])?;
         assert_eq!(config.get("mainFormat"), None);
+
+        let _ = fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn simple_sea_config_passes_baked_options_as_exec_argv()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = unique_tmp("baked-options");
+        fs::create_dir_all(&dir)?;
+        let entry = dir.join("index.js");
+        fs::write(&entry, "console.log(typeof global.gc);")?;
+        let bakes = vec![
+            "--expose-gc".to_owned(),
+            "--max-old-space-size=64".to_owned(),
+        ];
+
+        let config = simple_sea_config(&entry, &dir.join("sea.blob"), &bakes)?;
+        assert_eq!(
+            config.get("execArgv"),
+            Some(&serde_json::json!([
+                "--expose-gc",
+                "--max-old-space-size=64"
+            ]))
+        );
+
+        let config = simple_sea_config(&entry, &dir.join("sea-empty.blob"), &[])?;
+        assert_eq!(config.get("execArgv"), None);
 
         let _ = fs::remove_dir_all(&dir);
         Ok(())
