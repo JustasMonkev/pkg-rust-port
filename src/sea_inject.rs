@@ -65,24 +65,23 @@ pub(crate) fn injection_supported(platform: Platform) -> bool {
     )
 }
 
-/// Inject the SEA blob into a target executable image and flip the fuse.
+/// Flip the fuse in the target executable image and inject the SEA blob.
 ///
 /// `platform` selects the object-format strategy; the magic bytes are validated
 /// against it so a mismatched binary fails loudly instead of being corrupted.
 pub(crate) fn inject_sea_blob(
-    image: Vec<u8>,
+    mut image: Vec<u8>,
     blob: &[u8],
     platform: Platform,
 ) -> Result<Vec<u8>, PkgError> {
-    let mut image = match platform {
-        Platform::Win => inject_pe(image, blob)?,
-        Platform::Macos => inject_macho(image, blob)?,
+    match platform {
+        Platform::Win => inject_pe(image, blob),
+        Platform::Macos => inject_macho(image, blob),
         Platform::Linux | Platform::LinuxStatic | Platform::Alpine | Platform::Freebsd => {
-            inject_elf(image, blob)?
+            flip_sea_fuse(&mut image)?;
+            inject_elf(image, blob)
         }
-    };
-    flip_sea_fuse(&mut image)?;
-    Ok(image)
+    }
 }
 
 /// Flip the SEA fuse sentinel `…:0` to `…:1` so Node activates the blob.
@@ -353,7 +352,8 @@ fn inject_elf(mut image: Vec<u8>, blob: &[u8]) -> Result<Vec<u8>, PkgError> {
     endian.write_u16(&mut image[E_PHNUM..], new_phnum as u16);
 
     // ET_EXEC binaries keep absolute addresses; nothing else needs touching. The
-    // fuse flip happens in the caller once the format-specific work is done.
+    // caller flips the SEA fuse before appending the blob so payload bytes cannot
+    // create false duplicate fuse matches.
     let _ = E_TYPE;
 
     Ok(image)
@@ -560,6 +560,32 @@ mod tests {
     }
 
     #[test]
+    fn inactive_fuse_text_inside_blob_does_not_look_like_duplicate_binary_fuse()
+    -> Result<(), PkgError> {
+        let inactive = format!("{}:0", sea_fuse_sentinel());
+        let active = format!("{}:1", sea_fuse_sentinel());
+        let blob = format!("test fixture includes {inactive} as plain payload text");
+
+        let injected = inject_sea_blob(synthetic_elf(1), blob.as_bytes(), Platform::Linux)?;
+
+        let count_active = injected
+            .windows(active.len())
+            .filter(|window| *window == active.as_bytes())
+            .count();
+        assert_eq!(count_active, 1, "base binary fuse activated once");
+
+        let count_inactive = injected
+            .windows(inactive.len())
+            .filter(|window| *window == inactive.as_bytes())
+            .count();
+        assert_eq!(
+            count_inactive, 1,
+            "inactive marker inside the SEA blob stays payload data"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn missing_fuse_is_rejected() {
         assert!(matches!(
             inject_sea_blob(synthetic_elf(0), b"blob", Platform::Linux),
@@ -583,6 +609,18 @@ mod tests {
         ));
         assert!(matches!(
             inject_sea_blob(synthetic_elf(1), b"blob", Platform::Win),
+            Err(PkgError::Sea(message)) if message.contains("Windows")
+        ));
+    }
+
+    #[test]
+    fn unsupported_formats_fail_before_fuse_scanning() {
+        assert!(matches!(
+            inject_sea_blob(synthetic_elf(0), b"blob", Platform::Macos),
+            Err(PkgError::Sea(message)) if message.contains("macOS")
+        ));
+        assert!(matches!(
+            inject_sea_blob(synthetic_elf(0), b"blob", Platform::Win),
             Err(PkgError::Sea(message)) if message.contains("Windows")
         ));
     }
