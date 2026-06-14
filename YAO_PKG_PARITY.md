@@ -41,7 +41,8 @@ porting order. Items move to "Done" as they land with parity tests.
   `--no-fallback-to-source`). JS config modules are evaluated through the
   host `node` (same external boundary as bytecode fabrication). Not yet
   ported: unknown-key warnings and per-key type-error wording from
-  `validatePkgConfig`, and the `sea` flag (blocked on the SEA slice).
+  `validatePkgConfig`. The `sea` flag is now wired (CLI > config > default),
+  resolved alongside the other build-shaping flags (see the SEA slice below).
 - [x] pkg-fetch retargeted to `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`,
   release downloads from `yao-pkg/pkg-fetch`, the 3.6.3 patched node version
   set (8/10/12/14/16.20.2/18.20.8/20.20.2/22.22.3/24.15.0/26.2.0), the 3.6.3
@@ -63,7 +64,8 @@ porting order. Items move to "Done" as they land with parity tests.
 - [x] Help text / CLI surface updated to the yao-pkg help: config-file
   discovery wording, signature flag wording, Brotli/GZip/Zstd compression
   line, node22/node24 examples, Zstd example, and the config-file
-  paragraph. `--sea` stays out of the help until the SEA slice lands.
+  paragraph. `--sea` is now in the help (flag line, config paragraph, and
+  the `pkg --sea index.js` example) with the SEA slice landed.
 
 - [x] Walker/detector deltas (non-ESM): literal dynamic `import("x")` is
   detected as a resolvable alias (`visitorDynamicImport`); module resolution
@@ -103,10 +105,43 @@ porting order. Items move to "Done" as they land with parity tests.
   and load fine through the exports map — verified against the real
   node22 runtime).
 
+- [x] SEA support — **simple mode + shared foundation** (`lib/sea.ts`
+  `sea()` path). `--sea`/config `sea` build a Node single executable for a
+  bare entry file. Ported: the deterministic core (nodejs.org os/arch
+  mapping with the yao-pkg `NODE_OSES`/`NODE_ARCHS` sets and wording,
+  archive-filename + dist/unofficial-builds URL construction, version-format
+  validation, host `>= 22` assertion, single-major / min-major checks,
+  matching-host-target generator selection); the I/O pipeline (download +
+  `SHASUMS256.txt` checksum + zip/tar.gz extraction with `.ok` sentinels and
+  the `~/.pkg-cache/sea` cache, honoring `PKG_CACHE_PATH`; blob generation via
+  the host `node --experimental-sea-config`; bake = copy + inject; macOS
+  ad-hoc signing reusing `mach-o.rs`); and **native** `NODE_SEA_BLOB`
+  injection. DECISION: injection is native Rust rather than shelling out to
+  `postject` — Node's ELF resource finder (`postject-api.h`) locates the blob
+  by scanning `PT_NOTE` segments via `dl_iterate_phdr`, so injection appends
+  the blob as an ELF note, maps it with a fresh `PT_LOAD`, exposes it through a
+  fresh `PT_NOTE`, repoints `PT_PHDR` to the relocated header table, and flips
+  the `NODE_SEA_FUSE_…:0` fuse. ELF injection is verified end to end against
+  the real Node 22 runtime on Linux x64. Remaining (next slice): see item 1.
+
 ## Backlog (porting order)
 
-1. **SEA support** (`--sea`, `lib/sea.ts` ~930 lines, `lib/sea-assets.ts`,
-   `prelude/sea-*.js`): Node single-executable-application pipeline.
+1. **SEA: enhanced mode + macOS/Windows injection** (`lib/sea.ts`
+   `seaEnhanced()`, `lib/sea-assets.ts`, `prelude/sea-*.js`). The simple-mode
+   foundation landed (see Done); what remains:
+   - **Enhanced mode**: when an input `package.json`/config is present, walk
+     dependencies with `seaMode: true` (blob stores downgraded to content; no
+     ESM transform; JS/ESM bodies read for shipping), build the per-file SEA
+     archive + `__pkg_manifest__` (`sea-assets.ts`), and use the bundled VFS
+     bootstrap (`prelude/sea-bootstrap.bundle.js`, an esbuild bundle of
+     `sea-bootstrap.js` + `sea-vfs-setup.js` + `bootstrap-shared.js` — vendor
+     the generated bundle or assemble it). Currently fails closed with a
+     precise error.
+   - **macOS (Mach-O) injection**: add the `NODE_SEA` segment + `__NODE_SEA_BLOB`
+     section, then the existing Mach-O payload-patch skip + ad-hoc re-sign.
+     Currently fails closed.
+   - **Windows (PE) injection**: add the `NODE_SEA_BLOB` `RT_RCDATA` resource.
+     Currently fails closed.
    Design notes from the 2026-06-09 study of yao-pkg 6.19.0:
    - Host requirement: Node >= 20 on the build machine; enhanced mode
      requires a single target major and Node >= 22 targets.

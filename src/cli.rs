@@ -131,12 +131,19 @@ struct Cli {
     /// [default=None] compression algorithm = Brotli, GZip, or Zstd (Zstd requires Node.js >= 22.15 in the produced executable)
     #[arg(short = 'C', long = "compress", value_name = "compress")]
     compress: Option<String>,
+
+    /// (Experimental) compile given file using node's SEA feature. Requires node v22.0.0 or higher on the build host
+    #[arg(long = "sea", overrides_with = "no_sea")]
+    sea: bool,
+
+    #[arg(long = "no-sea", hide = true, overrides_with = "sea")]
+    no_sea: bool,
 }
 
 /// Usage examples appended to the CLI help, mirroring the JS `help.ts` output.
 const CLI_EXAMPLES: &str = "\
 All build-shaping flags above (compress, fallback-to-source, public, public-packages,
-options, bytecode, native-build, no-dict, debug, signature) can also be set in
+options, bytecode, native-build, no-dict, debug, signature, sea) can also be set in
 the pkg config file (camelCase keys). CLI flags override config values.
 
 Examples:
@@ -160,7 +167,9 @@ Examples:
 – reduce size of the data packed inside the executable with GZip
   $ pkg --compress GZip index.js
 – reduce size further with Zstd (Node.js >= 22.15 required at runtime)
-  $ pkg --compress Zstd index.js";
+  $ pkg --compress Zstd index.js
+– compile the file using node's SEA feature. Creates executables for Linux, macOS and Windows
+  $ pkg --sea index.js";
 
 /// Planned output artifact for one target.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -201,6 +210,11 @@ pub struct PackagePlan {
     /// Whether failed bytecode fabrication ships plain source instead of
     /// skipping the file.
     pub fallback_to_source: bool,
+    /// Whether to build a Single Executable Application via Node's SEA feature.
+    pub sea: bool,
+    /// Whether the SEA build uses enhanced mode (input is a package.json or a
+    /// resolved config file) rather than simple mode (a bare entry file).
+    pub sea_enhanced: bool,
     /// Whether JavaScript source should be disclosed for the top-level package.
     pub public_toplevel: bool,
     /// Dependency package names whose JavaScript source should be disclosed.
@@ -285,6 +299,30 @@ where
     }
     if plan.compression != Compression::None {
         println!("compression:  {}", plan.compression.cli_label());
+    }
+    if plan.sea {
+        // SEA downloads from nodejs.org and shells out to the host node via
+        // blocking reqwest/Command, so run it on a dedicated OS thread (like the
+        // classic build) instead of inside the Tokio runtime.
+        let plan_for_sea = plan.clone();
+        let sea_thread = std::thread::Builder::new()
+            .name("pkg-rust-sea".to_owned())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(move || {
+                let log = |message: &str| println!("> {message}");
+                crate::sea::run_sea(&plan_for_sea, &log)
+            })
+            .map_err(|source| PkgError::Io {
+                path: "pkg-rust-sea thread".to_owned(),
+                source,
+            })?;
+        return tokio::task::spawn_blocking(move || {
+            sea_thread
+                .join()
+                .map_err(|_payload| PkgError::Cli("SEA build task panicked".to_owned()))?
+        })
+        .await
+        .map_err(|error| PkgError::Cli(format!("SEA build join task failed: {error}")))?;
     }
     let cache = PkgFetchCache::default_cache()?;
     let prelude = prelude_template(debug);
@@ -450,6 +488,14 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         flag_config.and_then(|pkg| pkg.public),
         false,
     );
+    let sea = resolve_bool(
+        cli_bool(cli.sea, cli.no_sea),
+        flag_config.and_then(|pkg| pkg.sea),
+        false,
+    );
+    // JS index.ts routes to enhanced SEA mode when an input package.json
+    // (`inputJson`) or a resolved config file (`configJson`) is present.
+    let sea_enhanced = input_package.is_some() || config.is_some();
     let public_packages_raw = cli.public_packages.clone().or_else(|| {
         flag_config
             .and_then(|pkg| pkg.public_packages.as_ref())
@@ -542,6 +588,8 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         native_build,
         signature,
         fallback_to_source,
+        sea,
+        sea_enhanced,
         public_toplevel,
         public_packages,
         no_dictionary,
