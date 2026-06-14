@@ -46,6 +46,8 @@ const MIN_SEA_NODE_MAJOR: u32 = 22;
 const MIN_SEA_TARGET_MAJOR: u32 = 20;
 /// `mainFormat: "module"` is documented in Node SEA config starting in v26.
 const MIN_SEA_ESM_TARGET_MAJOR: u32 = 26;
+/// The SEA config `execArgv` field (baked `--options`) was added in Node v22.
+const MIN_SEA_EXECARGV_TARGET_MAJOR: u32 = 22;
 
 // ---------------------------------------------------------------------------
 // Deterministic mapping (offline-testable)
@@ -865,6 +867,7 @@ pub(crate) fn run_sea(plan: &PackagePlan, log: &dyn Fn(&str)) -> Result<(), PkgE
     sea_assert_supported_resolved_target_major(&resolved_versions)?;
     sea_assert_single_resolved_target_major(&resolved_versions)?;
     validate_simple_sea_format_support(&plan.entrypoint, &resolved_versions)?;
+    validate_simple_sea_options_support(&plan.bakes, &resolved_versions)?;
 
     run_simple_sea(plan, &targets, &resolved_versions, log)
 }
@@ -934,6 +937,36 @@ fn validate_simple_sea_format_support(
         "ESM simple SEA requires target Node.js >= {MIN_SEA_ESM_TARGET_MAJOR}.0.0 \
          because older SEA configs only support CommonJS injected mains; \
          unsupported target version(s): {}.",
+        unsupported.join(", ")
+    )))
+}
+
+/// Reject baked `--options` for SEA targets whose Node predates `execArgv`.
+///
+/// The SEA config `execArgv` field was added in Node v22; on older targets the
+/// generated blob silently omits the baked options. Fail closed rather than
+/// produce an executable that ignores the requested flags. (PR #6 review.)
+fn validate_simple_sea_options_support(
+    bakes: &[String],
+    resolved_versions: &[String],
+) -> Result<(), PkgError> {
+    if bakes.is_empty() {
+        return Ok(());
+    }
+    let unsupported = resolved_versions
+        .iter()
+        .filter(|version| {
+            version_major(version).is_some_and(|major| major < MIN_SEA_EXECARGV_TARGET_MAJOR)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        return Ok(());
+    }
+    Err(PkgError::Sea(format!(
+        "--options for simple SEA requires target Node.js >= {MIN_SEA_EXECARGV_TARGET_MAJOR}.0.0 \
+         because older SEA configs lack the execArgv field, so the baked options would be \
+         silently dropped; unsupported target version(s): {}.",
         unsupported.join(", ")
     )))
 }
@@ -1338,6 +1371,19 @@ mod tests {
             Err(PkgError::Sea(message)) if message == "Unsupported OS: alpine"
         ));
         Ok(())
+    }
+
+    #[test]
+    fn rejects_options_for_pre_execargv_targets() {
+        // execArgv (baked --options) was added to Node's SEA config in v22.
+        let bakes = vec!["--expose-gc".to_owned()];
+        assert!(validate_simple_sea_options_support(&bakes, &["v22.22.2".to_owned()]).is_ok());
+        // No baked options -> nothing to gate, even on older targets.
+        assert!(validate_simple_sea_options_support(&[], &["v20.20.2".to_owned()]).is_ok());
+        assert!(matches!(
+            validate_simple_sea_options_support(&bakes, &["v20.20.2".to_owned()]),
+            Err(PkgError::Sea(message)) if message.contains("execArgv") && message.contains("v20.20.2")
+        ));
     }
 
     #[test]
