@@ -143,23 +143,19 @@ pub fn sea_validate_node_version_format(version: &str) -> bool {
     })
 }
 
-/// Parse the major from a `node<major>` range, falling back to `host_major`
-/// when the range is not a plain `node<digits>` form (e.g. `latest`).
-fn target_major(node_range: &str, host_major: u32) -> u32 {
+/// Parse the major from a `node<major>` range.
+fn target_major(node_range: &str) -> Option<u32> {
     node_range
         .strip_prefix("node")
-        .and_then(|rest| rest.parse::<u32>().ok())
-        .unwrap_or(host_major)
+        .and_then(|rest| rest.split('.').next())
+        .and_then(|major| major.parse::<u32>().ok())
 }
 
 /// Smallest target Node major across a list (`resolveMinTargetMajor`).
 pub fn sea_resolve_min_target_major(targets: &[NodeTarget], host_major: u32) -> u32 {
-    if targets.is_empty() {
-        return host_major;
-    }
     targets
         .iter()
-        .map(|target| target_major(&target.node_range, host_major))
+        .filter_map(|target| target_major(&target.node_range))
         .min()
         .unwrap_or(host_major)
 }
@@ -171,8 +167,24 @@ pub fn sea_assert_single_target_major(
 ) -> Result<(), PkgError> {
     let mut majors: Vec<u32> = targets
         .iter()
-        .map(|target| target_major(&target.node_range, host_major))
+        .filter_map(|target| target_major(&target.node_range))
         .collect();
+    if majors.is_empty() {
+        majors.push(host_major);
+    }
+    assert_single_major(majors)
+}
+
+fn sea_assert_single_resolved_target_major(versions: &[String]) -> Result<(), PkgError> {
+    assert_single_major(
+        versions
+            .iter()
+            .filter_map(|version| version_major(version))
+            .collect(),
+    )
+}
+
+fn assert_single_major(mut majors: Vec<u32>) -> Result<(), PkgError> {
     majors.sort_unstable();
     majors.dedup();
     if majors.len() > 1 {
@@ -318,7 +330,14 @@ struct NodeIndexEntry {
 }
 
 fn node_version_matches_request(entry_version: &str, node_version: &str) -> bool {
-    node_version == "latest" || entry_version.starts_with(&format!("v{node_version}"))
+    if node_version == "latest" {
+        return true;
+    }
+    let entry_version = entry_version.trim_start_matches('v');
+    entry_version == node_version
+        || entry_version
+            .strip_prefix(node_version)
+            .is_some_and(|rest| rest.starts_with('.'))
 }
 
 /// Download `url` to `path`, streaming the body to disk.
@@ -804,21 +823,25 @@ pub(crate) fn run_sea(plan: &PackagePlan, log: &dyn Fn(&str)) -> Result<(), PkgE
                 .to_owned(),
         )
     })?;
-    let host_major = sea_assert_host_node_version(&host_version)?;
+    sea_assert_host_node_version(&host_version)?;
 
     let targets: Vec<NodeTarget> = plan
         .outputs
         .iter()
         .map(|output| output.target.clone())
         .collect();
-    sea_assert_single_target_major(&targets, host_major)?;
     // Reject unsupported targets up front so the documented default
     // (`pkg --sea index.js` -> linux,macos,win) fails fast instead of
     // downloading, generating a blob, and only then erroring on the macOS/Windows
     // injectors. (PR #6 review P1.)
     validate_sea_targets(&targets)?;
+    let resolved_versions = targets
+        .iter()
+        .map(resolve_target_node_version)
+        .collect::<Result<Vec<_>, PkgError>>()?;
+    sea_assert_single_resolved_target_major(&resolved_versions)?;
 
-    run_simple_sea(plan, &targets, log)
+    run_simple_sea(plan, &targets, &resolved_versions, log)
 }
 
 /// Validate every SEA target before any download/blob work happens.
@@ -851,9 +874,15 @@ fn validate_sea_targets(targets: &[NodeTarget]) -> Result<(), PkgError> {
 fn run_simple_sea(
     plan: &PackagePlan,
     targets: &[NodeTarget],
+    resolved_versions: &[String],
     log: &dyn Fn(&str),
 ) -> Result<(), PkgError> {
     let entrypoint = &plan.entrypoint;
+    if targets.len() != resolved_versions.len() {
+        return Err(PkgError::Sea(
+            "internal SEA error: target/version count mismatch".to_owned(),
+        ));
+    }
     if !entrypoint.exists() {
         return Err(PkgError::Sea(format!(
             "Entrypoint path \"{}\" does not exist",
@@ -864,11 +893,14 @@ fn run_simple_sea(
     // Resolve and download/extract every target's concrete Node binary up front.
     let resolved_targets = targets
         .iter()
-        .map(|target| {
+        .zip(resolved_versions)
+        .map(|(target, version)| {
             let (os, arch) = target_os_arch(target)?;
-            let version = resolve_target_node_version(target)?;
-            let node_path = get_nodejs_executable_for_version(&version, os, arch, log)?;
-            Ok(ResolvedSeaTarget { version, node_path })
+            let node_path = get_nodejs_executable_for_version(version, os, arch, log)?;
+            Ok(ResolvedSeaTarget {
+                version: version.clone(),
+                node_path,
+            })
         })
         .collect::<Result<Vec<_>, PkgError>>()?;
 
@@ -1111,7 +1143,26 @@ mod tests {
     fn latest_node_range_matches_any_dist_index_version() {
         assert!(node_version_matches_request("v24.11.1", "latest"));
         assert!(node_version_matches_request("v22.22.3", "22"));
+        assert!(node_version_matches_request("v22.1.3", "22.1"));
         assert!(!node_version_matches_request("v24.11.1", "22"));
+        assert!(!node_version_matches_request("v24.11.1", "2"));
+        assert!(!node_version_matches_request("v22.10.0", "22.1"));
+    }
+
+    #[test]
+    fn resolved_target_major_check_uses_concrete_versions() {
+        assert!(
+            sea_assert_single_resolved_target_major(&["v26.3.0".to_owned(), "v26.2.0".to_owned(),])
+                .is_ok()
+        );
+        assert!(matches!(
+            sea_assert_single_resolved_target_major(&[
+                "v26.3.0".to_owned(),
+                "v25.12.0".to_owned(),
+            ]),
+            Err(PkgError::Sea(message))
+                if message.contains("got 25, 26")
+        ));
     }
 
     #[test]
@@ -1133,10 +1184,11 @@ mod tests {
             sea_resolve_min_target_major(&targets("node22-linux,node24-linux")?, 25),
             22
         );
-        // Unparseable range falls back to host major.
+        // Unparseable ranges such as `latest` do not pretend to be the host
+        // major. The real SEA pipeline resolves them before comparing majors.
         assert_eq!(
-            sea_resolve_min_target_major(&targets("latest-linux")?, 25),
-            25
+            sea_resolve_min_target_major(&targets("latest-linux,node22-linux")?, 25),
+            22
         );
 
         assert!(sea_assert_single_target_major(&targets("node22-linux,node22-macos")?, 22).is_ok());
