@@ -52,6 +52,19 @@ fn sea_fuse_sentinel() -> String {
     sentinel
 }
 
+/// Whether native `NODE_SEA_BLOB` injection is implemented for `platform`.
+///
+/// Only ELF (Linux-family) targets are supported today; macOS (Mach-O) and
+/// Windows (PE) injection are not implemented yet. Callers gate on this before
+/// downloading binaries so an unsupported target fails before any work, rather
+/// than after generating the blob (see [`inject_sea_blob`]).
+pub(crate) fn injection_supported(platform: Platform) -> bool {
+    matches!(
+        platform,
+        Platform::Linux | Platform::LinuxStatic | Platform::Alpine | Platform::Freebsd
+    )
+}
+
 /// Inject the SEA blob into a target executable image and flip the fuse.
 ///
 /// `platform` selects the object-format strategy; the magic bytes are validated

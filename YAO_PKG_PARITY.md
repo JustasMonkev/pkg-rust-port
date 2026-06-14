@@ -111,7 +111,10 @@ porting order. Items move to "Done" as they land with parity tests.
   mapping with the yao-pkg `NODE_OSES`/`NODE_ARCHS` sets and wording,
   archive-filename + dist/unofficial-builds URL construction, version-format
   validation, host `>= 22` assertion, single-major / min-major checks,
-  matching-host-target generator selection); the I/O pipeline (download +
+  up-front rejection of targets whose native injector is not implemented yet,
+  and full generator selection — matching-host-target reuse, the
+  version-matched host `node`, or a host-platform download pinned to the exact
+  target version for cross-host builds); the I/O pipeline (download +
   `SHASUMS256.txt` checksum + zip/tar.gz extraction with `.ok` sentinels and
   the `~/.pkg-cache/sea` cache, honoring `PKG_CACHE_PATH`; blob generation via
   the host `node --experimental-sea-config`; bake = copy + inject; macOS

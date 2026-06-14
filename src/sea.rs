@@ -542,15 +542,21 @@ fn generate_sea_blob(
 
 /// Pick the Node binary used to generate the blob (`pickBlobGeneratorBinary`).
 ///
-/// Prefers a downloaded target binary that matches the host platform+arch (it is
-/// already version-matched). Otherwise the generator must exactly match the
-/// resolved target version, so we fall back to the host `node` only when its
-/// version matches; mismatches fail closed (per yao-pkg discussion #236 the blob
-/// layout is patch-version specific and a skewed generator crashes the binary at
-/// startup).
+/// 1. Prefer a downloaded target binary whose platform+arch match the host (it is
+///    already version-matched).
+/// 2. Otherwise, if the host `node` on PATH is exactly the resolved target
+///    version, use it (JS uses `process.execPath`).
+/// 3. Otherwise download a host-platform/arch Node binary pinned to the exact
+///    target version and use it purely as the generator.
+///
+/// The generator must match the target's Node version: per yao-pkg discussion
+/// #236 the SEA blob layout is patch-version specific, so a skewed generator
+/// crashes the produced binary at startup in
+/// `node::sea::FindSingleExecutableResource`.
 fn pick_blob_generator_binary(
     targets: &[NodeTarget],
     node_paths: &[PathBuf],
+    log: &dyn Fn(&str),
 ) -> Result<PathBuf, PkgError> {
     if let Some(index) =
         sea_pick_matching_host_target_index(Platform::host(), Arch::host(), targets)
@@ -571,15 +577,39 @@ fn pick_blob_generator_binary(
         // so the version-matched host `node` on PATH is the generator.
         return Ok(path);
     }
-    Err(PkgError::Sea(format!(
-        "Cannot generate SEA blob: host node {} differs from target {} and no \
-         host-platform/arch target was downloaded to use as the generator. \
-         Install node {} locally (e.g. via nvm) so the blob layout matches the \
-         baked SEA reader (see yao-pkg discussion #236).",
-        host_version.as_deref().unwrap_or("(absent)"),
+
+    // No host-matching target and no version-matched host node: download a
+    // host-platform Node pinned to the exact target version. Passing the full
+    // `node<major.minor.patch>` range makes version resolution short-circuit the
+    // dist index, so only the archive itself is fetched.
+    log(&format!(
+        "No target matches host {}-{}; downloading a host-platform node {} to \
+         generate the SEA blob (avoids SEA header version skew, see yao-pkg \
+         discussion #236).",
+        Platform::host(),
+        Arch::host(),
         target_version,
-        target_version,
-    )))
+    ));
+    let generator_target = NodeTarget {
+        node_range: format!("node{}", target_version.trim_start_matches('v')),
+        platform: Platform::host(),
+        arch: Arch::host(),
+        force_build: false,
+    };
+    get_nodejs_executable(&generator_target, log).map_err(|error| {
+        PkgError::Sea(format!(
+            "Cannot generate SEA blob: host node {} differs from target {} and the \
+             host-platform download failed ({}). Running the generator with a skewed \
+             node would crash the final binary at startup in \
+             node::sea::FindSingleExecutableResource (see yao-pkg discussion #236). \
+             Install node {} locally (e.g. via nvm) or pass a host-runnable node of \
+             that version.",
+            host_version.as_deref().unwrap_or("(absent)"),
+            target_version,
+            error,
+            target_version,
+        ))
+    })
 }
 
 /// Resolve a `node` executable from `PATH`.
@@ -706,8 +736,39 @@ pub(crate) fn run_sea(plan: &PackagePlan, log: &dyn Fn(&str)) -> Result<(), PkgE
         .map(|output| output.target.clone())
         .collect();
     sea_assert_single_target_major(&targets, host_major)?;
+    // Reject unsupported targets up front so the documented default
+    // (`pkg --sea index.js` -> linux,macos,win) fails fast instead of
+    // downloading, generating a blob, and only then erroring on the macOS/Windows
+    // injectors. (PR #6 review P1.)
+    validate_sea_targets(&targets)?;
 
     run_simple_sea(plan, &targets, log)
+}
+
+/// Validate every SEA target before any download/blob work happens.
+///
+/// Checks the nodejs.org os/arch mapping (cheap, no network) and that native
+/// `NODE_SEA_BLOB` injection is implemented for each target platform, failing
+/// closed with one actionable error for the unsupported set.
+fn validate_sea_targets(targets: &[NodeTarget]) -> Result<(), PkgError> {
+    for target in targets {
+        sea_node_os(target.platform)?;
+        sea_node_arch(target.arch)?;
+    }
+    let unsupported: Vec<String> = targets
+        .iter()
+        .filter(|target| !crate::sea_inject::injection_supported(target.platform))
+        .map(ToString::to_string)
+        .collect();
+    if !unsupported.is_empty() {
+        return Err(PkgError::Sea(format!(
+            "native SEA injection currently supports Linux (ELF) targets only; \
+             unsupported target(s): {}. Use -t with node<major>-linux targets \
+             (macOS and Windows SEA injection is the next slice).",
+            unsupported.join(", ")
+        )));
+    }
+    Ok(())
 }
 
 /// Simple SEA mode: the bare entry file becomes the SEA `main` (`sea()`).
@@ -750,7 +811,7 @@ fn run_simple_sea(
             source,
         })?;
 
-        let generator = pick_blob_generator_binary(targets, &node_paths)?;
+        let generator = pick_blob_generator_binary(targets, &node_paths, log)?;
         generate_sea_blob(&config_path, &generator, log)?;
 
         let blob = fs::read(&blob_path).map_err(|source| PkgError::Io {
@@ -905,6 +966,45 @@ mod tests {
             None
         );
         Ok(())
+    }
+
+    #[test]
+    fn validate_targets_rejects_unsupported_platforms() -> Result<(), TargetParseError> {
+        assert!(validate_sea_targets(&targets("node22-linux-x64")?).is_ok());
+        // macOS (Mach-O) and Windows (PE) injection are not implemented yet.
+        assert!(matches!(
+            validate_sea_targets(&targets("node22-macos-arm64")?),
+            Err(PkgError::Sea(message))
+                if message.contains("unsupported target(s)") && message.contains("node22-macos-arm64")
+        ));
+        assert!(matches!(
+            validate_sea_targets(&targets("node22-win-x64")?),
+            Err(PkgError::Sea(message)) if message.contains("node22-win-x64")
+        ));
+        // alpine fails the nodejs.org OS mapping before the injection check.
+        assert!(matches!(
+            validate_sea_targets(&targets("node22-alpine-x64")?),
+            Err(PkgError::Sea(message)) if message == "Unsupported OS: alpine"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn generator_reuses_host_matching_target_without_network() {
+        // A host-matching target short-circuits generator selection to the
+        // already-downloaded binary, so no network/version resolution happens.
+        let target = NodeTarget {
+            node_range: "node22".to_owned(),
+            platform: Platform::host(),
+            arch: Arch::host(),
+            force_build: false,
+        };
+        let paths = vec![PathBuf::from("/cache/host-node")];
+        let log = |_: &str| {};
+        assert!(matches!(
+            pick_blob_generator_binary(std::slice::from_ref(&target), &paths, &log),
+            Ok(path) if path == Path::new("/cache/host-node")
+        ));
     }
 
     fn unique_tmp(label: &str) -> PathBuf {
