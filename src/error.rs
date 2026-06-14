@@ -33,6 +33,10 @@ pub enum PkgError {
     #[error("target binary fetch failed: {0}")]
     Fetch(String),
 
+    /// Single-executable-application (SEA) pipeline failed.
+    #[error("{0}")]
+    Sea(String),
+
     /// A requested behavior has not been ported yet.
     #[error("{0}")]
     NotImplemented(&'static str),

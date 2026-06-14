@@ -180,6 +180,8 @@ pub struct PkgConfig {
     pub fallback_to_source: Option<bool>,
     /// Config-file equivalent of `--public`.
     pub public: Option<bool>,
+    /// Config-file equivalent of `--sea` (build a single executable application).
+    pub sea: Option<bool>,
     /// Config-file equivalent of `--public-packages`.
     pub public_packages: Option<StringOrList>,
     /// Config-file equivalent of `--no-dict` (as `noDictionary`).

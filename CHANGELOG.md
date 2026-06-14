@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added SEA (Single Executable Application) support — simple mode plus the
+  shared foundation. `--sea` (and the `sea` config key) build a Node single
+  executable by downloading an official `nodejs.org/dist` binary
+  (checksum-verified, extracted, and cached under `~/.pkg-cache/sea`),
+  generating a SEA prep blob via the host `node --experimental-sea-config`,
+  and natively injecting the `NODE_SEA_BLOB` resource + flipping the SEA fuse.
+  Cross-host builds download a host-platform Node pinned to the exact target
+  version to generate the blob (avoiding SEA header version skew). Native ELF
+  injection is implemented and verified end to end against the real Node 22
+  runtime; macOS (Mach-O) and Windows (PE) injection, and enhanced SEA mode
+  (package.json projects: walker + per-file archive + VFS bootstrap), are not
+  implemented yet — unsupported targets are rejected up front (before any
+  download) with a precise error. `--sea` is now documented in the help output.
 - Fixed two ESM transform bugs: interop helpers (`_interop_require_default`
   and friends) are now injected inline into transformed CommonJS output
   (previously any ESM default/namespace import crashed packaged binaries

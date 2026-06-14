@@ -37,6 +37,8 @@ mod prelude_assets;
 mod produce;
 mod refine;
 mod resolve;
+mod sea;
+mod sea_inject;
 mod target;
 mod walk;
 
@@ -76,6 +78,12 @@ pub use crate::produce::{
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
 pub use crate::resolve::{
     ResolveOptions, ResolvedModule, resolve_module, resolve_module_with_metadata,
+};
+pub use crate::sea::{
+    sea_assert_host_node_version, sea_assert_single_target_major, sea_node_arch,
+    sea_node_archive_filename, sea_node_dist_urls, sea_node_os,
+    sea_pick_matching_host_target_index, sea_resolve_min_target_major,
+    sea_validate_node_version_format,
 };
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,
