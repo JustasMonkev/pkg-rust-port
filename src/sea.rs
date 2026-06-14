@@ -42,6 +42,10 @@ const NODE_ARCHS: &[&str] = &[
 
 /// Minimum host Node major that supports the SEA pipeline.
 const MIN_SEA_NODE_MAJOR: u32 = 22;
+/// Older SEA target binaries used the pre-`NODE_SEA_BLOB` injection layout.
+const MIN_SEA_TARGET_MAJOR: u32 = 20;
+/// `mainFormat: "module"` is documented in Node SEA config starting in v26.
+const MIN_SEA_ESM_TARGET_MAJOR: u32 = 26;
 
 // ---------------------------------------------------------------------------
 // Deterministic mapping (offline-testable)
@@ -182,6 +186,24 @@ fn sea_assert_single_resolved_target_major(versions: &[String]) -> Result<(), Pk
             .filter_map(|version| version_major(version))
             .collect(),
     )
+}
+
+fn sea_assert_supported_resolved_target_major(versions: &[String]) -> Result<(), PkgError> {
+    let unsupported = versions
+        .iter()
+        .filter(|version| version_major(version).is_some_and(|major| major < MIN_SEA_TARGET_MAJOR))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        return Ok(());
+    }
+    Err(PkgError::Sea(format!(
+        "SEA mode requires target Node.js >= {MIN_SEA_TARGET_MAJOR}.0.0 for \
+         NODE_SEA_BLOB injection; unsupported target version(s): {}. \
+         Older Node SEA targets use the NODE_JS_CODE/NODE_JS_FUSE layout, \
+         which is not implemented.",
+        unsupported.join(", ")
+    )))
 }
 
 fn assert_single_major(mut majors: Vec<u32>) -> Result<(), PkgError> {
@@ -839,7 +861,9 @@ pub(crate) fn run_sea(plan: &PackagePlan, log: &dyn Fn(&str)) -> Result<(), PkgE
         .iter()
         .map(resolve_target_node_version)
         .collect::<Result<Vec<_>, PkgError>>()?;
+    sea_assert_supported_resolved_target_major(&resolved_versions)?;
     sea_assert_single_resolved_target_major(&resolved_versions)?;
+    validate_simple_sea_format_support(&plan.entrypoint, &resolved_versions)?;
 
     run_simple_sea(plan, &targets, &resolved_versions, log)
 }
@@ -868,6 +892,31 @@ fn validate_sea_targets(targets: &[NodeTarget]) -> Result<(), PkgError> {
         )));
     }
     Ok(())
+}
+
+fn validate_simple_sea_format_support(
+    entrypoint: &Path,
+    resolved_versions: &[String],
+) -> Result<(), PkgError> {
+    if simple_sea_main_format(entrypoint)? != Some("module") {
+        return Ok(());
+    }
+    let unsupported = resolved_versions
+        .iter()
+        .filter(|version| {
+            version_major(version).is_some_and(|major| major < MIN_SEA_ESM_TARGET_MAJOR)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        return Ok(());
+    }
+    Err(PkgError::Sea(format!(
+        "ESM simple SEA requires target Node.js >= {MIN_SEA_ESM_TARGET_MAJOR}.0.0 \
+         because older SEA configs only support CommonJS injected mains; \
+         unsupported target version(s): {}.",
+        unsupported.join(", ")
+    )))
 }
 
 /// Simple SEA mode: the bare entry file becomes the SEA `main` (`sea()`).
@@ -1163,6 +1212,39 @@ mod tests {
             Err(PkgError::Sea(message))
                 if message.contains("got 25, 26")
         ));
+    }
+
+    #[test]
+    fn resolved_target_major_check_rejects_old_sea_layout_versions() {
+        assert!(sea_assert_supported_resolved_target_major(&["v20.0.0".to_owned()]).is_ok());
+        assert!(matches!(
+            sea_assert_supported_resolved_target_major(&["v19.9.0".to_owned()]),
+            Err(PkgError::Sea(message))
+                if message.contains("target Node.js >= 20.0.0")
+                    && message.contains("NODE_JS_CODE/NODE_JS_FUSE")
+        ));
+    }
+
+    #[test]
+    fn esm_simple_sea_requires_main_format_capable_targets()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = unique_tmp("esm-version-gate");
+        fs::create_dir_all(&dir)?;
+        let mjs_entry = dir.join("index.mjs");
+        fs::write(&mjs_entry, "import process from 'node:process';")?;
+        let cjs_entry = dir.join("index.cjs");
+        fs::write(&cjs_entry, "require('node:process');")?;
+
+        assert!(validate_simple_sea_format_support(&mjs_entry, &["v26.3.0".to_owned()]).is_ok());
+        assert!(matches!(
+            validate_simple_sea_format_support(&mjs_entry, &["v22.22.0".to_owned()]),
+            Err(PkgError::Sea(message))
+                if message.contains("ESM simple SEA requires target Node.js >= 26.0.0")
+        ));
+        assert!(validate_simple_sea_format_support(&cjs_entry, &["v22.22.0".to_owned()]).is_ok());
+
+        let _ = fs::remove_dir_all(&dir);
+        Ok(())
     }
 
     #[test]
