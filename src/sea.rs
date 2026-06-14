@@ -504,8 +504,17 @@ fn extract_zip_member(archive: &Path, member: &str, dest: &Path) -> Result<(), P
 fn get_nodejs_executable(target: &NodeTarget, log: &dyn Fn(&str)) -> Result<PathBuf, PkgError> {
     let (os, arch) = target_os_arch(target)?;
     let version = resolve_target_node_version(target)?;
-    let filename = sea_node_archive_filename(&version, os, arch);
-    let (url, checksum_url) = sea_node_dist_urls(&version, os, arch);
+    get_nodejs_executable_for_version(&version, os, arch, log)
+}
+
+fn get_nodejs_executable_for_version(
+    version: &str,
+    os: &str,
+    arch: &str,
+    log: &dyn Fn(&str),
+) -> Result<PathBuf, PkgError> {
+    let filename = sea_node_archive_filename(version, os, arch);
+    let (url, checksum_url) = sea_node_dist_urls(version, os, arch);
 
     let download_dir = sea_cache_dir()?;
     fs::create_dir_all(&download_dir).map_err(|source| PkgError::Io {
@@ -573,9 +582,10 @@ fn generate_sea_blob(
 /// #236 the SEA blob layout is patch-version specific, so a skewed generator
 /// crashes the produced binary at startup in
 /// `node::sea::FindSingleExecutableResource`.
-fn pick_blob_generator_binary(
+fn pick_blob_generator_binary_for_version(
     targets: &[NodeTarget],
     node_paths: &[PathBuf],
+    target_version: &str,
     log: &dyn Fn(&str),
 ) -> Result<PathBuf, PkgError> {
     if let Some(index) =
@@ -585,12 +595,8 @@ fn pick_blob_generator_binary(
         return Ok(path.clone());
     }
 
-    let target = targets
-        .first()
-        .ok_or_else(|| PkgError::Sea("SEA mode requires at least one target".to_owned()))?;
-    let target_version = resolve_target_node_version(target)?;
     let host_version = host_node_version();
-    if host_version.as_deref() == Some(target_version.as_str())
+    if host_version.as_deref() == Some(target_version)
         && let Ok(path) = which_node()
     {
         // JS uses process.execPath (the Node running pkg). pkg-rust is not Node,
@@ -805,47 +811,71 @@ fn run_simple_sea(
         )));
     }
 
-    // Download/extract every target's Node binary up front.
-    let node_paths = targets
+    // Resolve and download/extract every target's concrete Node binary up front.
+    let resolved_targets = targets
         .iter()
-        .map(|target| get_nodejs_executable(target, log))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|target| {
+            let (os, arch) = target_os_arch(target)?;
+            let version = resolve_target_node_version(target)?;
+            let node_path = get_nodejs_executable_for_version(&version, os, arch, log)?;
+            Ok(ResolvedSeaTarget { version, node_path })
+        })
+        .collect::<Result<Vec<_>, PkgError>>()?;
 
     let tmp_dir = sea_tmp_dir()?;
     let result = (|| {
-        let blob_path = tmp_dir.join("sea-prep.blob");
-        let config_path = tmp_dir.join("sea-config.json");
-        let sea_config = serde_json::json!({
-            "main": entrypoint,
-            "output": blob_path,
-            "disableExperimentalSEAWarning": true,
-            "useSnapshot": false,
-            "useCodeCache": false,
-        });
-        log("Creating sea-config.json file...");
-        let config_bytes = serde_json::to_vec(&sea_config).map_err(|source| {
-            PkgError::Sea(format!("failed to encode sea-config.json: {source}"))
-        })?;
-        fs::write(&config_path, config_bytes).map_err(|source| PkgError::Io {
-            path: config_path.display().to_string(),
-            source,
-        })?;
+        for (version, indices) in group_indices_by_version(&resolved_targets) {
+            let version_label = version.trim_start_matches('v');
+            let blob_path = tmp_dir.join(format!("sea-prep-{version_label}.blob"));
+            let config_path = tmp_dir.join(format!("sea-config-{version_label}.json"));
+            let sea_config = serde_json::json!({
+                "main": entrypoint,
+                "output": blob_path,
+                "disableExperimentalSEAWarning": true,
+                "useSnapshot": false,
+                "useCodeCache": false,
+            });
+            log(&format!(
+                "Creating sea-config.json file for node {version}..."
+            ));
+            let config_bytes = serde_json::to_vec(&sea_config).map_err(|source| {
+                PkgError::Sea(format!("failed to encode sea-config.json: {source}"))
+            })?;
+            fs::write(&config_path, config_bytes).map_err(|source| PkgError::Io {
+                path: config_path.display().to_string(),
+                source,
+            })?;
 
-        let generator = pick_blob_generator_binary(targets, &node_paths, log)?;
-        generate_sea_blob(&config_path, &generator, log)?;
+            let group_targets = indices
+                .iter()
+                .map(|index| targets[*index].clone())
+                .collect::<Vec<_>>();
+            let group_node_paths = indices
+                .iter()
+                .map(|index| resolved_targets[*index].node_path.clone())
+                .collect::<Vec<_>>();
+            let generator = pick_blob_generator_binary_for_version(
+                &group_targets,
+                &group_node_paths,
+                &version,
+                log,
+            )?;
+            generate_sea_blob(&config_path, &generator, log)?;
 
-        let blob = fs::read(&blob_path).map_err(|source| PkgError::Io {
-            path: blob_path.display().to_string(),
-            source,
-        })?;
+            let blob = fs::read(&blob_path).map_err(|source| PkgError::Io {
+                path: blob_path.display().to_string(),
+                source,
+            })?;
 
-        for (index, target) in targets.iter().enumerate() {
-            let output = &plan.outputs[index].output;
-            let node_path = &node_paths[index];
-            bake(node_path, output, &blob, target, log)?;
-            sign_macos_if_needed(output, target, plan.signature, log)?;
-            if target.platform != Platform::Win {
-                plus_x(output)?;
+            for index in indices {
+                let target = &targets[index];
+                let output = &plan.outputs[index].output;
+                let node_path = &resolved_targets[index].node_path;
+                bake(node_path, output, &blob, target, log)?;
+                sign_macos_if_needed(output, target, plan.signature, log)?;
+                if target.platform != Platform::Win {
+                    plus_x(output)?;
+                }
             }
         }
         Ok(())
@@ -853,6 +883,26 @@ fn run_simple_sea(
 
     let _ = fs::remove_dir_all(&tmp_dir);
     result
+}
+
+struct ResolvedSeaTarget {
+    version: String,
+    node_path: PathBuf,
+}
+
+fn group_indices_by_version(resolved_targets: &[ResolvedSeaTarget]) -> Vec<(String, Vec<usize>)> {
+    let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+    for (index, resolved) in resolved_targets.iter().enumerate() {
+        if let Some((_, indices)) = groups
+            .iter_mut()
+            .find(|(version, _)| version == &resolved.version)
+        {
+            indices.push(index);
+        } else {
+            groups.push((resolved.version.clone(), vec![index]));
+        }
+    }
+    groups
 }
 
 /// Create a unique SEA temp directory (`withSeaTmpDir`, without the `chdir`).
@@ -1033,9 +1083,40 @@ mod tests {
         let paths = vec![PathBuf::from("/cache/host-node")];
         let log = |_: &str| {};
         assert!(matches!(
-            pick_blob_generator_binary(std::slice::from_ref(&target), &paths, &log),
+            pick_blob_generator_binary_for_version(
+                std::slice::from_ref(&target),
+                &paths,
+                "v22.0.0",
+                &log,
+            ),
             Ok(path) if path == Path::new("/cache/host-node")
         ));
+    }
+
+    #[test]
+    fn groups_targets_by_concrete_node_version() {
+        let resolved_targets = vec![
+            ResolvedSeaTarget {
+                version: "v22.22.2".to_owned(),
+                node_path: PathBuf::from("/cache/a"),
+            },
+            ResolvedSeaTarget {
+                version: "v22.20.0".to_owned(),
+                node_path: PathBuf::from("/cache/b"),
+            },
+            ResolvedSeaTarget {
+                version: "v22.22.2".to_owned(),
+                node_path: PathBuf::from("/cache/c"),
+            },
+        ];
+
+        assert_eq!(
+            group_indices_by_version(&resolved_targets),
+            vec![
+                ("v22.22.2".to_owned(), vec![0, 2]),
+                ("v22.20.0".to_owned(), vec![1]),
+            ]
+        );
     }
 
     fn unique_tmp(label: &str) -> PathBuf {
