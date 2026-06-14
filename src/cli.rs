@@ -493,9 +493,11 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         flag_config.and_then(|pkg| pkg.sea),
         false,
     );
-    // JS index.ts routes to enhanced SEA mode when an input package.json
-    // (`inputJson`) or a resolved config file (`configJson`) is present.
-    let sea_enhanced = input_package.is_some() || config.is_some();
+    // Simple SEA can still use flag-only config for a bare entry file (for
+    // example `{ "sea": true, "targets": [...] }`). Only package input or
+    // config that shapes bundled package contents needs the enhanced pipeline.
+    let sea_enhanced =
+        input_package.is_some() || config.as_ref().is_some_and(package_requires_enhanced_sea);
     let public_packages_raw = cli.public_packages.clone().or_else(|| {
         flag_config
             .and_then(|pkg| pkg.public_packages.as_ref())
@@ -609,6 +611,37 @@ fn config_value_strings(value: &serde_json::Value) -> Vec<String> {
             .filter_map(|item| item.as_str().map(ToOwned::to_owned))
             .collect(),
         _ => Vec::new(),
+    }
+}
+
+fn package_requires_enhanced_sea(package: &PackageJson) -> bool {
+    package.main.is_some()
+        || package.bin.is_some()
+        || !package.dependencies.is_empty()
+        || !package.files.is_empty()
+        || package
+            .pkg
+            .as_ref()
+            .is_some_and(pkg_config_requires_enhanced_sea)
+}
+
+fn pkg_config_requires_enhanced_sea(pkg: &crate::config::PkgConfig) -> bool {
+    config_value_has_entries(&pkg.scripts)
+        || config_value_has_entries(&pkg.assets)
+        || config_value_has_entries(&pkg.deploy_files)
+        || config_value_has_entries(&pkg.ignore)
+        || !pkg.patches.is_empty()
+        || !pkg.dictionary.is_empty()
+}
+
+fn config_value_has_entries(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {
+            false
+        }
+        serde_json::Value::String(text) => !text.is_empty(),
+        serde_json::Value::Array(items) => !items.is_empty(),
+        serde_json::Value::Object(entries) => !entries.is_empty(),
     }
 }
 

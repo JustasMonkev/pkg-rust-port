@@ -174,6 +174,10 @@ fn config_sea_flag_resolves_with_cli_precedence() -> Result<(), Box<dyn std::err
     // Config enables sea.
     let plan = plan_package([entry_text])?;
     assert!(plan.sea, "config sea:true enables SEA");
+    assert!(
+        !plan.sea_enhanced,
+        "flag-only config for a bare entry keeps simple SEA mode"
+    );
 
     // CLI --no-sea overrides config sea:true.
     let plan = plan_package(["--no-sea", entry_text])?;
