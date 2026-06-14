@@ -168,8 +168,8 @@ Examples:
   $ pkg --compress GZip index.js
 – reduce size further with Zstd (Node.js >= 22.15 required at runtime)
   $ pkg --compress Zstd index.js
-– compile the file using node's SEA feature. Creates executables for Linux, macOS and Windows
-  $ pkg --sea index.js";
+– compile the file using node's SEA feature (native injection currently supports Linux targets)
+  $ pkg --sea -t node22-linux index.js";
 
 /// Planned output artifact for one target.
 #[derive(Clone, Debug, Eq, PartialEq)]
