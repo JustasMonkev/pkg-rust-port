@@ -108,7 +108,9 @@ porting order. Items move to "Done" as they land with parity tests.
 - [x] SEA support — **simple mode + shared foundation** (`lib/sea.ts`
   `sea()` path). `--sea`/config `sea` build a Node single executable for a
   bare entry file. Ported: the deterministic core (nodejs.org os/arch
-  mapping with the yao-pkg `NODE_OSES`/`NODE_ARCHS` sets and wording,
+  mapping with the yao-pkg `NODE_OSES`/`NODE_ARCHS` sets and wording (Linux
+  `ppc64` resolves the `ppc64le` archive token — a fix over yao-pkg, whose
+  `node-<v>-linux-ppc64` URL 404s),
   archive-filename + dist/unofficial-builds URL construction, version-format
   validation, host `>= 22` assertion, single-major / min-major checks,
   up-front rejection of targets whose native injector is not implemented yet,

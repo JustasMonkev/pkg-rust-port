@@ -89,6 +89,28 @@ fn is_unofficial_arch(arch: &str) -> bool {
     matches!(arch, "riscv64" | "loong64")
 }
 
+/// Resolve the nodejs.org archive arch token for an `(os, arch)` pair.
+///
+/// `getNodeArch` returns the canonical `NODE_ARCHS` token, but nodejs.org's
+/// Linux Power archives are published as `linux-ppc64le` (plain `ppc64` is the
+/// AIX token), so a Linux `ppc64` target must download/resolve `ppc64le`.
+/// BEHAVIOR FIX over yao-pkg, which builds `node-<v>-linux-ppc64.tar.gz` and
+/// 404s. Other arches pass through unchanged.
+fn archive_arch_token(os: &str, arch: &'static str) -> &'static str {
+    if os == "linux" && arch == "ppc64" {
+        "ppc64le"
+    } else {
+        arch
+    }
+}
+
+/// Resolve a target's `(nodejs.org os, archive arch)` pair (validated + mapped).
+fn target_os_arch(target: &NodeTarget) -> Result<(&'static str, &'static str), PkgError> {
+    let os = sea_node_os(target.platform)?;
+    let arch = archive_arch_token(os, sea_node_arch(target.arch)?);
+    Ok((os, arch))
+}
+
 /// nodejs.org archive filename: `node-<version>-<os>-<arch>.<zip|tar.gz>`.
 pub fn sea_node_archive_filename(version: &str, os: &str, arch: &str) -> String {
     let ext = if os == "win" { "zip" } else { "tar.gz" };
@@ -244,8 +266,7 @@ fn sea_cache_dir() -> Result<PathBuf, PkgError> {
 /// Resolve the concrete Node version pkg will use for `target`
 /// (`resolveTargetNodeVersion`), querying the dist index for a partial range.
 fn resolve_target_node_version(target: &NodeTarget) -> Result<String, PkgError> {
-    let os = sea_node_os(target.platform)?;
-    let arch = sea_node_arch(target.arch)?;
+    let (os, arch) = target_os_arch(target)?;
     let bare = target.node_range.trim_start_matches("node");
     get_node_version(os, arch, bare)
 }
@@ -481,8 +502,7 @@ fn extract_zip_member(archive: &Path, member: &str, dest: &Path) -> Result<(), P
 
 /// Fetch, verify, and extract a Node binary for `target` (`getNodejsExecutable`).
 fn get_nodejs_executable(target: &NodeTarget, log: &dyn Fn(&str)) -> Result<PathBuf, PkgError> {
-    let os = sea_node_os(target.platform)?;
-    let arch = sea_node_arch(target.arch)?;
+    let (os, arch) = target_os_arch(target)?;
     let version = resolve_target_node_version(target)?;
     let filename = sea_node_archive_filename(&version, os, arch);
     let (url, checksum_url) = sea_node_dist_urls(&version, os, arch);
@@ -902,6 +922,17 @@ mod tests {
             "https://unofficial-builds.nodejs.org/download/release/v22.0.0/node-v22.0.0-linux-riscv64.tar.gz"
         );
         assert!(sums.starts_with("https://unofficial-builds.nodejs.org/"));
+    }
+
+    #[test]
+    fn linux_ppc64_uses_ppc64le_archive_token() {
+        // nodejs.org publishes Linux Power as `ppc64le`; plain `ppc64` is AIX,
+        // so a Linux ppc64 target must resolve/download `ppc64le`.
+        assert_eq!(archive_arch_token("linux", "ppc64"), "ppc64le");
+        assert_eq!(archive_arch_token("linux", "x64"), "x64");
+        assert_eq!(archive_arch_token("linux", "arm64"), "arm64");
+        // Non-linux SEA OSes (darwin/win) never carry ppc64 on the dist.
+        assert_eq!(archive_arch_token("win", "x64"), "x64");
     }
 
     #[test]
