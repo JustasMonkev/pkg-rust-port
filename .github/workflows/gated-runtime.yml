@@ -39,7 +39,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .pkg-rust-real-cache
-          key: pkg-fetch-v3.5-${{ inputs.target }}
+          key: pkg-fetch-v3.6-${{ inputs.target }}
       - name: Run selected gate
         shell: bash
         run: |
