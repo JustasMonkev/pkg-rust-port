@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reviewing native npm CLI releases</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #62666d;
+      --paper: #fbfbf8;
+      --panel: #ffffff;
+      --line: #d9dee8;
+      --accent: #245d63;
+      --accent-soft: #e4efef;
+      --bad: #8a4b08;
+      --good: #24613b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 52px 24px 80px;
+    }
+    h1 {
+      max-width: 760px;
+      font-size: 38px;
+      line-height: 1.08;
+      letter-spacing: 0;
+      margin: 0 0 10px;
+    }
+    h2 {
+      margin-top: 38px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      font-size: 22px;
+    }
+    h3 { margin-top: 24px; font-size: 18px; }
+    p, li { max-width: 74ch; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #eef2f2;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.94em;
+    }
+    pre {
+      overflow-x: auto;
+      background: #101418;
+      color: #edf3f3;
+      padding: 14px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    pre code {
+      display: block;
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border-radius: 0;
+      white-space: pre;
+    }
+    a { color: var(--accent); }
+    .subtitle {
+      color: var(--muted);
+      margin-top: 0;
+      font-size: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin: 18px 0;
+    }
+    .rule {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 12px 16px;
+      margin: 20px 0;
+    }
+    .warning {
+      border-left-color: var(--bad);
+      background: #fff4df;
+    }
+    .answer {
+      display: none;
+      margin-top: 8px;
+      color: var(--good);
+      font-weight: 600;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: white;
+      color: var(--accent);
+    }
+    .quiz-option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin: 8px 0;
+      background: white;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .quiz-option[data-state="right"] {
+      border-color: var(--good);
+      background: #e8f3ec;
+    }
+    .quiz-option[data-state="wrong"] {
+      border-color: var(--bad);
+      background: #fff4df;
+    }
+    .feedback {
+      min-height: 1.5em;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    @media print {
+      body { background: white; }
+      main { padding: 0; }
+      button { display: none; }
+      .answer { display: block; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Reviewing native npm CLI releases</h1>
+  <p class="subtitle">A short lesson using this repo's <code>@jm-pkg-rust/pkg-rust</code> packaging work as the example.</p>
+
+  <div class="card">
+    <strong>What you will be able to do:</strong>
+    <p>Given an npm CLI wrapper that delegates to native binaries, you will be able to trace the install path and spot release-only bugs that manifest checks alone miss.</p>
+  </div>
+
+  <h2>1. The root package is a launcher, not the payload</h2>
+  <p>In this repo, the root package <code>package.json</code> declares a command:</p>
+  <pre><code>"bin": {
+  "pkg": "./bin/pkg.js"
+}</code></pre>
+  <p>That means global npm installs expose the JavaScript launcher as the user-facing <code>pkg</code> command. The actual Rust executable lives in one of the platform packages listed under <code>optionalDependencies</code>, such as <code>@jm-pkg-rust/pkg-rust-darwin-arm64</code> or <code>@jm-pkg-rust/pkg-rust-linux-x64-gnu</code>.</p>
+  <p>The npm docs make <code>name</code> and <code>version</code> central for publishable packages, describe <code>bin</code> as package command exposure, and document <code>optionalDependencies</code>, <code>os</code>, and <code>cpu</code> as package selection metadata. See <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-json/">npm package.json docs</a>.</p>
+
+  <div class="rule">
+    <strong>Review rule:</strong> for native npm CLIs, ask two questions: "What command did npm install?" and "Where does that command find the real binary?"
+  </div>
+
+  <h2>2. The launcher chooses the native package</h2>
+  <p>The local launcher at <code>bin/pkg.js</code> builds a key from <code>process.platform</code>, <code>process.arch</code>, and, on Linux, libc. It then resolves the matching native package's <code>package.json</code> and executes <code>bin/pkg</code> or <code>bin/pkg.exe</code>.</p>
+  <pre><code>darwin arm64  -> @jm-pkg-rust/pkg-rust-darwin-arm64
+linux x64 musl -> @jm-pkg-rust/pkg-rust-linux-x64-musl
+win32 x64 -> @jm-pkg-rust/pkg-rust-win32-x64-msvc</code></pre>
+  <p>The execution detail matters because the launcher uses Node's <code>spawnSync</code>. Node documents <code>spawnSync(command, args, options)</code> as direct synchronous process creation. If the native file is not executable on macOS/Linux, the command fails before the Rust CLI gets control.</p>
+
+  <h2>3. The release workflow is part of the package</h2>
+  <p>The first review bug came from a gap between two true statements:</p>
+  <ul>
+    <li>The build job ran <code>chmod 755</code> before uploading the binary artifact.</li>
+    <li>The publish job downloaded that artifact and published the native package.</li>
+  </ul>
+  <p>The missing fact was from the <a href="https://github.com/actions/upload-artifact#permission-loss">GitHub upload-artifact docs</a>: artifact upload/download does not preserve Unix file modes; files can come back as <code>0644</code>. A 0644 native binary inside npm's tarball will install, but the launcher will fail with <code>EACCES</code>.</p>
+
+  <div class="rule warning">
+    <strong>The durable lesson:</strong> a native package's final correctness is not visible in the checked-in manifest. It is determined after CI downloads artifacts, restores permissions, and runs <code>npm pack</code>.
+  </div>
+
+  <h2>4. The fixed review pattern</h2>
+  <p>The release job now performs the check at the point where it matters: after artifact download and before publish.</p>
+  <pre><code>if [[ "${{ matrix.package }}" == win32-* ]]; then
+  test -f "npm/${{ matrix.package }}/bin/pkg.exe"
+else
+  chmod 755 "npm/${{ matrix.package }}/bin/pkg"
+  test -x "npm/${{ matrix.package }}/bin/pkg"
+fi
+npm pack "npm/${{ matrix.package }}" --dry-run --json</code></pre>
+  <p>This pattern makes the release workflow prove the native package is assembled correctly. It does not just trust earlier build steps.</p>
+
+  <h2>5. Practice: find the right check</h2>
+  <div class="card">
+    <p><strong>Scenario:</strong> A reviewer asks, "How do we know <code>target/</code> will not ship in the root npm package?" Which check answers that?</p>
+    <button class="quiz-option" data-correct="false">Run cargo test</button>
+    <button class="quiz-option" data-correct="true">Run npm pack dry-run</button>
+    <button class="quiz-option" data-correct="false">Run codesign verify</button>
+    <p class="feedback" id="feedback-one"></p>
+  </div>
+
+  <div class="card">
+    <p><strong>Scenario:</strong> A reviewer asks, "How do we know Linux users can execute the downloaded native binary?" Which check answers that?</p>
+    <button class="quiz-option" data-correct="false">Check optionalDependencies</button>
+    <button class="quiz-option" data-correct="true">Run chmod, test -x, then npm pack</button>
+    <button class="quiz-option" data-correct="false">Check README install text</button>
+    <p class="feedback" id="feedback-two"></p>
+  </div>
+
+  <h2>6. Use this next</h2>
+  <ul>
+    <li>Open the quick reference: <a href="../reference/npm-native-cli-release-checklist.html">Native npm CLI release checklist</a>.</li>
+    <li>Reopen <a href="../RESOURCES.md">RESOURCES.md</a> when you need the source links or local file anchors.</li>
+    <li>Ask the agent to quiz you on a specific release failure mode if any part still feels fuzzy.</li>
+  </ul>
+
+  <script>
+    const groups = [
+      { start: 0, feedback: document.getElementById("feedback-one") },
+      { start: 3, feedback: document.getElementById("feedback-two") }
+    ];
+    const buttons = Array.from(document.querySelectorAll(".quiz-option"));
+    groups.forEach((group) => {
+      buttons.slice(group.start, group.start + 3).forEach((button) => {
+        button.addEventListener("click", () => {
+          buttons.slice(group.start, group.start + 3).forEach((candidate) => {
+            candidate.dataset.state = "";
+          });
+          const right = button.dataset.correct === "true";
+          button.dataset.state = right ? "right" : "wrong";
+          group.feedback.textContent = right
+            ? "Correct. Match the check to the artifact being shipped."
+            : "Not quite. Pick the check that inspects the final npm package shape.";
+        });
+      });
+    });
+  </script>
+</main>
+</body>
+</html>

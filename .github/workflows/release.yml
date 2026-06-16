@@ -1,0 +1,245 @@
+name: Release npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish packages to npm
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify package metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check npm metadata and version sync
+        run: npm test
+      - name: Check tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          test "${GITHUB_REF_NAME}" = "v${VERSION}"
+
+  build:
+    name: Build ${{ matrix.package }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: darwin-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary: pkg
+            archive_binary: pkg
+            use_cross: false
+          - package: darwin-x64
+            os: macos-13
+            target: x86_64-apple-darwin
+            binary: pkg
+            archive_binary: pkg
+            use_cross: false
+          - package: linux-arm64-gnu
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: pkg
+            archive_binary: pkg
+            use_cross: true
+          - package: linux-arm64-musl
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            binary: pkg
+            archive_binary: pkg
+            use_cross: true
+          - package: linux-x64-gnu
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: pkg
+            archive_binary: pkg
+            use_cross: false
+          - package: linux-x64-musl
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: pkg
+            archive_binary: pkg
+            use_cross: true
+          - package: win32-x64-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: pkg.exe
+            archive_binary: pkg.exe
+            use_cross: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
+      - name: Build release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --locked --target "${{ matrix.target }}"
+          else
+            cargo build --release --locked --target "${{ matrix.target }}"
+          fi
+      - name: Validate Apple signing secrets
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_CERTIFICATE_P12"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_CODESIGN_IDENTITY"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_TEAM_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+      - name: Import Apple Developer ID certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/pkg-rust-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$RUNNER_TEMP" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$RUNNER_TEMP" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$RUNNER_TEMP" "$KEYCHAIN_PATH"
+      - name: Codesign macOS binary
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          codesign --force --timestamp --options runtime --sign "$APPLE_CODESIGN_IDENTITY" "$BIN"
+          codesign --verify --strict --verbose=2 "$BIN"
+      - name: Notarize macOS binary
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          ARCHIVE="$RUNNER_TEMP/pkg-rust-${{ matrix.package }}.zip"
+          ditto -c -k --keepParent "$BIN" "$ARCHIVE"
+          xcrun notarytool submit "$ARCHIVE" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+      - name: Stage binary artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/${{ matrix.package }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.package }}/${{ matrix.archive_binary }}"
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            chmod 755 "dist/${{ matrix.package }}/${{ matrix.archive_binary }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: dist/${{ matrix.package }}/${{ matrix.archive_binary }}
+          if-no-files-found: error
+
+  publish-native:
+    name: Publish native npm packages
+    needs: build
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - darwin-arm64
+          - darwin-x64
+          - linux-arm64-gnu
+          - linux-arm64-musl
+          - linux-x64-gnu
+          - linux-x64-musl
+          - win32-x64-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: npm/${{ matrix.package }}/bin
+      - name: Verify staged native package
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.package }}" == win32-* ]]; then
+            test -f "npm/${{ matrix.package }}/bin/pkg.exe"
+          else
+            chmod 755 "npm/${{ matrix.package }}/bin/pkg"
+            test -x "npm/${{ matrix.package }}/bin/pkg"
+          fi
+          npm pack "npm/${{ matrix.package }}" --dry-run --json
+      - name: Publish ${{ matrix.package }}
+        working-directory: npm/${{ matrix.package }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+  publish-root:
+    name: Publish root npm package
+    needs: publish-native
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+      - name: Verify package metadata
+        run: npm test
+      - name: Publish @jm-pkg-rust/pkg-rust
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

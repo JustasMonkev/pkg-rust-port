@@ -1,0 +1,35 @@
+{
+  "name": "@jm-pkg-rust/pkg-rust-win32-x64-msvc",
+  "version": "0.1.0",
+  "description": "Windows x64 MSVC native binary for @jm-pkg-rust/pkg-rust",
+  "license": "MIT",
+  "homepage": "https://github.com/JustasMonkev/pkg-rust-port#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JustasMonkev/pkg-rust-port.git"
+  },
+  "keywords": [
+    "pkg",
+    "node",
+    "packager",
+    "rust",
+    "native",
+    "windows",
+    "x64"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/pkg.exe"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

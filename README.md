@@ -11,6 +11,27 @@ runtime fixtures when a cache is provided.
 
 ## Usage
 
+Install the npm CLI wrapper:
+
+```sh
+npm install -g @jm-pkg-rust/pkg-rust
+pkg --help
+```
+
+The npm package ships `bin/pkg.js`, which dispatches to a platform-specific
+native package installed through optional dependencies:
+
+- `@jm-pkg-rust/pkg-rust-darwin-arm64`
+- `@jm-pkg-rust/pkg-rust-darwin-x64`
+- `@jm-pkg-rust/pkg-rust-linux-arm64-gnu`
+- `@jm-pkg-rust/pkg-rust-linux-arm64-musl`
+- `@jm-pkg-rust/pkg-rust-linux-x64-gnu`
+- `@jm-pkg-rust/pkg-rust-linux-x64-musl`
+- `@jm-pkg-rust/pkg-rust-win32-x64-msvc`
+
+If the launcher reports a missing native package, reinstall without
+`--omit=optional` so npm can install the matching binary package.
+
 ```sh
 cargo run -- --target node18-macos-x64 --output ./app ./index.js
 ```
@@ -95,6 +116,21 @@ Release binary check:
 ```sh
 cargo build --release --locked
 ```
+
+NPM release check:
+
+```sh
+npm test
+npm_config_cache=/private/tmp/npm-cache npm pack --dry-run --json
+```
+
+The release workflow builds native packages for macOS x64/arm64, Linux
+x64/arm64 with glibc and musl, and Windows x64. It publishes the native
+optional-dependency packages before publishing `@jm-pkg-rust/pkg-rust`.
+Publishing requires `NPM_TOKEN`; macOS release binaries also require
+`APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`,
+`APPLE_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, and
+`APPLE_APP_SPECIFIC_PASSWORD` so the workflow can codesign and notarize them.
 
 The release profile strips symbols. On this machine, a warm-cache release
 rebuild completed in `0.13s` with `target/release/pkg` already stripped.

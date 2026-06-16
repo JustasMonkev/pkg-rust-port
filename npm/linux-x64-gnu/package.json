@@ -1,0 +1,39 @@
+{
+  "name": "@jm-pkg-rust/pkg-rust-linux-x64-gnu",
+  "version": "0.1.0",
+  "description": "Linux x64 glibc native binary for @jm-pkg-rust/pkg-rust",
+  "license": "MIT",
+  "homepage": "https://github.com/JustasMonkev/pkg-rust-port#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JustasMonkev/pkg-rust-port.git"
+  },
+  "keywords": [
+    "pkg",
+    "node",
+    "packager",
+    "rust",
+    "native",
+    "linux",
+    "x64",
+    "glibc"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin/pkg"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
