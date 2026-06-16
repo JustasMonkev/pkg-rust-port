@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        toolchain: [stable, 1.85.0]
+        toolchain: [stable, 1.88.0]
         include:
           # Run the full locked test suite on Windows and macOS so OS-gated
           # tests (Windows fabricator target, macOS signing/fabricator) and
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .pkg-rust-real-cache
-          key: pkg-fetch-v3.5-node18-linux-x64
+          key: pkg-fetch-v3.6-node18-linux-x64
       - run: cargo test --locked --test runtime_smoke -- --nocapture
 
   windows-issue-smoke:
@@ -80,5 +80,5 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .pkg-rust-real-cache
-          key: pkg-fetch-v3.5-node18-win-x64
+          key: pkg-fetch-v3.6-node18-win-x64
       - run: cargo test --locked --test runtime_smoke windows_issue_regression_fixtures_run_when_real_cache_is_configured -- --nocapture
