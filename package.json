@@ -1,5 +1,5 @@
 {
-  "name": "@jm-pkg-rust/pkg-rust",
+  "name": "@justasmonkev/pkg-rust",
   "version": "0.1.0",
   "description": "Rust port of pkg: package Node.js projects into executable artifacts",
   "license": "MIT",
@@ -37,13 +37,13 @@
     "test": "npm run check:version && npm run check:package"
   },
   "optionalDependencies": {
-    "@jm-pkg-rust/pkg-rust-darwin-arm64": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-darwin-x64": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-linux-arm64-gnu": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-linux-arm64-musl": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-linux-x64-gnu": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-linux-x64-musl": "0.1.0",
-    "@jm-pkg-rust/pkg-rust-win32-x64-msvc": "0.1.0"
+    "@justasmonkev/pkg-rust-darwin-arm64": "0.1.0",
+    "@justasmonkev/pkg-rust-darwin-x64": "0.1.0",
+    "@justasmonkev/pkg-rust-linux-arm64-gnu": "0.1.0",
+    "@justasmonkev/pkg-rust-linux-arm64-musl": "0.1.0",
+    "@justasmonkev/pkg-rust-linux-x64-gnu": "0.1.0",
+    "@justasmonkev/pkg-rust-linux-x64-musl": "0.1.0",
+    "@justasmonkev/pkg-rust-win32-x64-msvc": "0.1.0"
   },
   "publishConfig": {
     "access": "public"

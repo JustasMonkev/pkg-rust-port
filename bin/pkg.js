@@ -6,13 +6,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const PACKAGE_BY_PLATFORM = {
-  "darwin arm64": "@jm-pkg-rust/pkg-rust-darwin-arm64",
-  "darwin x64": "@jm-pkg-rust/pkg-rust-darwin-x64",
-  "linux arm64 glibc": "@jm-pkg-rust/pkg-rust-linux-arm64-gnu",
-  "linux arm64 musl": "@jm-pkg-rust/pkg-rust-linux-arm64-musl",
-  "linux x64 glibc": "@jm-pkg-rust/pkg-rust-linux-x64-gnu",
-  "linux x64 musl": "@jm-pkg-rust/pkg-rust-linux-x64-musl",
-  "win32 x64": "@jm-pkg-rust/pkg-rust-win32-x64-msvc"
+  "darwin arm64": "@justasmonkev/pkg-rust-darwin-arm64",
+  "darwin x64": "@justasmonkev/pkg-rust-darwin-x64",
+  "linux arm64 glibc": "@justasmonkev/pkg-rust-linux-arm64-gnu",
+  "linux arm64 musl": "@justasmonkev/pkg-rust-linux-arm64-musl",
+  "linux x64 glibc": "@justasmonkev/pkg-rust-linux-x64-gnu",
+  "linux x64 musl": "@justasmonkev/pkg-rust-linux-x64-musl",
+  "win32 x64": "@justasmonkev/pkg-rust-win32-x64-msvc"
 };
 
 function linuxLibc() {

@@ -14,20 +14,20 @@ runtime fixtures when a cache is provided.
 Install the npm CLI wrapper:
 
 ```sh
-npm install -g @jm-pkg-rust/pkg-rust
+npm install -g @justasmonkev/pkg-rust
 pkg --help
 ```
 
 The npm package ships `bin/pkg.js`, which dispatches to a platform-specific
 native package installed through optional dependencies:
 
-- `@jm-pkg-rust/pkg-rust-darwin-arm64`
-- `@jm-pkg-rust/pkg-rust-darwin-x64`
-- `@jm-pkg-rust/pkg-rust-linux-arm64-gnu`
-- `@jm-pkg-rust/pkg-rust-linux-arm64-musl`
-- `@jm-pkg-rust/pkg-rust-linux-x64-gnu`
-- `@jm-pkg-rust/pkg-rust-linux-x64-musl`
-- `@jm-pkg-rust/pkg-rust-win32-x64-msvc`
+- `@justasmonkev/pkg-rust-darwin-arm64`
+- `@justasmonkev/pkg-rust-darwin-x64`
+- `@justasmonkev/pkg-rust-linux-arm64-gnu`
+- `@justasmonkev/pkg-rust-linux-arm64-musl`
+- `@justasmonkev/pkg-rust-linux-x64-gnu`
+- `@justasmonkev/pkg-rust-linux-x64-musl`
+- `@justasmonkev/pkg-rust-win32-x64-msvc`
 
 If the launcher reports a missing native package, reinstall without
 `--omit=optional` so npm can install the matching binary package.
@@ -126,7 +126,7 @@ npm_config_cache=/private/tmp/npm-cache npm pack --dry-run --json
 
 The release workflow builds native packages for macOS x64/arm64, Linux
 x64/arm64 with glibc and musl, and Windows x64. It publishes the native
-optional-dependency packages before publishing `@jm-pkg-rust/pkg-rust`.
+optional-dependency packages before publishing `@justasmonkev/pkg-rust`.
 Publishing requires `NPM_TOKEN`; macOS release binaries also require
 `APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`,
 `APPLE_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, and

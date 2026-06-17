@@ -1,7 +1,7 @@
 {
-  "name": "@jm-pkg-rust/pkg-rust-darwin-x64",
+  "name": "@justasmonkev/pkg-rust-darwin-x64",
   "version": "0.1.0",
-  "description": "macOS x64 native binary for @jm-pkg-rust/pkg-rust",
+  "description": "macOS x64 native binary for @justasmonkev/pkg-rust",
   "license": "MIT",
   "homepage": "https://github.com/JustasMonkev/pkg-rust-port#readme",
   "repository": {

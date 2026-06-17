@@ -12,7 +12,7 @@ for (const field of requiredRootFields) {
   }
 }
 
-if (rootPackage.name !== "@jm-pkg-rust/pkg-rust") {
+if (rootPackage.name !== "@justasmonkev/pkg-rust") {
   throw new Error(`unexpected npm package name: ${rootPackage.name}`);
 }
 
@@ -26,13 +26,13 @@ if (!rootPackage.files.includes("bin/pkg.js") || rootPackage.files.some((entry) 
 
 const nativePackages = new Set(Object.keys(rootPackage.optionalDependencies || {}));
 const expectedPackages = new Set([
-  "@jm-pkg-rust/pkg-rust-darwin-arm64",
-  "@jm-pkg-rust/pkg-rust-darwin-x64",
-  "@jm-pkg-rust/pkg-rust-linux-arm64-gnu",
-  "@jm-pkg-rust/pkg-rust-linux-arm64-musl",
-  "@jm-pkg-rust/pkg-rust-linux-x64-gnu",
-  "@jm-pkg-rust/pkg-rust-linux-x64-musl",
-  "@jm-pkg-rust/pkg-rust-win32-x64-msvc"
+  "@justasmonkev/pkg-rust-darwin-arm64",
+  "@justasmonkev/pkg-rust-darwin-x64",
+  "@justasmonkev/pkg-rust-linux-arm64-gnu",
+  "@justasmonkev/pkg-rust-linux-arm64-musl",
+  "@justasmonkev/pkg-rust-linux-x64-gnu",
+  "@justasmonkev/pkg-rust-linux-x64-musl",
+  "@justasmonkev/pkg-rust-win32-x64-msvc"
 ]);
 
 for (const name of expectedPackages) {

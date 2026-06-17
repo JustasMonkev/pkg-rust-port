@@ -1,7 +1,7 @@
 {
-  "name": "@jm-pkg-rust/pkg-rust-linux-x64-gnu",
+  "name": "@justasmonkev/pkg-rust-linux-x64-gnu",
   "version": "0.1.0",
-  "description": "Linux x64 glibc native binary for @jm-pkg-rust/pkg-rust",
+  "description": "Linux x64 glibc native binary for @justasmonkev/pkg-rust",
   "license": "MIT",
   "homepage": "https://github.com/JustasMonkev/pkg-rust-port#readme",
   "repository": {

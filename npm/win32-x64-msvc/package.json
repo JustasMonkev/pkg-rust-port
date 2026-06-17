@@ -1,7 +1,7 @@
 {
-  "name": "@jm-pkg-rust/pkg-rust-win32-x64-msvc",
+  "name": "@justasmonkev/pkg-rust-win32-x64-msvc",
   "version": "0.1.0",
-  "description": "Windows x64 MSVC native binary for @jm-pkg-rust/pkg-rust",
+  "description": "Windows x64 MSVC native binary for @justasmonkev/pkg-rust",
   "license": "MIT",
   "homepage": "https://github.com/JustasMonkev/pkg-rust-port#readme",
   "repository": {
