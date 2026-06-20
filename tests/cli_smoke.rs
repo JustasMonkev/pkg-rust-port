@@ -310,6 +310,7 @@ fn cli_help_matches_js_help_text() -> TestResult {
         "comma-separated list of targets (see examples)",
         "file with top-level config",
         "bake v8 options into executable to run with them on",
+        "validate inputs and print the package plan without fetching binaries or writing output",
         "don't download prebuilt base binaries, build them",
         "speed up and disclose the sources of top-level project",
         "force specified packages to be considered public",
@@ -326,6 +327,50 @@ fn cli_help_matches_js_help_text() -> TestResult {
     assert!(help.contains("$ pkg --compress GZip index.js"));
     assert!(help.contains("$ pkg --compress Zstd index.js"));
     assert!(help.contains("CLI flags override config values."));
+    Ok(())
+}
+
+#[test]
+fn cli_dry_run_reports_plan_without_cache_or_output() -> TestResult {
+    let temp_root = temp_root("dry-run-plan")?;
+    let output_path = temp_root.join("planned-output");
+    let output_text = output_path
+        .to_str()
+        .ok_or_else(|| "temp output path is not valid utf-8".to_owned())?;
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = run_cli(
+        manifest_dir,
+        [
+            "--dry-run",
+            "--target",
+            "node18-macos-arm64",
+            "--output",
+            output_text,
+            "--compress",
+            "GZip",
+            "test/test-50-require-resolve/test-x-index.js",
+        ],
+    )?;
+
+    assert!(
+        output.status.success(),
+        "pkg --dry-run failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("> pkg@"));
+    assert!(stdout.contains("> dry run: no binaries will be fetched"));
+    assert!(stdout.contains("entrypoint:"));
+    assert!(stdout.contains("test-50-require-resolve/test-x-index.js"));
+    assert!(stdout.contains("compression:  GZip"));
+    assert!(stdout.contains("target: node18-macos-arm64"));
+    assert!(stdout.contains(output_text));
+    assert!(!output_path.exists(), "dry run wrote output executable");
+
+    if temp_root.exists() {
+        fs::remove_dir_all(temp_root)?;
+    }
     Ok(())
 }
 

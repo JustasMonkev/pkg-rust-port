@@ -68,6 +68,10 @@ struct Cli {
     #[arg(long = "no-debug", hide = true, overrides_with = "debug")]
     no_debug: bool,
 
+    /// validate inputs and print the package plan without fetching binaries or writing output
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+
     /// don't download prebuilt base binaries, build them
     #[arg(short = 'b', long = "build")]
     build: bool,
@@ -201,6 +205,9 @@ pub struct PackagePlan {
     pub compression: Compression,
     /// Whether debug diagnostics are enabled (CLI flag or config).
     pub debug: bool,
+    /// Whether to stop after planning and print the selected inputs, targets,
+    /// and outputs without fetching base binaries or writing executable files.
+    pub dry_run: bool,
     /// Whether bytecode generation is enabled.
     pub bytecode: bool,
     /// Whether native addon prebuild selection/building is enabled.
@@ -299,6 +306,10 @@ where
     }
     if plan.compression != Compression::None {
         println!("compression:  {}", plan.compression.cli_label());
+    }
+    if plan.dry_run {
+        print_dry_run_plan(&plan);
+        return Ok(());
     }
     if plan.sea {
         // SEA downloads from nodejs.org and shells out to the host node via
@@ -586,6 +597,7 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         snapshot_base,
         compression,
         debug,
+        dry_run: cli.dry_run,
         bytecode,
         native_build,
         signature,
@@ -600,6 +612,24 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         outputs,
         notices,
     })
+}
+
+fn print_dry_run_plan(plan: &PackagePlan) {
+    println!("> dry run: no binaries will be fetched and no output will be written");
+    println!("input:        {}", plan.input.display());
+    println!("entrypoint:   {}", plan.entrypoint.display());
+    println!("snapshot base: {}", plan.snapshot_base.display());
+    println!("compression:  {}", plan.compression.cli_label());
+    println!("bytecode:     {}", if plan.bytecode { "yes" } else { "no" });
+    println!(
+        "native build: {}",
+        if plan.native_build { "yes" } else { "no" }
+    );
+    println!("targets:");
+    for output in &plan.outputs {
+        println!("  - target: {}", output.target);
+        println!("    output: {}", output.output.display());
+    }
 }
 
 /// Flatten a string-or-array config value into a string list.

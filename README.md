@@ -50,6 +50,7 @@ Common options:
 -o, --output <path>          output file name or template
     --out-path <path>        output directory for multiple targets
     --options <options>      comma-separated Node/V8 options to bake into output
+    --dry-run                validate and print the package plan without fetching binaries or writing output
     --no-bytecode            skip bytecode payloads when source content is available
 -C, --compress <algorithm>   none, gzip, or brotli
 ```
@@ -62,6 +63,7 @@ cargo run -- --target node18-linux-x64 ./index.js
 cargo run -- --target node18-linux,node18-macos,node18-win ./index.js
 cargo run -- --options expose-gc,max-old-space-size=1024 ./index.js
 cargo run -- --compress gzip ./index.js
+cargo run -- --dry-run --target node18-linux-x64 --output ./app ./index.js
 ```
 
 ## Targets
