@@ -1480,10 +1480,19 @@ fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgErr
 
     if !pattern.contains('*') {
         let pattern_path = base_dir.join(pattern);
+        let base_dir = canonicalize_or_self(base_dir);
         return if pattern_path.is_file() {
-            Ok(vec![canonicalize_or_self(&pattern_path)])
+            let file = canonicalize_or_self(&pattern_path);
+            if file.starts_with(&base_dir) {
+                Ok(vec![file])
+            } else {
+                Ok(Vec::new())
+            }
         } else if pattern_path.is_dir() {
-            collect_files_recursive(&pattern_path)
+            Ok(collect_files_recursive(&pattern_path)?
+                .into_iter()
+                .filter(|file| file.starts_with(&base_dir))
+                .collect())
         } else {
             Ok(Vec::new())
         };
