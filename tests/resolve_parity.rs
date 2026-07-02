@@ -179,3 +179,54 @@ fn type_module_package_resolves_js_exports_as_esm() -> Result<(), Box<dyn std::e
     std::fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }
+
+#[test]
+fn rejects_absolute_exports_targets() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = temp_root("exports-absolute-target")?;
+    let package_dir = fixture_dir.join("node_modules/badabs");
+    let secret = fixture_dir.join("secret.mjs");
+    std::fs::create_dir_all(&package_dir)?;
+    std::fs::write(&secret, "export default 'secret';\n")?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        format!(
+            r#"{{"name":"badabs","exports":{{".":{{"import":"{}"}}}}}}"#,
+            secret.display()
+        ),
+    )?;
+
+    let options = ResolveOptions::new(&fixture_dir);
+    let result = resolve_module("badabs", &options);
+
+    assert!(
+        matches!(result, Err(PkgError::Resolve(message)) if message.contains("Cannot find module 'badabs'"))
+    );
+
+    std::fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
+#[test]
+fn rejects_traversing_exports_pattern_targets() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_dir = temp_root("exports-pattern-traversal")?;
+    let package_dir = fixture_dir.join("node_modules/badpattern");
+    std::fs::create_dir_all(&package_dir)?;
+    std::fs::write(
+        fixture_dir.join("node_modules/secret.mjs"),
+        "export default 'secret';\n",
+    )?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"badpattern","exports":{"./*":{"import":"./../*.mjs"}}}"#,
+    )?;
+
+    let options = ResolveOptions::new(&fixture_dir);
+    let result = resolve_module("badpattern/secret", &options);
+
+    assert!(
+        matches!(result, Err(PkgError::Resolve(message)) if message.contains("Cannot find module 'badpattern/secret'"))
+    );
+
+    std::fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
