@@ -372,6 +372,48 @@ fn dependency_internal_missing_literal_is_debug_warning() -> Result<(), Box<dyn 
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn dictionary_exact_scripts_skip_symlinks_outside_package() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture_dir = std::env::temp_dir().join(format!(
+        "pkg-rust-thread-stream-symlink-{}",
+        std::process::id()
+    ));
+    let outside_file = std::env::temp_dir().join(format!(
+        "pkg-rust-thread-stream-secret-{}.js",
+        std::process::id()
+    ));
+    let _ignored = fs::remove_dir_all(&fixture_dir);
+    let _ignored = fs::remove_file(&outside_file);
+    let package_dir = fixture_dir.join("node_modules/thread-stream");
+    fs::create_dir_all(package_dir.join("lib"))?;
+    fs::write(fixture_dir.join("app.js"), "require('thread-stream');\n")?;
+    fs::write(
+        package_dir.join("package.json"),
+        r#"{"name":"thread-stream","main":"index.js"}"#,
+    )?;
+    fs::write(package_dir.join("index.js"), "module.exports = {};\n")?;
+    fs::write(&outside_file, "module.exports = 'secret';\n")?;
+    std::os::unix::fs::symlink(&outside_file, package_dir.join("lib/worker.js"))?;
+
+    let output = walk(
+        empty_marker()?,
+        fixture_dir.join("app.js"),
+        None,
+        WalkerParams::new().with_root(&fixture_dir),
+    )?;
+
+    assert!(output.contains_store(package_dir.join("index.js"), StoreKind::Blob));
+    assert!(!output.records.contains_key(&outside_file));
+    assert!(!output.contains_store(outside_file.clone(), StoreKind::Blob));
+    assert!(!output.contains_store(outside_file.clone(), StoreKind::Content));
+
+    fs::remove_dir_all(&fixture_dir)?;
+    fs::remove_file(&outside_file)?;
+    Ok(())
+}
+
 #[test]
 fn custom_package_dictionary_discloses_dependency_source() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("test/test-50-public-packages");
