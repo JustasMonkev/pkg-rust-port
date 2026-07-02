@@ -769,6 +769,73 @@ fn discovered_pkgrc_targets_and_output_path_override_package_json()
 }
 
 #[test]
+fn rejects_pkgrc_output_path_parent_traversal() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-traversal-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"traversal-demo","bin":"app.js","pkg":{"outputPath":"safe-out"}}"#,
+    )?;
+    fs::write(temp_root.join(".pkgrc"), r#"{"outputPath":"../outside"}"#)?;
+
+    let error = match plan_package([OsString::from(temp_root.as_os_str())]) {
+        Ok(plan) => {
+            fs::remove_dir_all(temp_root)?;
+            return Err(format!("expected outputPath traversal to fail, got {plan:#?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("pkg.outputPath must be a relative path without parent directory traversal"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn rejects_pkgrc_output_path_absolute_path() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-absolute-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"absolute-demo","bin":"app.js"}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        format!(r#"{{"outputPath":{}}}"#, serde_json::to_string(&temp_root)?),
+    )?;
+
+    let error = match plan_package([OsString::from(temp_root.as_os_str())]) {
+        Ok(plan) => {
+            fs::remove_dir_all(temp_root)?;
+            return Err(format!("expected absolute outputPath to fail, got {plan:#?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("pkg.outputPath must be a relative path without parent directory traversal"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
 fn discovered_pkgrc_pkg_options_drive_walker_marker() -> Result<(), Box<dyn std::error::Error>> {
     let temp_root =
         std::env::temp_dir().join(format!("pkg-rust-pkgrc-marker-{}", std::process::id()));

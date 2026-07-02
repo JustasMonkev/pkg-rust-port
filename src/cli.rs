@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use clap::{Parser, error::ErrorKind};
@@ -860,16 +860,31 @@ fn output_base(
         .unwrap_or(output_name);
     // `pkg_options` already carries the JS resolveConfig precedence: an
     // external/discovered config's `pkg` wins over the package.json `pkg`.
-    let configured_out_path = cli
-        .out_path
-        .clone()
-        .or_else(|| {
-            pkg_options
-                .and_then(|pkg| pkg.output_path.as_ref())
-                .map(PathBuf::from)
-        })
-        .unwrap_or_default();
+    let configured_out_path = match cli.out_path.clone() {
+        Some(out_path) => out_path,
+        None => pkg_options
+            .and_then(|pkg| pkg.output_path.as_ref())
+            .map(|output_path| confined_config_output_path(Path::new(output_path)))
+            .transpose()?
+            .unwrap_or_default(),
+    };
     absolute_path(&configured_out_path.join(stem))
+}
+
+fn confined_config_output_path(output_path: &Path) -> Result<PathBuf, PkgError> {
+    let escapes_output_dir = output_path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    });
+    if escapes_output_dir {
+        return Err(PkgError::Cli(format!(
+            "pkg.outputPath must be a relative path without parent directory traversal: {}",
+            output_path.display()
+        )));
+    }
+    Ok(output_path.to_path_buf())
 }
 
 fn resolve_targets(
