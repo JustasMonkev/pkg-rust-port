@@ -36,7 +36,8 @@ porting order. Items move to "Done" as they land with parity tests.
   `{ "pkg": ... }`; build-shaping flags resolvable from config with
   CLI > config > default precedence (`debug`, `compress`, `bytecode`,
   `nativeBuild`, `signature`, `fallbackToSource`, `public`, `publicPackages`,
-  `noDictionary`, `options`), including the hidden positive/negative CLI flag
+  `noDictionary`), excluding `options` because baked Node flags are accepted
+  only from the invoking CLI for security, including the hidden positive/negative CLI flag
   pairs (`--bytecode`, `--native-build`, `--no-debug`, `--no-public`,
   `--no-fallback-to-source`). JS config modules are evaluated through the
   host `node` (same external boundary as bytecode fabrication). Not yet

@@ -184,8 +184,6 @@ pub struct PkgConfig {
     pub public_packages: Option<StringOrList>,
     /// Config-file equivalent of `--no-dict` (as `noDictionary`).
     pub no_dictionary: Option<StringOrList>,
-    /// Config-file equivalent of `--options` (baked v8 options).
-    pub options: Option<StringOrList>,
 }
 
 /// Config value accepted as either a comma-joined string or a string list.

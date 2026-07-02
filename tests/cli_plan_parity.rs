@@ -608,7 +608,7 @@ fn pkgrc_discovery_resolves_flags_with_cli_precedence() -> Result<(), Box<dyn st
     fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
     fs::write(
         temp_root.join(".pkgrc"),
-        r#"{"compress":"GZip","bytecode":false,"fallbackToSource":true,"publicPackages":["alpha","beta"],"options":"expose-gc"}"#,
+        r#"{"compress":"GZip","bytecode":false,"fallbackToSource":true,"publicPackages":["alpha","beta"],"options":"require=./evil.js"}"#,
     )?;
 
     let plan = plan_package([
@@ -623,7 +623,7 @@ fn pkgrc_discovery_resolves_flags_with_cli_precedence() -> Result<(), Box<dyn st
     assert!(!plan.bytecode);
     assert!(plan.fallback_to_source);
     assert_eq!(plan.public_packages, ["alpha", "beta"]);
-    assert_eq!(plan.bakes, ["--expose-gc"]);
+    assert!(plan.bakes.is_empty());
     assert!(
         plan.notices
             .iter()
@@ -645,6 +645,34 @@ fn pkgrc_discovery_resolves_flags_with_cli_precedence() -> Result<(), Box<dyn st
     assert_eq!(plan.compression, Compression::Brotli);
     assert!(plan.bytecode);
     assert!(!plan.fallback_to_source);
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn package_json_pkg_options_do_not_become_bakes() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-options-plan-{}",
+        std::process::id()
+    ));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"package-options-demo","bin":"app.js","pkg":{"options":"require=./evil.js"}}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.as_os_str()),
+    ])?;
+
+    assert!(plan.bakes.is_empty());
 
     fs::remove_dir_all(temp_root)?;
     Ok(())

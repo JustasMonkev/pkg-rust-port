@@ -135,9 +135,11 @@ struct Cli {
 
 /// Usage examples appended to the CLI help, mirroring the JS `help.ts` output.
 const CLI_EXAMPLES: &str = "\
-All build-shaping flags above (compress, fallback-to-source, public, public-packages,
-options, bytecode, native-build, no-dict, debug, signature) can also be set in
-the pkg config file (camelCase keys). CLI flags override config values.
+All build-shaping flags above except options (compress, fallback-to-source, public,
+public-packages, bytecode, native-build, no-dict, debug, signature) can also be
+set in the pkg config file (camelCase keys). CLI flags override config values.
+The --options flag is accepted only from the invoking CLI because it is passed to
+Node during bytecode generation.
 
 Examples:
 
@@ -460,11 +462,10 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
             .and_then(|pkg| pkg.no_dictionary.as_ref())
             .map(crate::config::StringOrList::to_comma_joined)
     });
-    let options_raw = cli.options.clone().or_else(|| {
-        flag_config
-            .and_then(|pkg| pkg.options.as_ref())
-            .map(crate::config::StringOrList::to_comma_joined)
-    });
+    // SECURITY: `--options` values are passed as Node process flags during
+    // bytecode fabrication. Only trust the operator-supplied CLI flag here;
+    // package/config metadata may come from an untrusted project.
+    let options_raw = cli.options.clone();
     let entrypoint = resolve_entrypoint(&input, input_package.as_ref())?;
     let marker = build_marker(
         &input,
