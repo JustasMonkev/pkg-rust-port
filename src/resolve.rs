@@ -226,8 +226,9 @@ fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<Resol
         let package_root = package_json.parent()?;
         for condition in ["require", "import"] {
             if let Some(target) = resolve_exports_subpath(exports, &subpath, condition) {
-                let full = package_root.join(target.trim_start_matches("./"));
-                if full.is_file() {
+                if let Some(full) = resolve_exports_target_path(package_root, &target)
+                    && full.is_file()
+                {
                     return Some(ResolvedModule {
                         path: normalize(&full)?,
                         package_json: normalize(&package_json),
@@ -274,8 +275,9 @@ pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Optio
         let exports = json.get("exports")?;
         let package_root = package_json.parent()?;
         if let Some(target) = resolve_exports_subpath(exports, &subpath, "require") {
-            let full = package_root.join(target.trim_start_matches("./"));
-            if full.is_file() {
+            if let Some(full) = resolve_exports_target_path(package_root, &target)
+                && full.is_file()
+            {
                 if full.extension().and_then(|extension| extension.to_str()) == Some("mjs") {
                     return normalize(&full);
                 }
@@ -283,7 +285,7 @@ pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Optio
             }
         }
         let target = resolve_exports_subpath(exports, &subpath, "import")?;
-        let full = package_root.join(target.trim_start_matches("./"));
+        let full = resolve_exports_target_path(package_root, &target)?;
         if !full.is_file() {
             return None;
         }
@@ -359,6 +361,26 @@ fn resolve_exports_target(
         }),
         _ => None,
     }
+}
+
+/// Convert a package `exports` target into a filesystem path while enforcing
+/// Node's package-internal target constraints. Export targets must be relative
+/// paths beginning with `./`; absolute paths and `..` traversal are rejected
+/// before any filesystem access.
+fn resolve_exports_target_path(package_root: &Path, target: &str) -> Option<PathBuf> {
+    let relative = target.strip_prefix("./")?;
+    let relative_path = Path::new(relative);
+    if relative_path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return None;
+    }
+    Some(package_root.join(relative_path))
 }
 
 /// JS `common.isESMFile`: `.mjs` is ESM, `.cjs` is CJS, `.js` follows the
