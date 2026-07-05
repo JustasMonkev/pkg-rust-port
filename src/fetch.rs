@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -83,6 +84,7 @@ impl BinaryKind {
 pub struct PkgFetchCache {
     root: PathBuf,
     download_on_miss: bool,
+    allow_unverified_built_cache: bool,
 }
 
 impl PkgFetchCache {
@@ -95,6 +97,7 @@ impl PkgFetchCache {
         Self {
             root: root.into(),
             download_on_miss: false,
+            allow_unverified_built_cache: false,
         }
     }
 
@@ -119,7 +122,26 @@ impl PkgFetchCache {
         self
     }
 
+    /// Allow reading unverified `built-*` cache artifacts.
+    ///
+    /// Built cache entries are local build products and do not have embedded
+    /// pkg-fetch release hashes. They are therefore disabled by default so a
+    /// poisoned reusable cache cannot silently replace the trusted base
+    /// executable. Callers that deliberately manage a private build cache can
+    /// opt in to the legacy behavior.
+    #[must_use]
+    pub fn with_unverified_built_cache(mut self) -> Self {
+        self.allow_unverified_built_cache = true;
+        self
+    }
+
     /// Create a download-enabled cache provider from `$PKG_CACHE_PATH` or `~/.pkg-cache`.
+    ///
+    /// Set `PKG_ALLOW_UNVERIFIED_BUILT_CACHE` to a truthy value (`1`, `true`,
+    /// `yes`, or `on`) to opt in to reading unverified `built-*` cache
+    /// artifacts, matching [`with_unverified_built_cache`](Self::with_unverified_built_cache).
+    /// This is the CLI/`PKG_CACHE_PATH` escape hatch for workflows that
+    /// deliberately seed a private build cache.
     ///
     /// # Example
     ///
@@ -128,15 +150,25 @@ impl PkgFetchCache {
     /// assert!(cache.is_ok() || cache.is_err());
     /// ```
     pub fn default_cache() -> Result<Self, PkgError> {
+        let allow_unverified_built =
+            opt_in_flag_enabled(std::env::var_os("PKG_ALLOW_UNVERIFIED_BUILT_CACHE").as_deref());
+        let finalize = |cache: Self| {
+            let cache = cache.with_downloads();
+            if allow_unverified_built {
+                cache.with_unverified_built_cache()
+            } else {
+                cache
+            }
+        };
         if let Some(path) = std::env::var_os("PKG_CACHE_PATH") {
-            return Ok(Self::new(path).with_downloads());
+            return Ok(finalize(Self::new(path)));
         }
         let Some(home) = std::env::var_os("HOME") else {
             return Err(PkgError::Fetch(
                 "HOME is not set and PKG_CACHE_PATH was not provided".to_owned(),
             ));
         };
-        Ok(Self::new(PathBuf::from(home).join(".pkg-cache")).with_downloads())
+        Ok(finalize(Self::new(PathBuf::from(home).join(".pkg-cache"))))
     }
 
     /// Return the cache path for a target and cache artifact kind.
@@ -270,12 +302,11 @@ impl TargetBinaryProvider for PkgFetchCache {
     }
 
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        let built = self.binary_path(target, BinaryKind::Built)?;
         if target.force_build {
             let requirement = self.source_build_requirement(target)?;
             if requirement.built_path.is_file() {
-                return read_binary(&requirement.built_path).map(|bytes| {
-                    TargetBinary::from_bytes(bytes).with_path(requirement.built_path)
-                });
+                return self.read_built_artifact(target, requirement.built_path);
             }
             return Err(PkgError::Fetch(requirement.message()));
         }
@@ -286,16 +317,27 @@ impl TargetBinaryProvider for PkgFetchCache {
                 .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
         }
 
-        let built = self.binary_path(target, BinaryKind::Built)?;
-        if built.is_file() {
-            return read_binary(&built)
-                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
-        }
         if self.download_on_miss {
             let fetched = self.binary_path(target, BinaryKind::Fetched)?;
-            return self
-                .download_fetched(target)
-                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
+            match self.download_fetched(target) {
+                Ok(bytes) => {
+                    return Ok(TargetBinary::from_bytes(bytes).with_path(fetched));
+                }
+                Err(download_error) => {
+                    // A verified download is preferred, but when it is
+                    // unavailable — e.g. targets absent from the embedded SHA
+                    // table or offline environments — an explicitly trusted
+                    // built cache artifact may still satisfy the request.
+                    if self.allow_unverified_built_cache && built.is_file() {
+                        return self.read_built_artifact(target, built);
+                    }
+                    return Err(download_error);
+                }
+            }
+        }
+
+        if built.is_file() {
+            return self.read_built_artifact(target, built);
         }
 
         // DECISION: explicit `new` caches stay offline so tests and callers can
@@ -309,6 +351,20 @@ impl TargetBinaryProvider for PkgFetchCache {
 }
 
 impl PkgFetchCache {
+    fn read_built_artifact(
+        &self,
+        target: &NodeTarget,
+        path: PathBuf,
+    ) -> Result<TargetBinary, PkgError> {
+        if !self.allow_unverified_built_cache {
+            return Err(PkgError::Fetch(format!(
+                "refusing unverified built binary for target {target}; {} has no embedded pkg-fetch hash",
+                path.display()
+            )));
+        }
+        read_binary(&path).map(|bytes| TargetBinary::from_bytes(bytes).with_path(path))
+    }
+
     fn verify_fetched(&self, target: &NodeTarget, path: &Path) -> Result<bool, PkgError> {
         let expected = expected_hash(target)?;
         let actual = sha256_hex(path)?;
@@ -394,6 +450,20 @@ fn downloading_path(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.downloading", path.display()))
 }
 
+/// Interpret an environment-style opt-in flag.
+///
+/// Returns `true` for `1`, `true`, `yes`, or `on` (case-insensitive, trimmed);
+/// `false` for anything else, including unset values.
+fn opt_in_flag_enabled(value: Option<&OsStr>) -> bool {
+    let Some(value) = value.and_then(OsStr::to_str) else {
+        return false;
+    };
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 fn tag_from_version(version: &str) -> String {
     let mut parts = version.split('.');
     let major = parts.next().filter(|part| !part.is_empty()).unwrap_or("0");
@@ -434,6 +504,23 @@ mod tests {
 
     use super::*;
     use crate::target::{TargetDefaults, parse_targets};
+
+    #[test]
+    fn opt_in_flag_recognizes_truthy_values() {
+        for value in ["1", "true", "TRUE", " yes ", "On"] {
+            assert!(
+                opt_in_flag_enabled(Some(OsStr::new(value))),
+                "expected {value:?} to enable opt-in"
+            );
+        }
+        for value in ["0", "false", "no", "off", "", "maybe"] {
+            assert!(
+                !opt_in_flag_enabled(Some(OsStr::new(value))),
+                "expected {value:?} to leave opt-in disabled"
+            );
+        }
+        assert!(!opt_in_flag_enabled(None));
+    }
 
     #[test]
     fn stores_fetched_binary_and_verifies_hash() -> Result<(), Box<dyn std::error::Error>> {
