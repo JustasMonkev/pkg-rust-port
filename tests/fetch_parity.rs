@@ -151,6 +151,67 @@ fn cache_provider_can_opt_into_unverified_built_cache() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn download_enabled_cache_falls_back_to_opted_in_built_artifact()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-download-built-fallback-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root)
+        .with_downloads()
+        .with_unverified_built_cache();
+    let defaults = TargetDefaults::host("node18");
+    // `linux-armv7` has no entry in the embedded pkg-fetch SHA table, so the
+    // fetched download fails before any network access, exercising the built
+    // cache fallback for opted-in callers.
+    let target = parse_targets("linux-armv7", &defaults)?.targets.remove(0);
+    let built = cache.binary_path(&target, BinaryKind::Built)?;
+    fs::create_dir_all(
+        built
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&built, b"built")?;
+
+    let artifact = cache.binary_artifact_for(&target)?;
+
+    assert_eq!(artifact.bytes(), b"built");
+    assert_eq!(artifact.path(), Some(built.as_path()));
+    fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn download_enabled_cache_rejects_built_artifact_without_opt_in()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-download-built-reject-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root).with_downloads();
+    let defaults = TargetDefaults::host("node18");
+    let target = parse_targets("linux-armv7", &defaults)?.targets.remove(0);
+    let built = cache.binary_path(&target, BinaryKind::Built)?;
+    fs::create_dir_all(
+        built
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&built, b"built")?;
+
+    let error = cache.binary_artifact_for(&target).err();
+
+    assert!(
+        matches!(&error, Some(PkgError::Fetch(message)) if !message.contains("refusing unverified built binary")),
+        "unexpected result without opt-in: {error:?}"
+    );
+    fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
 fn force_build_rejects_unverified_built_cache_artifacts() -> Result<(), Box<dyn std::error::Error>>
 {
     let root = std::env::temp_dir().join(format!(
