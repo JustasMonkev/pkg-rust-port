@@ -1,10 +1,57 @@
 #![allow(missing_docs)]
 
+use std::collections::BTreeSet;
+
 use serde_json::json;
 
 use pkg_rust::{
     DictionaryLog, PackageJson, active_dependencies, apply_dictionary_entry, lookup_dictionary,
 };
+
+/// test-77-compare-dicts-and-tests: every dictionary module must have a
+/// corresponding `test-79-npm` fixture and vice versa, accounting for the same
+/// manual exceptions the JS meta-test applies. The canonical dictionary module
+/// names are vendored as test data because the Rust port stores the dictionary
+/// as typed data rather than as `dictionary/*.js` files.
+#[test]
+fn dictionary_modules_and_npm_fixtures_stay_consistent() -> Result<(), Box<dyn std::error::Error>> {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut configs: BTreeSet<String> =
+        std::fs::read_to_string(manifest_dir.join("test/dictionary-modules.txt"))?
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+    // Matches the JS test's manual config additions.
+    for extra in ["etc", "express-with-jade", "redis-with-hiredis"] {
+        configs.insert(extra.to_owned());
+    }
+
+    let mut tests: BTreeSet<String> = std::fs::read_dir(manifest_dir.join("test/test-79-npm"))?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name != "_isolator")
+        .collect();
+    // Matches the JS test's manual fixture additions.
+    for extra in ["etc", "steam-resources"] {
+        tests.insert(extra.to_owned());
+    }
+
+    let configs_absent_in_tests: Vec<&String> = configs.difference(&tests).collect();
+    let tests_absent_in_configs: Vec<&String> = tests.difference(&configs).collect();
+    assert!(
+        configs_absent_in_tests.is_empty(),
+        "dictionary modules without a test-79-npm fixture: {configs_absent_in_tests:?}"
+    );
+    assert!(
+        tests_absent_in_configs.is_empty(),
+        "test-79-npm fixtures without a dictionary module: {tests_absent_in_configs:?}"
+    );
+    Ok(())
+}
 
 #[test]
 fn sequelize_dictionary_replaces_pkg_scripts() -> Result<(), Box<dyn std::error::Error>> {

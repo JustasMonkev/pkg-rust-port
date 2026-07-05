@@ -7,7 +7,7 @@ use pkg_rust::PackageJson;
 #[test]
 fn parses_string_bin_from_package_json_fixture() -> Result<(), Box<dyn std::error::Error>> {
     let package = PackageJson::parse(include_str!(
-        "../../test/test-46-input-package-json/package.json"
+        "../test/test-46-input-package-json/package.json"
     ))?;
 
     assert_eq!(package.name.as_deref(), Some("palookaville"));
@@ -15,12 +15,10 @@ fn parses_string_bin_from_package_json_fixture() -> Result<(), Box<dyn std::erro
     assert_eq!(package.selected_bin().as_deref(), Some("test-x-index.js"));
     assert_eq!(
         package
-            .resolve_selected_bin(Path::new(
-                "../../test/test-46-input-package-json/package.json"
-            ))
+            .resolve_selected_bin(Path::new("../test/test-46-input-package-json/package.json"))
             .as_deref(),
         Some(Path::new(
-            "../../test/test-46-input-package-json/test-x-index.js"
+            "../test/test-46-input-package-json/test-x-index.js"
         ))
     );
     Ok(())
@@ -29,7 +27,7 @@ fn parses_string_bin_from_package_json_fixture() -> Result<(), Box<dyn std::erro
 #[test]
 fn strips_scope_for_package_basename() -> Result<(), Box<dyn std::error::Error>> {
     let package = PackageJson::parse(include_str!(
-        "../../test/test-46-input-package-json-dir-scope/package.json"
+        "../test/test-46-input-package-json-dir-scope/package.json"
     ))?;
 
     assert_eq!(package.name.as_deref(), Some("@org/palookaville"));
@@ -41,7 +39,7 @@ fn strips_scope_for_package_basename() -> Result<(), Box<dyn std::error::Error>>
 #[test]
 fn reads_pkg_output_path_and_targets() -> Result<(), Box<dyn std::error::Error>> {
     let output_package = PackageJson::parse(include_str!(
-        "../../test/test-46-input-package-json-outputdir/package.json"
+        "../test/test-46-input-package-json-outputdir/package.json"
     ))?;
     assert_eq!(
         output_package.pkg.and_then(|pkg| pkg.output_path),
@@ -49,7 +47,7 @@ fn reads_pkg_output_path_and_targets() -> Result<(), Box<dyn std::error::Error>>
     );
 
     let target_package = PackageJson::parse(include_str!(
-        "../../test/test-46-input-package-json-target/package.json"
+        "../test/test-46-input-package-json-target/package.json"
     ))?;
     assert_eq!(
         target_package.pkg.map(|pkg| pkg.targets),

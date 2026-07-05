@@ -10,10 +10,14 @@ use crate::fsx::plus_x;
 use crate::package::{TargetBinary, TargetBinaryProvider};
 use crate::target::NodeTarget;
 
-const PKG_FETCH_VERSION: &str = "3.5.2";
-const PKG_FETCH_RELEASE_BASE_URL: &str = "https://github.com/vercel/pkg-fetch/releases/download";
+const PKG_FETCH_VERSION: &str = "3.6.3";
+const PKG_FETCH_RELEASE_BASE_URL: &str = "https://github.com/yao-pkg/pkg-fetch/releases/download";
+// Node versions patched by @yao-pkg/pkg-fetch 3.6.3 (`patches/patches.json`).
+// Prebuilt release binaries exist only for v14 and newer; older entries are
+// reachable solely through the external `--build` source-build boundary.
 const SUPPORTED_NODE_VERSIONS: &[&str] = &[
-    "8.17.0", "10.24.1", "12.22.11", "14.21.3", "16.19.1", "18.15.0", "19.8.1",
+    "8.17.0", "10.24.1", "12.22.11", "14.21.3", "16.20.2", "18.20.8", "20.20.2", "22.22.3",
+    "24.15.0", "26.2.0",
 ];
 
 /// Kind of pkg-fetch cache artifact.
@@ -23,6 +27,32 @@ pub enum BinaryKind {
     Fetched,
     /// Binary built locally from patched Node.js source.
     Built,
+}
+
+/// Requirement emitted when a target must be supplied by a source-built
+/// pkg-fetch binary.
+///
+/// The Rust port does not build Node.js from source. A force-build target is
+/// complete only when an external pkg-fetch-compatible builder has placed the
+/// expected `built-*` artifact in the cache.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceBuildRequirement {
+    /// Target that requested a built binary.
+    pub target: NodeTarget,
+    /// Exact cache path the external builder must create.
+    pub built_path: PathBuf,
+}
+
+impl SourceBuildRequirement {
+    /// Human-readable explanation suitable for CLI/cache errors.
+    #[must_use]
+    pub fn message(&self) -> String {
+        format!(
+            "source build required for force-build target {}; run pkg-fetch's source build workflow externally and place the built binary at {}",
+            self.target,
+            self.built_path.display()
+        )
+    }
 }
 
 impl BinaryKind {
@@ -46,7 +76,7 @@ impl BinaryKind {
 ///     .targets
 ///     .remove(0);
 /// let path = cache.binary_path(&target, pkg_rust::BinaryKind::Fetched)?;
-/// assert!(path.to_string_lossy().contains("fetched-v18.15.0-linux-x64"));
+/// assert!(path.to_string_lossy().contains("fetched-v18.20.8-linux-x64"));
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,7 +112,7 @@ impl PkgFetchCache {
     ///     .targets
     ///     .remove(0);
     /// let path = cache.binary_path(&target, pkg_rust::BinaryKind::Fetched)?;
-    /// assert!(path.to_string_lossy().contains("v3.5"));
+    /// assert!(path.to_string_lossy().contains("v3.6"));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -134,6 +164,21 @@ impl PkgFetchCache {
             target.platform,
             target.arch
         )))
+    }
+
+    /// Return the external source-build requirement for `target`.
+    ///
+    /// This makes the `--build` boundary explicit: the Rust port consumes
+    /// pkg-fetch-compatible built cache artifacts, but does not run the
+    /// Node.js source build itself.
+    pub fn source_build_requirement(
+        &self,
+        target: &NodeTarget,
+    ) -> Result<SourceBuildRequirement, PkgError> {
+        Ok(SourceBuildRequirement {
+            target: target.clone(),
+            built_path: self.binary_path(target, BinaryKind::Built)?,
+        })
     }
 
     /// Download the fetched binary for `target` into the pkg-fetch cache.
@@ -242,13 +287,11 @@ impl TargetBinaryProvider for PkgFetchCache {
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
         let built = self.binary_path(target, BinaryKind::Built)?;
         if target.force_build {
-            if built.is_file() {
-                return self.read_built_artifact(target, built);
+            let requirement = self.source_build_requirement(target)?;
+            if requirement.built_path.is_file() {
+                return self.read_built_artifact(target, requirement.built_path);
             }
-            return Err(PkgError::Fetch(format!(
-                "no built binary for force-build target {target}; expected {}",
-                built.display()
-            )));
+            return Err(PkgError::Fetch(requirement.message()));
         }
 
         let fetched = self.binary_path(target, BinaryKind::Fetched)?;
@@ -385,7 +428,7 @@ fn tag_from_version(version: &str) -> String {
     format!("v{major}.{minor}")
 }
 
-fn satisfying_node_version(node_range: &str) -> Result<&'static str, PkgError> {
+pub(crate) fn satisfying_node_version(node_range: &str) -> Result<&'static str, PkgError> {
     if node_range == "latest" {
         return SUPPORTED_NODE_VERSIONS
             .last()

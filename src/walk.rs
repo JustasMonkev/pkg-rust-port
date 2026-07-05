@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -87,7 +87,7 @@ impl Marker {
     /// # Example
     ///
     /// ```
-    /// let marker = pkg_rust::Marker::from_package_path("../test/test-46-input-package-json/package.json")?;
+    /// let marker = pkg_rust::Marker::from_package_path("test/test-46-input-package-json/package.json")?;
     /// assert!(marker.package().name.is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -152,6 +152,8 @@ pub struct WalkerParams {
     pub public_packages: Vec<String>,
     /// Dictionary module filenames disabled for this walk.
     pub no_dictionary: Vec<String>,
+    /// Top-level config `ignore` glob patterns; matching files are skipped.
+    pub ignore: Vec<String>,
 }
 
 impl WalkerParams {
@@ -236,6 +238,24 @@ impl WalkerParams {
         self.no_dictionary = modules.into_iter().map(Into::into).collect();
         self
     }
+
+    /// Set top-level config `ignore` glob patterns.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let params = pkg_rust::WalkerParams::new().with_ignore(["**/*.md"]);
+    /// assert_eq!(params.ignore, ["**/*.md"]);
+    /// ```
+    #[must_use]
+    pub fn with_ignore<I, S>(mut self, patterns: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.ignore = patterns.into_iter().map(Into::into).collect();
+        self
+    }
 }
 
 /// Filesystem metadata captured for a record.
@@ -274,6 +294,9 @@ pub struct FileRecord {
     pub stat: bool,
     /// Raw content bytes when the content store read the file.
     pub body: Option<Vec<u8>>,
+    /// Whether an `.mjs` body was transformed to CommonJS (packer renames the
+    /// snapshot to `.js`).
+    pub was_transformed: bool,
     /// Sorted directory child names when the links store read a directory.
     pub children: Vec<String>,
     /// Filesystem metadata when available.
@@ -289,6 +312,7 @@ impl FileRecord {
             links: false,
             stat: false,
             body: None,
+            was_transformed: false,
             children: Vec::new(),
             metadata: None,
         }
@@ -302,8 +326,8 @@ impl FileRecord {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// let record = output.record("../test/test-50-require-resolve/test-z-require-code-1.js");
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// let record = output.record("test/test-50-require-resolve/test-z-require-code-1.js");
     /// assert!(record.is_some_and(|record| record.has_store(pkg_rust::StoreKind::Blob)));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
@@ -388,6 +412,19 @@ pub enum PackageWarning {
         /// Fabricator failure details.
         message: String,
     },
+    /// An ESM module could not be transformed to CommonJS.
+    EsmTransform {
+        /// Pre-rendered warning message from the transformer.
+        message: String,
+    },
+    /// A blob stripe could not be compiled to bytecode and was shipped as
+    /// plain source because `--fallback-to-source` was set.
+    BytecodeFallbackToSource {
+        /// Snapshot path for the blob stripe.
+        snap: String,
+        /// Fabricator failure details.
+        message: String,
+    },
     /// A dynamic `require` or `require.resolve` could not be resolved at
     /// compile time.
     CannotResolve {
@@ -451,9 +488,13 @@ impl PackageWarning {
                 "Unable to sign the macOS executable '{}'. Due to the mandatory code signing requirement, before the executable is distributed to end users, it must be signed. Otherwise, it will be immediately killed by kernel on launch. An ad-hoc signature is sufficient. Signing failure: {message}",
                 output.display()
             ),
-            Self::BytecodeFabricationFailed { snap, message } => {
-                format!("Failed to make bytecode for {snap}: {message}")
-            }
+            Self::BytecodeFabricationFailed { snap, message } => format!(
+                "Failed to generate V8 bytecode for {snap}. Cause: {message}. Use --fallback-to-source to include the file as plain source instead."
+            ),
+            Self::EsmTransform { message } => message.clone(),
+            Self::BytecodeFallbackToSource { snap, message } => format!(
+                "Failed to generate V8 bytecode for {snap}. Shipping source instead. Cause: {message}"
+            ),
             Self::CannotResolve { alias, .. } => format!("Cannot resolve '{alias}'"),
             Self::MalformedRequirement { alias, .. } => {
                 format!("Malformed requirement for '{alias}'")
@@ -480,7 +521,9 @@ impl PackageWarning {
             | Self::StylusResolveImports { .. }
             | Self::DeployFile { .. }
             | Self::MacosSignature { .. }
-            | Self::BytecodeFabricationFailed { .. } => false,
+            | Self::BytecodeFabricationFailed { .. }
+            | Self::EsmTransform { .. }
+            | Self::BytecodeFallbackToSource { .. } => false,
             Self::CannotResolve { debug, .. } | Self::MalformedRequirement { debug, .. } => *debug,
             Self::CannotFindModule { .. } => true,
         }
@@ -496,8 +539,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.record("../test/test-50-require-resolve/test-z-require-code-1.js").is_some());
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.record("test/test-50-require-resolve/test-z-require-code-1.js").is_some());
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -516,8 +559,8 @@ impl WalkOutput {
     /// let package = pkg_rust::PackageJson::parse("{}")
     ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
     /// let marker = pkg_rust::Marker::new(package);
-    /// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
-    /// assert!(output.contains_store("../test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
+    /// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-z-require-code-1.js", None, pkg_rust::WalkerParams::new())?;
+    /// assert!(output.contains_store("test/test-50-require-resolve/test-z-require-code-1.js", pkg_rust::StoreKind::Blob));
     /// # Ok::<(), pkg_rust::PkgError>(())
     /// ```
     #[must_use]
@@ -555,6 +598,7 @@ struct WalkerState {
     public_toplevel: bool,
     public_packages: Vec<String>,
     no_dictionary: Vec<String>,
+    ignore: Vec<String>,
     custom_dictionaries: BTreeMap<String, DictionaryEntry>,
     activated_packages: BTreeSet<PathBuf>,
     patches: BTreeMap<PathBuf, Vec<PatchOp>>,
@@ -566,6 +610,7 @@ impl WalkerState {
         public_toplevel: bool,
         public_packages: Vec<String>,
         no_dictionary: Vec<String>,
+        ignore: Vec<String>,
         custom_dictionaries: BTreeMap<String, DictionaryEntry>,
     ) -> Self {
         Self {
@@ -575,6 +620,7 @@ impl WalkerState {
             public_toplevel,
             public_packages,
             no_dictionary,
+            ignore,
             custom_dictionaries,
             activated_packages: BTreeSet::new(),
             patches: BTreeMap::new(),
@@ -607,6 +653,13 @@ impl WalkerState {
 
         if self.should_activate_marker(&mut task.marker) {
             self.activate_marker(&mut task.marker)?;
+        }
+
+        // yao-pkg walker: top-level config `ignore` patterns skip blob and
+        // content stores for matching files before any payload is recorded.
+        if matches!(task.store, StoreKind::Blob | StoreKind::Content) && self.is_ignored(&task.file)
+        {
+            return Ok(());
         }
 
         let completed_store = match task.store {
@@ -718,9 +771,13 @@ impl WalkerState {
         };
 
         for deploy_file in deploy_files(&pkg_config.deploy_files) {
+            let Some(source) = contained_deploy_source(base_dir, Path::new(&deploy_file.source))
+            else {
+                continue;
+            };
             self.output.warnings.push(PackageWarning::DeployFile {
                 file_type: deploy_file.file_type,
-                source: base_dir.join(deploy_file.source),
+                source,
                 target: PathBuf::from(deploy_file.target),
             });
         }
@@ -772,7 +829,30 @@ impl WalkerState {
 
         let mut body = read_to_string(file)?;
         self.apply_patch(file, &mut body);
-        let body = strip_bom_and_shebang(&body);
+        let mut body = strip_bom_and_shebang(&body);
+        // yao-pkg walker: ESM blobs are transformed to CommonJS before
+        // detection and bytecode compilation; transformed `.mjs` records are
+        // marked so the packer renames their snapshots to `.js`.
+        if crate::esm::is_esm_file(file) {
+            let transform = crate::esm::transform_esm_to_cjs(&body, file);
+            if let Some(message) = transform.warning {
+                self.output
+                    .warnings
+                    .push(PackageWarning::EsmTransform { message });
+            }
+            if transform.is_transformed {
+                body = transform.code;
+                // BEHAVIOR FIX over yao-pkg: mark every transformed module,
+                // not only `.mjs` files. The flag gates the relative `.mjs`
+                // require-path rewrite below; a transformed `type: module`
+                // `.js` file importing `./dep.mjs` must also be rewritten to
+                // `./dep.js` because the packer renames the dependency's
+                // snapshot. The packer rename itself stays gated on the
+                // `.mjs` snapshot extension, so `.js` snapshots keep their
+                // names.
+                self.record_mut(file).was_transformed = true;
+            }
+        }
         self.record_mut(file).body = Some(body.as_bytes().to_vec());
         let mut successful = Vec::new();
         for detected in detect(&body)? {
@@ -836,6 +916,23 @@ impl WalkerState {
             }
         }
 
+        // After dependencies are resolved, rewrite relative `.mjs` require
+        // paths to `.js` in transformed bodies, matching the packer's
+        // snapshot renames.
+        if self
+            .output
+            .records
+            .get(file)
+            .is_some_and(|record| record.was_transformed)
+        {
+            let record = self.record_mut(file);
+            if let Some(body) = record.body.take() {
+                let rewritten =
+                    crate::esm::rewrite_mjs_require_paths(&String::from_utf8_lossy(&body));
+                record.body = Some(rewritten.into_bytes());
+            }
+        }
+
         Ok(true)
     }
 
@@ -869,22 +966,24 @@ impl WalkerState {
     }
 
     fn step_links(&mut self, directory: &Path, marker: &Marker) -> Result<(), PkgError> {
+        let _ = marker;
         if !directory.is_dir() {
             return Ok(());
         }
 
-        let mut children = Vec::new();
-        for entry in fs::read_dir(directory).map_err(|source| io_error(directory, source))? {
-            let entry = entry.map_err(|source| io_error(directory, source))?;
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                children.push(name.to_owned());
-            }
-            if inside_root(&self.root, &path) {
-                self.append(path, StoreKind::Stat, marker.clone());
-            }
-        }
+        let mut children = self
+            .output
+            .records
+            .keys()
+            .filter_map(|path| {
+                (path.parent() == Some(directory))
+                    .then(|| path.file_name().and_then(|name| name.to_str()))
+                    .flatten()
+                    .map(ToOwned::to_owned)
+            })
+            .collect::<Vec<_>>();
         children.sort();
+        children.dedup();
         self.record_mut(directory).children = children;
         Ok(())
     }
@@ -994,6 +1093,25 @@ impl WalkerState {
             self.append(package_json.to_path_buf(), StoreKind::Content, marker);
         }
         Ok(())
+    }
+
+    fn is_ignored(&self, file: &Path) -> bool {
+        if self.ignore.is_empty() {
+            return false;
+        }
+        // Config `ignore` globs are usually written relative to the package
+        // (e.g. `dist/**`), while walker files are absolute. Match both the
+        // absolute path (yao-pkg picomatch behavior) and the walk-root
+        // relative path so package-relative patterns work without a leading
+        // `**/`.
+        let absolute = path_to_slash_string(file);
+        let relative = file.strip_prefix(&self.root).ok().map(path_to_slash_string);
+        self.ignore.iter().any(|pattern| {
+            path_pattern_matches(pattern, &absolute)
+                || relative
+                    .as_deref()
+                    .is_some_and(|candidate| path_pattern_matches(pattern, candidate))
+        })
     }
 
     fn append(&mut self, file: PathBuf, store: StoreKind, marker: Marker) {
@@ -1121,8 +1239,8 @@ fn missing_dependency_main_warning(basedir: &Path, alias: &str) -> Option<Packag
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let output = pkg_rust::walk(marker, "../test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
-/// assert!(output.contains_store("../test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
+/// let output = pkg_rust::walk(marker, "test/test-50-require-resolve/test-x-index.js", None, pkg_rust::WalkerParams::new())?;
+/// assert!(output.contains_store("test/test-50-require-resolve/test-x-index.js", pkg_rust::StoreKind::Blob));
 /// # Ok::<(), pkg_rust::PkgError>(())
 /// ```
 pub fn walk(
@@ -1149,6 +1267,7 @@ pub fn walk(
         params.public_toplevel,
         params.public_packages,
         params.no_dictionary,
+        params.ignore,
         custom_dictionaries,
     );
     state.append(entrypoint, StoreKind::Blob, marker.clone());
@@ -1308,6 +1427,23 @@ fn is_public_license(license: &str) -> bool {
     )
 }
 
+fn contained_deploy_source(base_dir: &Path, source: &Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in source.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(base_dir.join(relative))
+}
+
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => Ok(Vec::new()),
@@ -1344,10 +1480,19 @@ fn expand_pattern(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>, PkgErr
 
     if !pattern.contains('*') {
         let pattern_path = base_dir.join(pattern);
+        let base_dir = canonicalize_or_self(base_dir);
         return if pattern_path.is_file() {
-            Ok(vec![canonicalize_or_self(&pattern_path)])
+            let file = canonicalize_or_self(&pattern_path);
+            if file.starts_with(&base_dir) {
+                Ok(vec![file])
+            } else {
+                Ok(Vec::new())
+            }
         } else if pattern_path.is_dir() {
-            collect_files_recursive(&pattern_path)
+            Ok(collect_files_recursive(&pattern_path)?
+                .into_iter()
+                .filter(|file| file.starts_with(&base_dir))
+                .collect())
         } else {
             Ok(Vec::new())
         };

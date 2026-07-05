@@ -69,7 +69,7 @@ impl FabricatorPool {
     }
 
     fn fabricate(&mut self, request: FabricateRequest<'_>) -> Result<Vec<u8>, PkgError> {
-        let key = FabricatorKey::from_request(request);
+        let key = FabricatorKey::from_request(request)?;
         if !self.children.contains_key(&key) {
             let child = FabricatorChild::spawn(&key)?;
             self.children.insert(key.clone(), child);
@@ -95,13 +95,20 @@ pub struct FabricateRequest<'a> {
     /// JavaScript source bytes to compile.
     pub source: &'a [u8],
     /// Optional target Node executable used for target-specific bytecode.
+    ///
+    /// Relative or missing executables are rejected during fabrication so
+    /// packaging never resolves a fabricator through the ambient `PATH`.
     pub executable: Option<&'a Path>,
     /// Bakery flags passed to the target executable before the fabricator script.
     pub bakes: &'a [String],
 }
 
 impl<'a> FabricateRequest<'a> {
-    /// Build a request using host `node` as the fabricator executable.
+    /// Build a request without a fabricator executable.
+    ///
+    /// Call [`Self::with_executable`] with an absolute target Node path before
+    /// fabrication. Requests without an absolute executable fail closed rather
+    /// than resolving `node` through `PATH`.
     #[must_use]
     pub fn new(snap: &'a str, source: &'a [u8]) -> Self {
         Self {
@@ -112,7 +119,7 @@ impl<'a> FabricateRequest<'a> {
         }
     }
 
-    /// Use an explicit target Node executable for this request.
+    /// Use an explicit absolute target Node executable for this request.
     #[must_use]
     pub fn with_executable(mut self, executable: &'a Path) -> Self {
         self.executable = Some(executable);
@@ -134,14 +141,22 @@ struct FabricatorKey {
 }
 
 impl FabricatorKey {
-    fn from_request(request: FabricateRequest<'_>) -> Self {
-        let executable = request
-            .executable
-            .map_or_else(|| PathBuf::from("node"), Path::to_path_buf);
-        Self {
-            executable,
-            active_bakes: active_bakes(request.bakes),
+    fn from_request(request: FabricateRequest<'_>) -> Result<Self, PkgError> {
+        let Some(executable) = request.executable else {
+            return Err(PkgError::Pack(
+                "bytecode fabricator executable path is required".to_owned(),
+            ));
+        };
+        if !executable.is_absolute() {
+            return Err(PkgError::Pack(format!(
+                "bytecode fabricator executable must be an absolute path: {}",
+                executable.display()
+            )));
         }
+        Ok(Self {
+            executable: executable.to_path_buf(),
+            active_bakes: active_bakes(request.bakes),
+        })
     }
 
     fn command_label(&self) -> String {
@@ -377,6 +392,31 @@ process.stdin.resume();
         )?;
         make_executable(&executable)?;
         Ok((executable, args_log, request_log))
+    }
+
+    #[test]
+    fn rejects_missing_fabricator_executable() {
+        let mut pool = FabricatorPool::new();
+        let error = fabricate(&mut pool, FabricateRequest::new("/snapshot/app.js", b"app"))
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+
+        assert!(error.contains("bytecode fabricator executable path is required"));
+    }
+
+    #[test]
+    fn rejects_relative_fabricator_executable() {
+        let mut pool = FabricatorPool::new();
+        let error = fabricate(
+            &mut pool,
+            FabricateRequest::new("/snapshot/app.js", b"app").with_executable(Path::new("node")),
+        )
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_default();
+
+        assert!(error.contains("bytecode fabricator executable must be an absolute path: node"));
     }
 
     #[cfg(unix)]

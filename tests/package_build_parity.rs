@@ -45,6 +45,325 @@ impl TargetBinaryProvider for ExecutableStubBinaryWithPath {
     }
 }
 
+/// Records every target requested from the provider so a test can verify the
+/// separate fabricator target selection.
+struct RecordingProvider {
+    requested: std::cell::RefCell<Vec<NodeTarget>>,
+}
+
+impl RecordingProvider {
+    fn new() -> Self {
+        Self {
+            requested: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl TargetBinaryProvider for RecordingProvider {
+    fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        self.requested.borrow_mut().push(target.clone());
+        Ok(binary_with_placeholders())
+    }
+}
+
+fn recorded_targets_for(target: &str) -> Result<Vec<NodeTarget>, Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-fabricator-target-{}-{}",
+        std::process::id(),
+        target.replace(['-', ',', ' '], "_")
+    ));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--target",
+        target,
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+    let _ignored = std::fs::remove_file(&output);
+    let recorded = provider.requested.borrow().clone();
+    Ok(recorded)
+}
+
+// On a non-Windows host, building a Windows output: bytecode must be fabricated
+// by a host-platform binary (the Windows output binary cannot run here), so the
+// fabricator request uses the host platform, never Windows.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn bytecode_fabricator_target_is_host_platform_for_windows_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let recorded = recorded_targets_for("node18-win-x64")?;
+    let host = Platform::host().to_string();
+    assert_ne!(host, "win", "this test must run on a non-Windows host");
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Win && t.arch == Arch::X64),
+        "expected a Windows output binary request, got {recorded:?}"
+    );
+    assert!(
+        recorded.iter().any(|t| t.platform.to_string() == host
+            && t.arch == Arch::X64
+            && t.node_range == "node18"),
+        "expected a host-platform ({host}) fabricator request, got {recorded:?}"
+    );
+    Ok(())
+}
+
+// `--build` force-builds only the output base binary; the host fabricator
+// binary is always fetched (never force-built), matching pkg's
+// `fabricatorForTarget`/cache behavior.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn bytecode_fabricator_binary_is_not_force_built() -> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let output = std::env::temp_dir().join(format!("pkg-rust-fab-nobuild-{}", std::process::id()));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--build",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let recorded = provider.requested.borrow();
+    let host = Platform::host().to_string();
+    // The Windows output base binary honors --build.
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Win && t.arch == Arch::X64 && t.force_build),
+        "expected a force-built Windows output request, got {recorded:?}"
+    );
+    // The host fabricator binary is fetched, not force-built.
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform.to_string() == host && t.arch == Arch::X64 && !t.force_build),
+        "expected a non-force-built host fabricator request, got {recorded:?}"
+    );
+
+    let _ignored = std::fs::remove_file(&output);
+    Ok(())
+}
+
+// On a Windows host, building a Linux output: the fabricator request uses the
+// Windows host platform (the mirror of the non-Windows case).
+#[cfg(target_os = "windows")]
+#[test]
+fn bytecode_fabricator_target_is_windows_host_for_linux_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pkg_rust::{Arch, Platform};
+
+    let recorded = recorded_targets_for("node18-linux-x64")?;
+    assert!(
+        recorded
+            .iter()
+            .any(|t| t.platform == Platform::Linux && t.arch == Arch::X64),
+        "expected a Linux output binary request, got {recorded:?}"
+    );
+    assert!(
+        recorded.iter().any(|t| t.platform == Platform::Win
+            && t.arch == Arch::X64
+            && t.node_range == "node18"),
+        "expected a Windows host fabricator request, got {recorded:?}"
+    );
+    Ok(())
+}
+
+// Proves the fetched fabricator binary is actually executed (not merely
+// selected): the provider answers the host fabricator target with a runnable
+// script that records a marker, and the build must invoke it.
+#[cfg(unix)]
+struct ScriptFabricatorProvider {
+    script: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl TargetBinaryProvider for ScriptFabricatorProvider {
+    fn binary_for(&self, target: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+        use pkg_rust::Platform;
+        if target.platform == Platform::Win {
+            Ok(binary_with_placeholders())
+        } else {
+            std::fs::read(&self.script).map_err(|source| PkgError::Io {
+                path: self.script.display().to_string(),
+                source,
+            })
+        }
+    }
+
+    fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        use pkg_rust::Platform;
+        let bytes = self.binary_for(target)?;
+        let binary = TargetBinary::from_bytes(bytes);
+        if target.platform == Platform::Win {
+            // Output base binary: bytes only, no runnable path.
+            Ok(binary)
+        } else {
+            // Host fabricator binary: a runnable script on disk.
+            Ok(binary.with_path(self.script.clone()))
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn bytecode_fabricator_binary_is_actually_executed() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!("pkg-rust-fab-invoke-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root)?;
+    let app = root.join("app.js");
+    std::fs::write(&app, b"module.exports = 42;\n")?;
+    let marker = root.join("fabricator-invoked");
+    let script = root.join("fab-node");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf 'run\\n' >> '{}'\nexit 7\n",
+            marker.display()
+        ),
+    )?;
+    let mut permissions = std::fs::metadata(&script)?.permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&script, permissions)?;
+
+    let output = root.join("out");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let app_text = app
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary app path must be utf-8".to_owned()))?;
+    // Build a Windows output on this Unix host, so the fabricator target is the
+    // Unix host platform, which the provider answers with the runnable script.
+    let plan = plan_package([
+        "--public",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        app_text,
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &ScriptFabricatorProvider {
+            script: script.clone(),
+        },
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    assert!(
+        marker.is_file(),
+        "the fabricator binary was not executed (no marker written)"
+    );
+    assert!(
+        build.warnings.iter().any(|warning| matches!(
+            warning,
+            // Windows targets use backslash snapshot paths, so match either separator.
+            PackageWarning::BytecodeFabricationFailed { snap, .. } if snap.ends_with("app.js")
+        )),
+        "expected a bytecode fabrication warning from the failing fabricator, got {:?}",
+        build.warnings
+    );
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn no_bytecode_skips_fabricator_binary_fetch() -> Result<(), Box<dyn std::error::Error>> {
+    let output =
+        std::env::temp_dir().join(format!("pkg-rust-fabricator-skip-{}", std::process::id()));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--no-bytecode",
+        "--public",
+        "--target",
+        "node18-win-x64",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let provider = RecordingProvider::new();
+    build_package_with_provider(
+        &plan,
+        &provider,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    // Without bytecode there is no fabricator, so only the output target binary
+    // is requested.
+    assert_eq!(provider.requested.borrow().len(), 1);
+
+    let _ignored = std::fs::remove_file(&output);
+    Ok(())
+}
+
+#[test]
+fn file_input_preserves_entry_directory_without_bundling_siblings()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join(format!(
+        "pkg-rust-file-input-snapshot-{}",
+        std::process::id()
+    ));
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        "--no-bytecode",
+        "--public",
+        "--target",
+        "linux",
+        "--output",
+        output_text,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+
+    let build = build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    let image = String::from_utf8_lossy(&build.outputs[0].image.bytes);
+    assert!(image.contains("\"/snapshot/test-50-api/test-x-index.js\""));
+    assert!(image.contains("\"/snapshot/test-50-api\""));
+    assert!(!image.contains("\"/snapshot/test-x-index.js\""));
+    assert!(!image.contains("\"/snapshot/test-50-api/main.js\""));
+
+    std::fs::remove_file(output)?;
+    Ok(())
+}
+
 #[test]
 fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std::error::Error>> {
     let output =
@@ -59,7 +378,7 @@ fn builds_outputs_from_plan_with_stub_target_binary() -> Result<(), Box<dyn std:
         output_text,
         "--options",
         "trace-warnings",
-        "../test/test-50-require-resolve/test-x-index.js",
+        "test/test-50-require-resolve/test-x-index.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -99,7 +418,7 @@ fn creates_missing_output_parent_directories() -> Result<(), Box<dyn std::error:
         "linux",
         "--output",
         output_text,
-        "../test/test-50-api/test-x-index.js",
+        "test/test-50-api/test-x-index.js",
     ])?;
 
     build_package_with_provider(
@@ -253,6 +572,134 @@ fn copies_deploy_files_next_to_output_executable() -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+// Security regression: a dependency's `pkg.deployFiles` must not be able to
+// write outside the output directory via an absolute path or `..` traversal.
+// A package-json input with a subpath bin makes a sibling node_modules marker
+// reachable, so its deployFiles are processed; the copy sink must contain them.
+#[test]
+fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-package-deploy-containment-{}",
+        std::process::id()
+    ));
+    let _ignored = std::fs::remove_dir_all(&root);
+    let package_dir = root.join("package");
+    let output = root.join("dist").join("demo");
+    let escaped = root.join("escaped.txt");
+    let mixed_escaped = root.join("dist/mixed-escaped.txt");
+    let absolute_victim = root.join("absolute-victim.txt");
+    let source_victim = root.join("dist/source-victim.txt");
+    let absolute_source_victim = root.join("dist/absolute-source-victim.txt");
+    let symlink_victim_dir = root.join("symlink-victim");
+    std::fs::create_dir_all(package_dir.join("src"))?;
+    std::fs::create_dir_all(package_dir.join("node_modules/evil"))?;
+    std::fs::create_dir_all(&symlink_victim_dir)?;
+    std::fs::write(
+        package_dir.join("src/index.js"),
+        "'use strict';\nrequire('evil');\nconsole.log('ok');\n",
+    )?;
+    std::fs::write(
+        package_dir.join("node_modules/evil/index.js"),
+        "module.exports = 1;\n",
+    )?;
+    std::fs::write(
+        package_dir.join("node_modules/evil/payload.txt"),
+        "attacker controlled\n",
+    )?;
+    std::fs::write(root.join("outside-source.txt"), "outside source\n")?;
+    std::fs::write(root.join("absolute-source.txt"), "absolute source\n")?;
+    std::fs::write(
+        package_dir.join("package.json"),
+        serde_json::json!({
+            "name": "demo",
+            "bin": "src/index.js",
+            "dependencies": {"evil": "1.0.0"}
+        })
+        .to_string(),
+    )?;
+    let absolute_target = absolute_victim
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary victim path must be utf-8".to_owned()))?;
+    let absolute_source = root
+        .join("absolute-source.txt")
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary source path must be utf-8".to_owned()))?
+        .to_owned();
+    std::fs::write(
+        package_dir.join("node_modules/evil/package.json"),
+        serde_json::json!({
+            "name": "evil",
+            "main": "index.js",
+            "pkg": {
+                "deployFiles": [
+                    ["payload.txt", "safe/payload.txt"],
+                    ["payload.txt", "../escaped.txt"],
+                    ["payload.txt", "safe/../mixed-escaped.txt"],
+                    ["payload.txt", absolute_target],
+                    ["../outside-source.txt", "source-victim.txt"],
+                    [absolute_source, "absolute-source-victim.txt"],
+                    ["payload.txt", "symlink/payload.txt"]
+                ]
+            }
+        })
+        .to_string(),
+    )?;
+    #[cfg(unix)]
+    {
+        std::fs::create_dir_all(root.join("dist"))?;
+        std::os::unix::fs::symlink(&symlink_victim_dir, root.join("dist/symlink"))?;
+    }
+
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let package_text = package_dir
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary package path must be utf-8".to_owned()))?;
+    let plan = plan_package(["--target", "linux", "--output", output_text, package_text])?;
+
+    build_package_with_provider(
+        &plan,
+        &StubBinary,
+        "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+    )?;
+
+    // The safe relative target is copied inside the output dir...
+    assert_eq!(
+        std::fs::read_to_string(root.join("dist/safe/payload.txt"))?,
+        "attacker controlled\n"
+    );
+    // ...but the traversal and absolute targets never escape it.
+    assert!(
+        !escaped.exists(),
+        "../ traversal target escaped the output dir"
+    );
+    assert!(
+        !mixed_escaped.exists(),
+        "mixed ../ traversal target escaped the output dir"
+    );
+    assert!(
+        !absolute_victim.exists(),
+        "absolute target escaped the output dir"
+    );
+    assert!(
+        !source_victim.exists(),
+        "relative source traversal copied a file from outside the package"
+    );
+    assert!(
+        !absolute_source_victim.exists(),
+        "absolute source copied a file from outside the package"
+    );
+    #[cfg(unix)]
+    assert!(
+        !symlink_victim_dir.join("payload.txt").exists(),
+        "deploy target followed a symlink out of the output dir"
+    );
+
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
 #[test]
 fn native_build_uses_cached_platform_addon_when_available() -> Result<(), Box<dyn std::error::Error>>
 {
@@ -366,7 +813,7 @@ fn node_modules_file_input_synthesizes_intermediate_snapshot_directories()
         "linux",
         "--output",
         output_text,
-        "../test/test-50-package-json-6b/node_modules/alpha/alpha.js",
+        "test/test-50-package-json-6b/node_modules/alpha/alpha.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -398,7 +845,7 @@ fn escaped_dependency_falls_back_to_common_snapshot_denominator()
         "linux",
         "--output",
         output_text,
-        "../test/test-50-native-addon-3/lib/test-x-index.js",
+        "test/test-50-native-addon-3/lib/test-x-index.js",
     ])?;
 
     let build = build_package_with_provider(
@@ -433,7 +880,7 @@ fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Erro
         "linux",
         "--output",
         output_text,
-        "../test/test-50-api/test-x-index.js",
+        "test/test-50-api/test-x-index.js",
     ])?;
 
     let error = build_package_with_provider(

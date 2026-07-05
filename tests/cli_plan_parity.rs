@@ -34,7 +34,7 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
         OsString::from("linux,win"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-46-input-package-json"),
+        OsString::from("test/test-46-input-package-json"),
     ])?;
 
     assert!(plan.entrypoint.ends_with("test-x-index.js"));
@@ -58,7 +58,7 @@ fn plans_package_json_input_outputs_and_targets() -> Result<(), Box<dyn std::err
 #[test]
 fn package_json_input_uses_package_directory_as_walk_root_for_subpath_bin()
 -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-99-#1192")])?;
+    let plan = plan_package([OsString::from("test/test-99-#1192")])?;
 
     assert!(plan.entrypoint.ends_with("test-99-#1192/src/index.js"));
     assert!(plan.root.ends_with("test-99-#1192"));
@@ -101,7 +101,7 @@ fn config_json_input_resolves_bin_like_package_json() -> Result<(), Box<dyn std:
 
 #[test]
 fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-46-input/test-x-index")])?;
+    let plan = plan_package([OsString::from("test/test-46-input/test-x-index")])?;
 
     assert!(plan.entrypoint.ends_with("test-46-input/test-x-index"));
     assert_output_suffixes(
@@ -118,7 +118,7 @@ fn plans_default_multi_target_outputs_for_bare_input() -> Result<(), Box<dyn std
 #[test]
 fn plans_default_multi_target_outputs_without_js_extension()
 -> Result<(), Box<dyn std::error::Error>> {
-    let plan = plan_package([OsString::from("../test/test-46-input-js/test-x-index.js")])?;
+    let plan = plan_package([OsString::from("test/test-46-input-js/test-x-index.js")])?;
 
     assert!(
         plan.entrypoint
@@ -144,7 +144,7 @@ fn plans_out_path_multi_target_outputs() -> Result<(), Box<dyn std::error::Error
     let plan = plan_package([
         OsString::from("--out-path"),
         OsString::from(output_root_text),
-        OsString::from("../test/test-46-outpath/test-x-index"),
+        OsString::from("test/test-46-outpath/test-x-index"),
     ])?;
 
     assert_output_suffixes(
@@ -161,16 +161,15 @@ fn plans_out_path_multi_target_outputs() -> Result<(), Box<dyn std::error::Error
 #[test]
 fn plans_package_json_targets_and_output_path_defaults() -> Result<(), Box<dyn std::error::Error>> {
     let target_plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-target/package.json",
+        "test/test-46-input-package-json-target/package.json",
     )])?;
     assert_eq!(target_plan.outputs.len(), 2);
     assert_eq!(target_plan.outputs[0].target.platform, Platform::Linux);
     assert_eq!(target_plan.outputs[1].target.platform, Platform::Macos);
     assert_output_suffixes(&target_plan, &["palookaville-linux", "palookaville-macos"]);
 
-    let output_path_plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-outputdir",
-    )])?;
+    let output_path_plan =
+        plan_package([OsString::from("test/test-46-input-package-json-outputdir")])?;
     assert_output_suffixes(
         &output_path_plan,
         &[
@@ -191,7 +190,7 @@ fn plans_explicit_output_as_single_host_target() -> Result<(), Box<dyn std::erro
     let plan = plan_package([
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-46-input-output/test-x-index"),
+        OsString::from("test/test-46-input-output/test-x-index"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 1);
@@ -222,7 +221,7 @@ fn plans_single_target_out_path_without_platform_suffix() -> Result<(), Box<dyn 
         OsString::from("linux"),
         OsString::from("--out-path"),
         OsString::from(output_root_text),
-        OsString::from("../test/test-46-outpath-target/test-x-index"),
+        OsString::from("test/test-46-outpath-target/test-x-index"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 1);
@@ -233,9 +232,7 @@ fn plans_single_target_out_path_without_platform_suffix() -> Result<(), Box<dyn 
 #[test]
 fn plans_scoped_package_directory_with_unscoped_basename() -> Result<(), Box<dyn std::error::Error>>
 {
-    let plan = plan_package([OsString::from(
-        "../test/test-46-input-package-json-dir-scope",
-    )])?;
+    let plan = plan_package([OsString::from("test/test-46-input-package-json-dir-scope")])?;
 
     assert!(
         plan.input
@@ -257,8 +254,8 @@ fn plans_scoped_package_directory_with_unscoped_basename() -> Result<(), Box<dyn
 fn rejects_explicit_output_that_would_overwrite_input() -> Result<(), Box<dyn std::error::Error>> {
     let error = match plan_package([
         OsString::from("--output"),
-        OsString::from("../test/test-46-input/test-x-index"),
-        OsString::from("../test/test-46-input/test-x-index"),
+        OsString::from("test/test-46-input/test-x-index"),
+        OsString::from("test/test-46-input/test-x-index"),
     ]) {
         Ok(plan) => {
             return Err(format!("explicit output unexpectedly planned: {plan:?}").into());
@@ -269,6 +266,114 @@ fn rejects_explicit_output_that_would_overwrite_input() -> Result<(), Box<dyn st
     assert!(
         matches!(error, PkgError::Cli(message) if message.contains("Refusing to overwrite input file"))
     );
+    Ok(())
+}
+
+#[test]
+fn zstd_compression_rejects_pre_node_22_15_targets() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-zstd-old-target");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let error = match plan_package([
+        OsString::from("--targets"),
+        OsString::from("node20-linux-x64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("Zstd with node20 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("Node.js >= 22.15")
+            && message.contains("node20-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+
+    // A mixed selection reports only the targets that cannot decompress Zstd.
+    let error = match plan_package([
+        OsString::from("--targets"),
+        OsString::from("node22-linux-x64,node16-win-x64,node18-macos-arm64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("Zstd with node16/node18 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("node16-win-x64")
+            && message.contains("node18-macos-arm64")
+            && !message.contains("node22-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn zstd_compression_plans_for_node_22_15_capable_targets() -> Result<(), Box<dyn std::error::Error>>
+{
+    let output = std::env::temp_dir().join("pkg-rust-cli-plan-zstd-capable");
+    let output_text = output
+        .to_str()
+        .ok_or_else(|| PkgError::Cli("temporary output path must be utf-8".to_owned()))?;
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node22-linux-x64,node24-win-x64,latest-macos-arm64"),
+        OsString::from("--compress"),
+        OsString::from("Zstd"),
+        OsString::from("--output"),
+        OsString::from(output_text),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Zstd);
+    assert_eq!(plan.outputs.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn zstd_compression_from_config_rejects_pre_node_22_15_targets()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-zstd-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"compress":"Zstd","targets":["node18-linux-x64"]}"#,
+    )?;
+
+    let error = match plan_package([
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ]) {
+        Ok(plan) => {
+            return Err(format!("config Zstd with node18 unexpectedly planned: {plan:?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(&error, PkgError::Cli(message) if message.contains("Node.js >= 22.15")
+            && message.contains("node18-linux-x64")),
+        "unexpected error: {error:?}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
     Ok(())
 }
 
@@ -288,11 +393,11 @@ fn plans_options_and_compression() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--compress"),
         OsString::from("br"),
         OsString::from("--no-bytecode"),
-        OsString::from("../test/test-50-require-resolve/test-x-index.js"),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.compression, Compression::Brotli);
-    assert!(plan.snapshot_base.ends_with("test-50-require-resolve"));
+    assert!(plan.snapshot_base.ends_with("test"));
     assert!(!plan.bytecode);
     assert!(plan.native_build);
     assert!(plan.signature);
@@ -316,7 +421,7 @@ fn plans_no_native_build_flag() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-native-build"),
-        OsString::from("../test/test-50-native-addon/test-x-index.js"),
+        OsString::from("test/test-50-native-addon/test-x-index.js"),
     ])?;
 
     assert!(!plan.native_build);
@@ -335,7 +440,7 @@ fn plans_no_signature_flag() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-signature"),
-        OsString::from("../test/test-50-api/test-x-index.js"),
+        OsString::from("test/test-50-api/test-x-index.js"),
     ])?;
 
     assert!(!plan.signature);
@@ -354,7 +459,7 @@ fn plans_force_build_on_all_targets() -> Result<(), Box<dyn std::error::Error>> 
         OsString::from("linux,win"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-require-resolve/test-x-index.js"),
+        OsString::from("test/test-50-require-resolve/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.outputs.len(), 2);
@@ -376,7 +481,7 @@ fn plans_public_disclosure_flags() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from("--public"),
         OsString::from("--public-packages"),
         OsString::from("crusader,swordsman"),
-        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+        OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
     assert!(plan.public_toplevel);
@@ -397,7 +502,7 @@ fn plans_public_package_wildcard_like_js() -> Result<(), Box<dyn std::error::Err
         OsString::from(output_text),
         OsString::from("--public-packages"),
         OsString::from("crusader,*,swordsman"),
-        OsString::from("../test/test-50-public-packages/test-x-index.js"),
+        OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
     assert!(!plan.public_toplevel);
@@ -418,7 +523,7 @@ fn plans_disabled_dictionary_modules() -> Result<(), Box<dyn std::error::Error>>
         OsString::from(output_text),
         OsString::from("--no-dict"),
         OsString::from("busboy.js,log4js.js"),
-        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+        OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.no_dictionary, vec!["busboy.js", "log4js.js"]);
@@ -438,7 +543,7 @@ fn plans_disabled_dictionary_wildcard_like_js() -> Result<(), Box<dyn std::error
         OsString::from(output_text),
         OsString::from("--no-dict"),
         OsString::from("busboy.js,*,log4js.js"),
-        OsString::from("../test/test-50-package-json-4/test-x-index.js"),
+        OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
     assert_eq!(plan.no_dictionary, vec!["*"]);
@@ -457,7 +562,7 @@ fn file_input_inside_package_keeps_package_directory_in_snapshot()
         OsString::from("host"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-package-json-6c/beta/alpha.js"),
+        OsString::from("test/test-50-package-json-6c/beta/alpha.js"),
     ])?;
 
     assert!(plan.root.ends_with("test-50-package-json-6c/beta"));
@@ -477,7 +582,7 @@ fn file_input_inside_node_modules_package_keeps_node_modules_in_snapshot()
         OsString::from("host"),
         OsString::from("--output"),
         OsString::from(output_text),
-        OsString::from("../test/test-50-package-json-6b/node_modules/alpha/alpha.js"),
+        OsString::from("test/test-50-package-json-6b/node_modules/alpha/alpha.js"),
     ])?;
 
     assert!(
@@ -491,5 +596,286 @@ fn file_input_inside_node_modules_package_keeps_node_modules_in_snapshot()
 #[tokio::test]
 async fn exec_treats_version_as_successful_display() -> Result<(), Box<dyn std::error::Error>> {
     pkg_rust::exec(["--version"]).await?;
+    Ok(())
+}
+
+#[test]
+fn pkgrc_discovery_resolves_flags_with_cli_precedence() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"compress":"GZip","bytecode":false,"fallbackToSource":true,"publicPackages":["alpha","beta"],"options":"expose-gc"}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Gzip);
+    assert!(!plan.bytecode);
+    assert!(plan.fallback_to_source);
+    assert_eq!(plan.public_packages, ["alpha", "beta"]);
+    assert_eq!(plan.bakes, ["--expose-gc"]);
+    assert!(
+        plan.notices
+            .iter()
+            .any(|notice| notice.starts_with("> Using config") && notice.ends_with(".pkgrc"))
+    );
+
+    // CLI flags take precedence over the discovered config.
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--compress"),
+        OsString::from("Brotli"),
+        OsString::from("--bytecode"),
+        OsString::from("--no-fallback-to-source"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+    assert_eq!(plan.compression, Compression::Brotli);
+    assert!(plan.bytecode);
+    assert!(!plan.fallback_to_source);
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn explicit_bare_json_config_wraps_into_pkg_options() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-bare-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("flags.config.json"),
+        r#"{"signature":false,"noDictionary":"*"}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-macos-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from("--config"),
+        OsString::from(temp_root.join("flags.config.json").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert!(!plan.signature);
+    assert_eq!(plan.no_dictionary, ["*"]);
+    Ok(())
+}
+
+#[test]
+fn missing_explicit_config_reports_js_wording() {
+    let error = plan_package([
+        OsString::from("--config"),
+        OsString::from("/nonexistent/pkg.config.json"),
+        OsString::from("test/test-50-require-resolve/test-z-require-content.css"),
+    ])
+    .err();
+
+    assert!(
+        matches!(&error, Some(PkgError::Cli(message)) if message.starts_with("Config file does not exist")),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn js_config_module_loads_through_node() -> Result<(), Box<dyn std::error::Error>> {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping: node is unavailable");
+        return Ok(());
+    }
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-js-config-plan-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("pkg.config.cjs"),
+        "module.exports = { compress: 'Zstd', public: true };\n",
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node24-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.join("app.js").as_os_str()),
+    ])?;
+
+    assert_eq!(plan.compression, Compression::Zstd);
+    assert!(plan.public_toplevel);
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn discovered_pkgrc_targets_and_output_path_override_package_json()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-prec-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"prec-demo","bin":"app.js","pkg":{"targets":["node18-linux-x64"],"outputPath":"from-package"}}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"targets":["node22-win-x64"],"outputPath":"from-pkgrc"}"#,
+    )?;
+
+    let plan = plan_package([OsString::from(temp_root.as_os_str())])?;
+
+    // The discovered .pkgrc takes precedence over the package.json pkg field
+    // for targets and outputPath, matching the JS resolveConfig warning.
+    assert_eq!(plan.outputs.len(), 1);
+    assert_eq!(plan.outputs[0].target.node_range, "node22");
+    assert_eq!(plan.outputs[0].target.platform, Platform::Win);
+    assert!(
+        plan.outputs[0]
+            .output
+            .to_string_lossy()
+            .contains("from-pkgrc"),
+        "output {} should use the pkgrc outputPath",
+        plan.outputs[0].output.display()
+    );
+    assert!(
+        plan.notices
+            .iter()
+            .any(|notice| notice.contains("takes precedence"))
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn rejects_pkgrc_output_path_parent_traversal() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-traversal-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"traversal-demo","bin":"app.js","pkg":{"outputPath":"safe-out"}}"#,
+    )?;
+    fs::write(temp_root.join(".pkgrc"), r#"{"outputPath":"../outside"}"#)?;
+
+    let error = match plan_package([OsString::from(temp_root.as_os_str())]) {
+        Ok(plan) => {
+            fs::remove_dir_all(temp_root)?;
+            return Err(format!("expected outputPath traversal to fail, got {plan:#?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("pkg.outputPath must be a relative path without parent directory traversal"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn rejects_pkgrc_output_path_absolute_path() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-absolute-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"absolute-demo","bin":"app.js"}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        format!(r#"{{"outputPath":{}}}"#, serde_json::to_string(&temp_root)?),
+    )?;
+
+    let error = match plan_package([OsString::from(temp_root.as_os_str())]) {
+        Ok(plan) => {
+            fs::remove_dir_all(temp_root)?;
+            return Err(format!("expected absolute outputPath to fail, got {plan:#?}").into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("pkg.outputPath must be a relative path without parent directory traversal"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn discovered_pkgrc_pkg_options_drive_walker_marker() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-pkgrc-marker-{}", std::process::id()));
+    let _ignored = fs::remove_dir_all(&temp_root);
+    fs::create_dir_all(&temp_root)?;
+    fs::write(temp_root.join("app.js"), "console.log('ok');\n")?;
+    fs::write(temp_root.join("data.txt"), "from-pkgrc\n")?;
+    fs::write(
+        temp_root.join("package.json"),
+        r#"{"name":"marker-demo","bin":"app.js","dependencies":{},"pkg":{"assets":"stale.txt","scripts":"stale.js"}}"#,
+    )?;
+    fs::write(
+        temp_root.join(".pkgrc"),
+        r#"{"assets":"data.txt","deployFiles":["native.node"]}"#,
+    )?;
+
+    let plan = plan_package([
+        OsString::from("--targets"),
+        OsString::from("node18-linux-x64"),
+        OsString::from("--output"),
+        OsString::from(temp_root.join("out").as_os_str()),
+        OsString::from(temp_root.as_os_str()),
+    ])?;
+
+    // The walker reads assets/scripts/deployFiles from the marker package, so
+    // the discovered .pkgrc must replace the package.json `pkg` section there,
+    // not only in flag/target resolution.
+    let marker_pkg = plan.marker.package().pkg.as_ref().ok_or_else(|| {
+        PkgError::Cli("marker should carry the discovered pkgrc config".to_owned())
+    })?;
+    assert_eq!(marker_pkg.assets, serde_json::json!("data.txt"));
+    assert_eq!(marker_pkg.deploy_files, serde_json::json!(["native.node"]));
+    assert!(
+        marker_pkg.scripts.is_null(),
+        "stale package.json scripts should not leak into the marker: {:?}",
+        marker_pkg.scripts
+    );
+    // Package identity stays with the input package.json.
+    assert_eq!(plan.marker.package().name.as_deref(), Some("marker-demo"));
+
+    fs::remove_dir_all(temp_root)?;
     Ok(())
 }

@@ -25,6 +25,9 @@ fn compression_accepts_original_cli_aliases() {
     assert_eq!(Compression::from_str("gz"), Ok(Compression::Gzip));
     assert_eq!(Compression::from_str("brotli"), Ok(Compression::Brotli));
     assert_eq!(Compression::from_str("br"), Ok(Compression::Brotli));
+    assert_eq!(Compression::from_str("zstd"), Ok(Compression::Zstd));
+    assert_eq!(Compression::from_str("zs"), Ok(Compression::Zstd));
     assert_eq!(Compression::Gzip.cli_label(), "GZip");
     assert_eq!(Compression::Brotli.cli_label(), "Brotli");
+    assert_eq!(Compression::Zstd.cli_label(), "Zstd");
 }

@@ -25,6 +25,7 @@ mod config;
 mod detect;
 mod dictionary;
 mod error;
+mod esm;
 mod fabricate;
 mod fetch;
 mod fsx;
@@ -32,9 +33,12 @@ mod macho;
 mod pack;
 mod package;
 mod prelude;
+mod prelude_assets;
 mod produce;
 mod refine;
 mod resolve;
+mod sea;
+mod sea_inject;
 mod target;
 mod walk;
 
@@ -44,7 +48,7 @@ pub use crate::common::{
     retrieve_denominator, snapshotify, strip_snapshot, substitute_denominator,
 };
 pub use crate::compress::{Compression, CompressionParseError};
-pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig};
+pub use crate::config::{BinField, PackageJson, PackageJsonError, PkgConfig, StringOrList};
 pub use crate::detect::{
     Derivative, DetectedUse, DetectionKind, detect, non_literal_and_cwd_debug_lines,
     successful_debug_lines,
@@ -57,14 +61,15 @@ pub use crate::error::PkgError;
 pub use crate::fabricate::{
     FabricateRequest, FabricatorPool, fabricate, fabricate_twice, shutdown_fabricators,
 };
-pub use crate::fetch::{BinaryKind, PkgFetchCache};
+pub use crate::fetch::{BinaryKind, PkgFetchCache, SourceBuildRequirement};
 pub use crate::fsx::plus_x;
 pub use crate::macho::{patch_macho_executable, sign_macho_executable};
 pub use crate::pack::{PackedOutput, Stripe, pack};
 pub use crate::package::{
     PackageBuild, ProducedOutput, TargetBinary, TargetBinaryProvider, build_package_with_provider,
+    fabricator_for_target,
 };
-pub use crate::prelude::prelude_template;
+pub use crate::prelude::{PKG_VERSION, prelude_template};
 pub use crate::produce::{
     PayloadPointer, Placeholder, PlaceholderKind, PlaceholderSet, PlaceholderValues,
     ProducedExecutable, ProducerManifest, discover_placeholders, inject_placeholders,
@@ -73,6 +78,12 @@ pub use crate::produce::{
 pub use crate::refine::{RefinedOutput, SymlinkMap, refine, refine_walked};
 pub use crate::resolve::{
     ResolveOptions, ResolvedModule, resolve_module, resolve_module_with_metadata,
+};
+pub use crate::sea::{
+    sea_assert_host_node_version, sea_assert_single_target_major, sea_node_arch,
+    sea_node_archive_filename, sea_node_dist_urls, sea_node_os,
+    sea_pick_matching_host_target_index, sea_resolve_min_target_major,
+    sea_validate_node_version_format,
 };
 pub use crate::target::{
     Arch, NodeTarget, ParsedTargets, Platform, TargetDefaults, TargetParseError, output_names,

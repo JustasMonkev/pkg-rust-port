@@ -16,7 +16,7 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn denominates_walked_records_and_entrypoint() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let output = walk(
         empty_marker()?,
@@ -35,7 +35,7 @@ fn denominates_walked_records_and_entrypoint() -> Result<(), PkgError> {
 
 #[test]
 fn denominates_symlinks_with_same_denominator_as_records() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let output = walk(
         empty_marker()?,
@@ -105,6 +105,7 @@ fn directory_record<const N: usize>(file: &str, children: [&str; N]) -> FileReco
         links: true,
         stat: true,
         body: None,
+        was_transformed: false,
         children: children.into_iter().map(ToOwned::to_owned).collect(),
         metadata: None,
     }
@@ -118,6 +119,7 @@ fn file_record(file: &str) -> FileRecord {
         links: false,
         stat: true,
         body: None,
+        was_transformed: false,
         children: Vec::new(),
         metadata: None,
     }

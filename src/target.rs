@@ -100,10 +100,18 @@ pub enum Arch {
     X64,
     /// AArch64.
     Arm64,
-    /// ARMv6.
-    Armv6,
     /// ARMv7.
     Armv7,
+    /// 32-bit x86.
+    X86,
+    /// PowerPC 64-bit.
+    Ppc64,
+    /// IBM System z.
+    S390x,
+    /// RISC-V 64-bit.
+    Riscv64,
+    /// LoongArch 64-bit.
+    Loong64,
 }
 
 impl Arch {
@@ -123,8 +131,12 @@ impl fmt::Display for Arch {
         let value = match self {
             Self::X64 => "x64",
             Self::Arm64 => "arm64",
-            Self::Armv6 => "armv6",
             Self::Armv7 => "armv7",
+            Self::X86 => "x86",
+            Self::Ppc64 => "ppc64",
+            Self::S390x => "s390x",
+            Self::Riscv64 => "riscv64",
+            Self::Loong64 => "loong64",
         };
         formatter.write_str(value)
     }
@@ -137,8 +149,12 @@ impl FromStr for Arch {
         match value.to_ascii_lowercase().as_str() {
             "x64" | "x86_64" => Ok(Self::X64),
             "arm64" | "aarch64" => Ok(Self::Arm64),
-            "armv6" => Ok(Self::Armv6),
             "armv7" | "arm" => Ok(Self::Armv7),
+            "x86" | "ia32" => Ok(Self::X86),
+            "ppc64" => Ok(Self::Ppc64),
+            "s390x" => Ok(Self::S390x),
+            "riscv64" => Ok(Self::Riscv64),
+            "loong64" => Ok(Self::Loong64),
             _ => Err(TargetParseError::UnknownToken(value.to_owned())),
         }
     }

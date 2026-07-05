@@ -15,7 +15,7 @@ fn empty_marker() -> Result<Marker, PkgError> {
 
 #[test]
 fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -38,7 +38,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
             && stripe
                 .buffer
                 .as_ref()
-                .is_some_and(|buffer| buffer == br#"["main.js","test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
+                .is_some_and(|buffer| buffer == br#"["test-x-index.js","test-y-resolve.any","test-z-require-code-1.js","test-z-require-code-2.js","test-z-require-code-3.js","test-z-require-code-4.js","test-z-require-content.css","test-z-require-json-1.json","test-z-require-json-2.json","test-z-require-json-3.json","test-z-require-json-4.json","test-z-require-json-5.json"]"#)
     }));
     assert!(packed.stripes.iter().any(|stripe| {
         stripe.snap == "/test-x-index.js"
@@ -61,7 +61,7 @@ fn packs_content_links_and_stat_stripes() -> Result<(), PkgError> {
 
 #[test]
 fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
-    let fixture_dir = PathBuf::from("../test/test-50-require-resolve");
+    let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-x-index.js");
     let walked = walk(
         empty_marker()?,
@@ -150,5 +150,127 @@ fn carries_walker_symlinks_into_packed_output() -> Result<(), Box<dyn std::error
     );
 
     fs::remove_dir_all(&fixture_dir)?;
+    Ok(())
+}
+
+#[test]
+fn transformed_mjs_records_are_renamed_to_js_in_snapshot() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_root = std::env::temp_dir().join(format!("pkg-rust-esm-pack-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root)?;
+    std::fs::write(
+        temp_root.join("entry.mjs"),
+        "import { helper } from './helper.mjs';\nconsole.log(helper());\n",
+    )?;
+    std::fs::write(
+        temp_root.join("helper.mjs"),
+        "export function helper() { return 42; }\n",
+    )?;
+
+    let package = pkg_rust::PackageJson::parse("{}")
+        .map_err(|error| pkg_rust::PkgError::Cli(error.to_string()))?;
+    let entrypoint = temp_root.join("entry.mjs");
+    let walked = pkg_rust::walk(
+        pkg_rust::Marker::new(package),
+        &entrypoint,
+        None,
+        pkg_rust::WalkerParams::new().with_root(&temp_root),
+    )?;
+    let refined = pkg_rust::refine_walked(walked, &entrypoint, pkg_rust::PathStyle::Posix);
+    let packed = pkg_rust::pack(refined, true)?;
+
+    assert!(
+        packed.entrypoint.ends_with("entry.js"),
+        "entrypoint {} should be renamed to .js",
+        packed.entrypoint
+    );
+    assert!(
+        packed
+            .stripes
+            .iter()
+            .all(|stripe| !stripe.snap.ends_with(".mjs")),
+        "no snapshot path should keep the .mjs extension"
+    );
+    let entry_blob = packed
+        .stripes
+        .iter()
+        .find(|stripe| {
+            stripe.snap.ends_with("entry.js") && stripe.store == pkg_rust::StoreKind::Blob
+        })
+        .ok_or("missing transformed entry blob")?;
+    let body = String::from_utf8_lossy(
+        entry_blob
+            .buffer
+            .as_deref()
+            .ok_or("entry blob should carry a transformed buffer")?,
+    );
+    assert!(
+        body.contains(r#"require("./helper.js")"#),
+        "transformed body: {body}"
+    );
+    assert!(!body.contains("import {"));
+
+    std::fs::remove_dir_all(&temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn transformed_type_module_js_rewrites_mjs_requires() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_root =
+        std::env::temp_dir().join(format!("pkg-rust-esm-typemod-{}", std::process::id()));
+    let _ignored = std::fs::remove_dir_all(&temp_root);
+    std::fs::create_dir_all(&temp_root)?;
+    std::fs::write(temp_root.join("package.json"), r#"{"type":"module"}"#)?;
+    std::fs::write(
+        temp_root.join("index.js"),
+        "import { helper } from './dep.mjs';\nconsole.log(helper());\n",
+    )?;
+    std::fs::write(
+        temp_root.join("dep.mjs"),
+        "export function helper() { return 9; }\n",
+    )?;
+
+    let package = pkg_rust::PackageJson::parse(r#"{"type":"module"}"#)
+        .map_err(|error| pkg_rust::PkgError::Cli(error.to_string()))?;
+    let entrypoint = temp_root.join("index.js");
+    let walked = pkg_rust::walk(
+        pkg_rust::Marker::new(package),
+        &entrypoint,
+        None,
+        pkg_rust::WalkerParams::new().with_root(&temp_root),
+    )?;
+    let refined = pkg_rust::refine_walked(walked, &entrypoint, pkg_rust::PathStyle::Posix);
+    let packed = pkg_rust::pack(refined, true)?;
+
+    // The transformed .js entry keeps its name, while its .mjs dependency is
+    // renamed; the entry's require must point at the renamed snapshot.
+    assert!(packed.entrypoint.ends_with("index.js"));
+    assert!(
+        packed
+            .stripes
+            .iter()
+            .any(|stripe| stripe.snap.ends_with("dep.js")),
+        "dep.mjs should be renamed to dep.js in the snapshot"
+    );
+    let entry_blob = packed
+        .stripes
+        .iter()
+        .find(|stripe| {
+            stripe.snap.ends_with("index.js") && stripe.store == pkg_rust::StoreKind::Blob
+        })
+        .ok_or("missing transformed entry blob")?;
+    let body = String::from_utf8_lossy(
+        entry_blob
+            .buffer
+            .as_deref()
+            .ok_or("entry blob should carry a transformed buffer")?,
+    );
+    assert!(
+        body.contains(r#"require("./dep.js")"#),
+        "transformed body should require the renamed dependency: {body}"
+    );
+
+    std::fs::remove_dir_all(&temp_root)?;
     Ok(())
 }

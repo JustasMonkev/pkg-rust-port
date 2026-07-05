@@ -37,7 +37,7 @@ pub struct PackedOutput {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-content.css";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-content.css";
 /// let output = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(output, entrypoint, pkg_rust::PathStyle::Posix);
 /// let packed = pkg_rust::pack(refined, true)?;
@@ -48,7 +48,24 @@ pub fn pack(refined: RefinedOutput, bytecode: bool) -> Result<PackedOutput, PkgE
     let mut stripes = Vec::new();
     let symlinks = refined.symlinks;
 
+    // yao-pkg packer: a transformed `.mjs` entrypoint is renamed to `.js` in
+    // the snapshot so Node does not treat the CommonJS output as an ES module.
+    let mut entrypoint = refined.entrypoint;
+    if entrypoint.ends_with(".mjs")
+        && refined
+            .records
+            .get(&entrypoint)
+            .is_some_and(|record| record.was_transformed)
+    {
+        entrypoint = rename_mjs_snap(&entrypoint);
+    }
+
     for (snap, mut record) in refined.records {
+        let snap = if record.was_transformed && snap.ends_with(".mjs") {
+            rename_mjs_snap(&snap)
+        } else {
+            snap
+        };
         if !has_any_store(&record) {
             continue;
         }
@@ -73,10 +90,14 @@ pub fn pack(refined: RefinedOutput, bytecode: bool) -> Result<PackedOutput, PkgE
     }
 
     Ok(PackedOutput {
-        entrypoint: refined.entrypoint,
+        entrypoint,
         symlinks,
         stripes,
     })
+}
+
+fn rename_mjs_snap(snap: &str) -> String {
+    format!("{}.js", &snap[..snap.len() - 4])
 }
 
 fn has_any_store(record: &FileRecord) -> bool {
@@ -119,7 +140,6 @@ fn push_links(stripes: &mut Vec<Stripe>, snap: &str, record: &FileRecord) -> Res
     }
 
     let mut children = record.children.clone();
-    children.sort();
     children.dedup();
     let buffer = serde_json::to_vec(&children)
         .map_err(|error| PkgError::Pack(format!("links json failed for '{snap}': {error}")))?;

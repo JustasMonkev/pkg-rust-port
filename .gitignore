@@ -1,2 +1,7 @@
 /target/
 /.pkg-rust-real-cache/
+/.DS_Store
+/.idea/
+/npm/*/bin/pkg
+/npm/*/bin/pkg.exe
+/*.tgz

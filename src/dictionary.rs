@@ -275,6 +275,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
                 "require.resolve('socket.io-client/dist/socket.io.js.map', 'must-exclude')"
             ]),
         )),
+        "sqlite3" => Some(assets(["build/Release/*.node"])),
         "steam-crypto" => Some(assets(["public.pub"])),
         "steam-resources" => Some(steam_resources()),
         "stylus" => Some(stylus()),
@@ -283,6 +284,7 @@ pub fn lookup_dictionary(package_name: &str) -> Option<DictionaryEntry> {
             [".svgo.yml"],
         )),
         "tesseract.js" => Some(scripts(["src/worker-script/node/index.js"])),
+        "thread-stream" => Some(scripts(["lib/worker.js"])),
         "tinify" => Some(assets(["lib/data/cacert.pem"])),
         "tiny-worker" => Some(assets(["lib/noop.js"])),
         "umd" => Some(umd()),

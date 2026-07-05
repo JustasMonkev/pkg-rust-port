@@ -1,0 +1,8 @@
+{
+  "name": "test-80-compression",
+  "private": true,
+  "dependencies": {
+    "chalk": "4.1.2",
+    "minimist": "1.2.8"
+  }
+}

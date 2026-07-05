@@ -1707,3 +1707,98 @@ Verified: target-node oracle probing passes for `diff` with `PKG_RUST_INSTALL_NP
 Next: continue target-oracle-checking deterministic public npm fixtures before promotion, and keep deploy-file/native packages behind their separate gates.
 
 Decisions made: choose `diff` because it is deterministic, has no fixture meta/native/service requirements, and adds a behavior-level public package assertion. Capturing the package.json that supplied `main` is required for packages like current `diff`, where the selected CJS entry sits below a nested `libcjs/package.json`.
+
+## 2026-05-29 - Self-contained repo + port completion pass
+
+Shipped: made the extracted standalone repository build and test on its own and closed the remaining behavioral and parity gaps.
+
+- Embedded the pkg 5.8.1 runtime prelude as Rust string constants in `src/prelude_assets.rs` (so the crate has no `.js` source files) and vendored the referenced `test/` fixtures into the repository, then repointed every fixture reference. The crate previously read `../../prelude/*.js` and `../test/` from the original JS repo it was developed inside, so it did not even compile after extraction.
+- Replaced the interim host-`node` bytecode fabrication with pkg's `fabricatorForTarget`: bytecode is produced by a host-platform fabricator binary matching the output target's node range and arch (linuxstatic for cross-arch on linux), ad-hoc signed on macOS and made executable elsewhere. The host-`node` path remains only as a seam for in-memory test providers. Exposed `fabricator_for_target` and seeded the fabricator binary in the offline CLI smoke cache.
+- Reported the mirrored pkg version 5.8.1 for `-v`/`--version` (bare, like the JS `console.log(version)`), printed the `pkg@5.8.1` banner, and kept the prelude `process.versions.pkg` injection in sync via a shared public `PKG_VERSION`.
+- Ported the remaining offline-testable mapped suites: test-77 dictionary/fixture consistency (canonical dictionary list vendored as test data), test-78 version reporting, and a test-42 fetch-naming matrix across the platform/arch/node-range grid. Recreated the post-5.8.1 `test-99-#1861` Windows relaunch fixture. Added a real macOS `codesign` smoke gated to macOS. Expanded the Criterion benchmarks.
+
+Verified: full locked gate is green -- `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets`, `cargo test --locked --doc`, `RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features`, and `cargo bench --locked --bench packaging --no-run`.
+
+Next: the only remaining JS behaviors not exercised in-repo are the `--build` Node-from-source path (which lives in the separate pkg-fetch package, out of scope) and the opt-in network/npm/native fixtures behind their existing env gates.
+
+Decisions made: vendor prelude and fixtures into the repository rather than depend on an adjacent JS checkout, since the port is now a standalone crate. Keep the host-`node` fabrication seam for deterministic in-memory providers while the real provider path always fetches a host-platform fabricator binary.
+
+## 2026-05-31 - External gates completed
+
+Shipped: completed the three remaining post-port validation boundaries without expanding this crate into a pkg-fetch source builder. `PkgFetchCache` now exposes `source_build_requirement` so force-build targets have a typed external `built-*` artifact requirement, and force-build misses report that requirement instead of a generic cache miss. Added a reusable public npm promotion gate (`PKG_RUST_PROMOTE_PUBLIC_NPM=<fixture>`) that runs the selected target-node oracle before packaging and comparing the Rust executable output. Added the manual `Gated Runtime Validation` workflow for source-build boundary checks, npm issue fixtures, public npm smoke, target-node probes, one-fixture public npm promotion, and native npm smoke.
+
+Verified: focused source-build boundary coverage passes with `cargo test --locked --test fetch_parity`; focused public npm gate coverage compiles and skips cleanly without env vars with `cargo test --locked --test runtime_smoke public_npm_ -- --nocapture`.
+
+Next: use the manual workflow or local env-gated commands when a real cache, npm network access, and native build tooling are available. The remaining external work is operational validation, not missing Rust port code.
+
+Decisions made: keep Node-from-source building delegated to pkg-fetch-compatible tooling and require the produced built cache artifact. This preserves the Rust port boundary while making the required evidence explicit and automatable.
+
+## 2026-05-31 - Real pkg comparison harness
+
+Shipped: added a gated `real_pkg_compare` integration harness that packages selected fixtures with both real `pkg@5.8.1` and this Rust port using the same pkg-fetch cache, runs both executables, and compares stdout, stderr, and concrete embedded `/snapshot/...` strings. Fixed the real divergences it exposed: plain file inputs now preserve the entry directory basename under `/snapshot`, parent directory records no longer pull in unbundled sibling files, and packaged directory links preserve pkg-compatible file-before-directory ordering for `fs.readdirSync`/mountpoint behavior. Expanded deploy-file containment so dependency metadata cannot escape through absolute targets, `..` targets, mixed `..` targets, symlinked target parents, relative source traversal, or absolute source paths.
+
+Verified: curl-seeded `/private/tmp/pkg-rust-real-compare/cache/v3.5/fetched-v18.15.0-macos-x64` matched SHA `13cc043442af8f110836e7a4abcfc4ba5cf1d9568564485f018fd93d688291e1`; `PKG_RUST_REAL_PKG_COMPARE=1 PKG_RUST_REAL_PKG_BIN=/private/tmp/pkg-rust-real-compare/oracle/node_modules/.bin/pkg PKG_CACHE_PATH=/private/tmp/pkg-rust-real-compare/cache PKG_RUST_REAL_TARGET=node18-macos-x64 cargo test --locked --test real_pkg_compare -- --nocapture` passed for snapshot-path, module-parent, mountpoints, fs-runtime-layer-2, require-edge-cases, and readdir-bundled-dir. An empty-cache Rust CLI run verified the live reqwest downloader after sandbox network approval and produced a matching SHA/correct `42` executable. `--build` still reports the explicit external built artifact requirement at `/private/tmp/pkg-rust-real-compare/cache/v3.5/built-v18.15.0-macos-x64`.
+
+Next: keep the real pkg comparison gate opt-in because it needs network/cache/oracle setup. A plain `npm install pkg@5.8.1` installs nested `pkg-fetch@3.4.2`, so the v3.5/Node 18.15.0 cache comparison requires overriding that nested dependency to `pkg-fetch@3.5.2`.
+
+## 2026-06-09 - yao-pkg retarget: prelude + Zstd shipped
+
+Shipped: retargeted the parity oracle from vercel/pkg 5.8.1 to yao-pkg/pkg 6.19.0 and added `YAO_PKG_PARITY.md` as the gap backlog. Replaced the embedded prelude with the yao-pkg 6.19.0 `bootstrap.js` + `bootstrap-shared.js` pair (verbatim, SHA-pinned in `src/prelude_assets.rs`), updated `prelude_template` to the new packer wrapper with the `REQUIRE_SHARED` module IIFE and inline diagnostic snippet, and bumped the reported version to 6.19.0. Added `Compression::Zstd` end to end: parser aliases `zstd`/`zs`, enum index 3 for `%DOCOMPRESS%`, native Rust zstd payload encoding, and the yao-pkg invalid-compression wording.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline; new parity tests cover the wrapper shape, diagnostic injection, Zstd manifest accounting, and `%DOCOMPRESS%` rendering.
+
+Next: continue the `YAO_PKG_PARITY.md` backlog: external config file support (`-c/--config` + `.pkgrc` discovery + CLI>config>default flag resolution), then `--fallback-to-source` and the exports-aware resolver.
+
+Decisions made: the Rust producer encodes Zstd natively with libzstd instead of requiring a Node >= 22.15 build host the way the JS producer does; only the produced binary keeps the runtime Node >= 22.15 requirement. The debug diagnostic is now the yao-pkg inline packer snippet rather than the retired `prelude/diagnostic.js`.
+
+Blockers worked around: none.
+
+## 2026-06-09 - yao-pkg flags, pkg-fetch 3.6.3, and config files shipped
+
+Shipped: three more yao-pkg parity slices. `--fallback-to-source` ships plain source when bytecode fabrication fails (yao warning wording; fail-closed skip behavior retained without the flag) and `--signature` is accepted as the positive override. Binary fetching now targets `@yao-pkg/pkg-fetch` 3.6.3: cache tag `v3.6`, yao-pkg release downloads, the 3.6.3 node version set, the 3.6.3 expected-SHA table, and the yao known-arch set. External config files now work end to end: `-c/--config` with JSON or node-evaluated JS modules, `.pkgrc`/`pkg.config.*` auto-discovery with the `Using config` notice and precedence warning, bare-config wrapping, and CLI > config > default flag resolution.
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` are green offline, including new parity tests for fallback-to-source payloads, the pkg-fetch 3.6 cache matrix, pkgrc discovery/precedence, bare-config wrapping, missing-config wording, and node-evaluated JS configs.
+
+Next: continue the YAO_PKG_PARITY.md backlog with the exports-aware resolver, then the walker/detector deltas and ESM transformation.
+
+Decisions made: JS config modules are evaluated through the host `node` subprocess (the same external boundary as bytecode fabrication) instead of embedding a JS engine; config type validation keeps serde error wording for now instead of the JS `validatePkgConfig` messages.
+
+Blockers worked around: none.
+
+## 2026-06-09 - Resolver, walker deltas, dictionary, help, and ESM shipped
+
+Shipped: five more yao-pkg parity slices. Exports-field-aware resolution (require-then-import conditions, pattern subpaths, ESM-only gating). Non-ESM walker/detector deltas: literal dynamic `import()` detection, `.mjs` resolve extension, and top-level config `ignore` patterns. Dictionary sync (`sqlite3`, `thread-stream` + fixture). Help text updated to the yao-pkg surface. Producer placeholder discovery now skips apostrophe-quoted source literals (yao-pkg/pkg#86). ESM support landed end to end: SWC `common_js` transformation before detection/bytecode, async-IIFE wrapping for top-level await, `import.meta` rewriting, `.mjs` require-path rewriting, `was_transformed` records, and packer `.mjs` -> `.js` snapshot renames. SWC crates aligned on a single AST family (ast 25 / parser 41 / common 23).
+
+Verified: `cargo test`, `cargo clippy --all-targets`, and `cargo fmt --check` green offline, including new parity tests for exports resolution, dynamic import detection, walker ignore, apostrophe placeholder skip, ESM unit transforms, and an end-to-end .mjs walk/refine/pack test.
+
+Next: SEA support is the last large backlog item; misc small items are listed in YAO_PKG_PARITY.md.
+
+Decisions made: the Rust port transforms ESM with SWC instead of an esbuild subprocess, keeping the toolchain native; SWC's native import.meta rewriting replaces the JS regex shim. Known pre-existing flake: parallel lib tests that write-then-exec helper scripts can hit a fork/exec text-busy race.
+
+Blockers worked around: the transform crates initially pulled a second SWC AST family; the existing parser pins were upgraded instead of carrying duplicate ASTs.
+
+## 2026-06-10 - Real-runtime validation against node22 and ESM codegen fix
+
+Shipped: validated the yao-pkg retarget end to end on this machine. Seeded the pkg-fetch v3.6 cache with the real `node-v22.22.3-linux-x64` release binary (SHA-256 matched the embedded 3.6.3 expected-hash table), then ran the full gated runtime smoke suite with `PKG_RUST_REAL_TARGET=node22-linux-x64`: all 33 tests pass, covering the new 6.19.0 prelude, Zstd/GZip/Brotli payloads, `.pkgrc` discovery, and ESM entrypoints executed as produced binaries. Fixed a real ESM bug the run exposed: the SWC pipeline was missing the `hygiene` and `fixer` passes, so `(0, _mod.fn)()` indirect calls lost their parentheses and corrupted argument lists; transformed output now goes through the full resolver/common_js/hygiene/fixer pipeline. Updated the write-guard smoke expectation to yao-pkg 6.19's node20+ contract (final `writeFileSync` surfaces ENOENT for the snapshot path).
+
+Verified: `PKG_RUST_REAL_CACHE=... PKG_RUST_REAL_TARGET=node22-linux-x64 cargo test --test runtime_smoke` is 33/33 green; offline `cargo test` (22 suites), clippy, and fmt remain green. Manual end-to-end runs confirmed `--compress Zstd` output executes on the node22 target and an `.mjs` entrypoint with top-level await and `import.meta.url` prints correct values.
+
+Next: SEA support remains the last large backlog item in YAO_PKG_PARITY.md; in-process release downloads fail in this sandbox because reqwest ignores the HTTP proxy that curl/npm honor, so the cache was seeded externally (real-machine downloads are unaffected).
+
+Decisions made: the test-80-compression fixture needs `minimist` and `chalk` installed locally (matching the JS repo where the suite resolves them from the repo root); its fixture .gitignore now also ignores node_modules.
+
+Blockers worked around: GitHub release downloads were seeded via curl due to the sandbox proxy; SHA verification still ran against the embedded expected-hash table.
+
+## 2026-06-14 - SEA simple mode + native ELF injection
+
+Shipped: the first SEA slice — simple mode (`pkg --sea entry.js` for a bare entry file) plus the shared foundation, ported from yao-pkg 6.19.0 `lib/sea.ts`. New `src/sea.rs` (orchestration + deterministic mapping/validation) and `src/sea_inject.rs` (native `NODE_SEA_BLOB` injection). The `--sea` CLI flag and `sea` config key are wired (CLI > config > default), `--sea` is documented in the help, and `exec` routes SEA builds onto a dedicated OS thread like the classic build. The deterministic core mirrors upstream exactly: nodejs.org os/arch mapping with the `NODE_OSES`/`NODE_ARCHS` sets and "Unsupported OS/architecture" wording, archive-filename + dist/unofficial-builds URL construction, the `getNodeVersion` version-format regex, the host `>= 22` assertion wording, `assertSingleTargetMajor`/`resolveMinTargetMajor`, and `pickMatchingHostTargetIndex`. The I/O pipeline downloads from `nodejs.org/dist`, verifies against `SHASUMS256.txt`, extracts zip/tar.gz with `.ok` sentinels into `~/.pkg-cache/sea` (honoring `PKG_CACHE_PATH`), generates the prep blob via host `node --experimental-sea-config`, bakes (copy + inject), and ad-hoc signs macOS via `mach-o.rs`.
+
+Decision (flagged in the backlog): blob injection is native Rust, not a `postject` subprocess. Node's ELF resource finder (`postject-api.h`) locates the blob by scanning `PT_NOTE` segments through `dl_iterate_phdr`, so the injector appends the blob as an ELF note, maps it with a fresh `PT_LOAD`, exposes it via a fresh `PT_NOTE`, repoints `PT_PHDR` at the relocated header table (glibc derives the load bias as `AT_PHDR - PT_PHDR.p_vaddr`, so a stale `PT_PHDR` crashes `ld.so` at startup — found while bringing this up), and flips the `NODE_SEA_FUSE_…:0` fuse to `:1`.
+
+Verified: native ELF injection end to end against the real Node 22.22.2 runtime on this linux-x64 host — `src/sea_inject.rs::elf_injection_runs_against_real_node_runtime` generates a blob with host node, injects it with the real `inject_sea_blob`, and runs the produced executable, which prints the embedded main's output. Offline: `cargo clippy --all-targets`, `cargo fmt --check`, `cargo test` (all suites), and `cargo test --doc` are green, including new parity tests for the deterministic mapping/validation, synthetic-archive extraction (tar.gz + zip), structural ELF injection (PT_LOAD/PT_NOTE/PT_PHDR + note descriptor), fuse flip (missing/duplicate rejection), and CLI/config `--sea` planning + simple-vs-enhanced mode selection. Manual CLI checks confirm `--sea` appears in `--help`, enhanced mode (package.json input) fails closed with a precise error before any network, and simple mode reaches the download step.
+
+Next (next SEA slice, see YAO_PKG_PARITY.md item 1): enhanced SEA mode (walker `seaMode` + `sea-assets` archive/manifest + the vendored VFS bootstrap bundle) and native Mach-O/PE injection. All currently fail closed with precise errors rather than emitting broken binaries.
+
+Blockers worked around: in-process nodejs.org downloads fail in this sandbox (reqwest does not use the curl/npm proxy), so the full `pkg --sea` CLI path is verifiable only up to the network boundary here; the novel injection code is fully verified against the real runtime via host node, which needs no network. Real-machine SEA builds are unaffected (same constraint as the existing pkg-fetch download path).
+
+PR #6 review follow-ups: (P1) SEA now rejects targets whose native injector is unimplemented (macOS/Windows) up front in `run_sea`, before any download or blob generation, so the documented `pkg --sea index.js` default no longer half-builds the Linux output and then errors — it fails fast with the unsupported-target list. (P2) `pickBlobGeneratorBinary` now ports yao-pkg's third path: when no target matches the host and the host `node` is not the exact target version, it downloads a host-platform Node pinned to the resolved target version to use as the generator, instead of hard-failing — enabling cross-arch Linux SEA builds (e.g. `-t node22-linux-arm64` on linux-x64).

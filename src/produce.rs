@@ -104,7 +104,7 @@ pub struct PlaceholderValues {
 /// let package = pkg_rust::PackageJson::parse("{}")
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let marker = pkg_rust::Marker::new(package);
-/// let entrypoint = "../test/test-50-require-resolve/test-z-require-content.css";
+/// let entrypoint = "test/test-50-require-resolve/test-z-require-content.css";
 /// let walked = pkg_rust::walk(marker, entrypoint, None, pkg_rust::WalkerParams::new())?;
 /// let refined = pkg_rust::refine_walked(walked, entrypoint, pkg_rust::PathStyle::Posix);
 /// let packed = pkg_rust::pack(refined, true)?;
@@ -118,8 +118,9 @@ pub fn produce_manifest(
     style: PathStyle,
 ) -> Result<ProducerManifest, PkgError> {
     let native_addons = NativeAddonOptions::default();
-    let (manifest, _payload, _warnings) =
-        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
+    let (manifest, _payload, warnings) =
+        build_manifest_and_payload(packed, compression, style, None, &[], false, &native_addons)?;
+    fail_on_hidden_bytecode_warnings(&warnings)?;
     Ok(manifest)
 }
 
@@ -141,13 +142,13 @@ pub fn produce_manifest(
 ///     .map_err(|error| pkg_rust::PkgError::Resolve(error.to_string()))?;
 /// let walked = pkg_rust::walk(
 ///     pkg_rust::Marker::new(package),
-///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     "test/test-50-require-resolve/test-z-require-content.css",
 ///     None,
 ///     pkg_rust::WalkerParams::new(),
 /// )?;
 /// let refined = pkg_rust::refine_walked(
 ///     walked,
-///     "../test/test-50-require-resolve/test-z-require-content.css",
+///     "test/test-50-require-resolve/test-z-require-content.css",
 ///     pkg_rust::PathStyle::Posix,
 /// );
 /// let packed = pkg_rust::pack(refined, true)?;
@@ -170,47 +171,22 @@ pub fn produce_executable_image(
     style: PathStyle,
     bakery: Vec<u8>,
 ) -> Result<ProducedExecutable, PkgError> {
-    let native_addons = NativeAddonOptions::default();
-    let (manifest, payload, _warnings) =
-        build_manifest_and_payload(packed, compression, style, None, &[], &native_addons)?;
-    let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
-    let payload_position = binary.len() as u64;
-    let payload_size = payload.len() as u64;
-    let prelude_position = payload_position + payload_size;
-    let prelude_size = prelude.len() as u64;
-
-    let mut bytes = binary;
-    bytes.extend_from_slice(&payload);
-    bytes.extend_from_slice(&prelude);
-
-    let placeholders = discover_placeholders(&bytes);
-    let values = PlaceholderValues {
-        bakery,
-        payload_position,
-        payload_size,
-        prelude_position,
-        prelude_size,
-    };
-    inject_placeholders(
-        &mut bytes,
-        &placeholders,
-        &values,
-        &[
-            PlaceholderKind::Bakery,
-            PlaceholderKind::PayloadPosition,
-            PlaceholderKind::PayloadSize,
-            PlaceholderKind::PreludePosition,
-            PlaceholderKind::PreludeSize,
-        ],
+    let produced = build_executable_image_with_fabricator(
+        binary,
+        packed,
+        prelude_template,
+        ProducerBuildOptions {
+            compression,
+            style,
+            bakery,
+            bakes: &[],
+            fabricator_path: None,
+            fallback_to_source: false,
+            native_addons: NativeAddonOptions::default(),
+        },
     )?;
-
-    Ok(ProducedExecutable {
-        bytes,
-        manifest,
-        payload_position,
-        prelude_position,
-        prelude_size,
-    })
+    fail_on_hidden_bytecode_warnings(&produced.warnings)?;
+    Ok(produced.executable)
 }
 
 /// Produce an executable image and write it to disk.
@@ -273,6 +249,7 @@ pub fn write_executable_image(
             bakery,
             bakes: &[],
             fabricator_path: None,
+            fallback_to_source: false,
             native_addons: NativeAddonOptions::default(),
         },
     )
@@ -284,6 +261,7 @@ pub(crate) struct ProducerBuildOptions<'a> {
     pub(crate) bakery: Vec<u8>,
     pub(crate) bakes: &'a [String],
     pub(crate) fabricator_path: Option<&'a Path>,
+    pub(crate) fallback_to_source: bool,
     pub(crate) native_addons: NativeAddonOptions,
 }
 
@@ -308,14 +286,12 @@ pub(crate) fn write_executable_image_with_fabricator(
     prelude_template: &str,
     options: ProducerBuildOptions<'_>,
 ) -> Result<ProducedExecutable, PkgError> {
-    write_executable_image_with_fabricator_diagnostics(
-        output,
-        binary,
-        packed,
-        prelude_template,
-        options,
-    )
-    .map(|produced| produced.executable)
+    let output = output.as_ref();
+    let produced =
+        build_executable_image_with_fabricator(binary, packed, prelude_template, options)?;
+    fail_on_hidden_bytecode_warnings(&produced.warnings)?;
+    write_produced_executable(output, &produced.executable)?;
+    Ok(produced.executable)
 }
 
 pub(crate) fn write_executable_image_with_fabricator_diagnostics(
@@ -326,12 +302,25 @@ pub(crate) fn write_executable_image_with_fabricator_diagnostics(
     options: ProducerBuildOptions<'_>,
 ) -> Result<ProducedExecutableWithWarnings, PkgError> {
     let output = output.as_ref();
+    let produced =
+        build_executable_image_with_fabricator(binary, packed, prelude_template, options)?;
+    write_produced_executable(output, &produced.executable)?;
+    Ok(produced)
+}
+
+fn build_executable_image_with_fabricator(
+    binary: Vec<u8>,
+    packed: PackedOutput,
+    prelude_template: &str,
+    options: ProducerBuildOptions<'_>,
+) -> Result<ProducedExecutableWithWarnings, PkgError> {
     let (manifest, payload, warnings) = build_manifest_and_payload(
         packed,
         options.compression,
         options.style,
         options.fabricator_path,
         options.bakes,
+        options.fallback_to_source,
         &options.native_addons,
     )?;
     let prelude = prelude_buffer_from_prelude(&render_prelude(prelude_template, &manifest)?);
@@ -372,13 +361,31 @@ pub(crate) fn write_executable_image_with_fabricator_diagnostics(
         prelude_position,
         prelude_size,
     };
-    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
-        path: output.display().to_string(),
-        source,
-    })?;
     Ok(ProducedExecutableWithWarnings {
         executable: produced,
         warnings,
+    })
+}
+
+fn fail_on_hidden_bytecode_warnings(warnings: &[PackageWarning]) -> Result<(), PkgError> {
+    let messages = warnings
+        .iter()
+        .filter_map(|warning| match warning {
+            PackageWarning::BytecodeFabricationFailed { .. } => Some(warning.to_cli_message()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if messages.is_empty() {
+        Ok(())
+    } else {
+        Err(PkgError::Pack(messages.join("; ")))
+    }
+}
+
+fn write_produced_executable(output: &Path, produced: &ProducedExecutable) -> Result<(), PkgError> {
+    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
+        path: output.display().to_string(),
+        source,
     })
 }
 
@@ -388,29 +395,50 @@ fn build_manifest_and_payload(
     style: PathStyle,
     fabricator_path: Option<&Path>,
     bakes: &[String],
+    fallback_to_source: bool,
     native_addons: &NativeAddonOptions,
 ) -> Result<(ProducerManifest, Vec<u8>, Vec<PackageWarning>), PkgError> {
-    let mut offset = 0_u64;
-    let mut payload = Vec::new();
+    // Reserve roughly the uncompressed size up front so the contiguous payload
+    // grows in one allocation instead of repeatedly as stripes are appended.
+    let payload_capacity = packed
+        .stripes
+        .iter()
+        .filter_map(|stripe| stripe.buffer.as_ref().map(Vec::len))
+        .sum();
+    let mut payload = Vec::with_capacity(payload_capacity);
     let mut vfs: BTreeMap<String, BTreeMap<u8, PayloadPointer>> = BTreeMap::new();
     let mut path_dictionary = PathDictionary::default();
     let mut fabricator_pool = FabricatorPool::new();
     let mut warnings = Vec::new();
 
-    for stripe in packed.stripes {
+    for mut stripe in packed.stripes {
         let snap = snapshotify(&stripe.snap, style);
-        let stripe_bytes = stripe_bytes(&stripe, native_addons)?;
-        let payload_bytes = if stripe.store == StoreKind::Blob {
-            // DECISION: prefer target-specific bytecode when the provider
-            // exposes a runnable target binary path; fall back to host `node`
-            // for deterministic in-memory test providers.
+        let mut store = stripe.store;
+        // Move the stripe buffer out instead of cloning it.
+        let raw = take_stripe_bytes(&mut stripe, native_addons)?;
+        let bytes = if store == StoreKind::Blob {
+            // DECISION: fabricate bytecode only through the selected target
+            // binary. A request without an absolute executable fails closed in
+            // `fabricate`, so packaging never resolves a `node` shim through
+            // PATH; the failed stripe is recorded as a warning below.
             let request = match fabricator_path {
-                Some(path) => FabricateRequest::new(&snap, &stripe_bytes).with_executable(path),
-                None => FabricateRequest::new(&snap, &stripe_bytes),
+                Some(path) => FabricateRequest::new(&snap, &raw).with_executable(path),
+                None => FabricateRequest::new(&snap, &raw),
             }
             .with_bakes(bakes);
             match fabricate(&mut fabricator_pool, request) {
                 Ok(bytes) => bytes,
+                Err(error) if fallback_to_source => {
+                    // JS producer: on fabrication failure with
+                    // --fallback-to-source, the stripe is shipped as plain
+                    // source under STORE_CONTENT instead of being skipped.
+                    warnings.push(PackageWarning::BytecodeFallbackToSource {
+                        snap: snap.clone(),
+                        message: error.to_string(),
+                    });
+                    store = StoreKind::Content;
+                    raw
+                }
                 Err(error) => {
                     warnings.push(PackageWarning::BytecodeFabricationFailed {
                         snap,
@@ -420,17 +448,19 @@ fn build_manifest_and_payload(
                 }
             }
         } else {
-            stripe_bytes
+            raw
         };
-        let payload_bytes = compress_payload(&payload_bytes, compression)?;
-        let size = payload_bytes.len() as u64;
+        // Compress (or copy) each stripe straight into the contiguous payload so
+        // no per-stripe intermediate buffer is allocated.
+        let offset = payload.len() as u64;
+        append_payload(&mut payload, &bytes, compression)?;
+        let size = payload.len() as u64 - offset;
         let vfs_key = path_dictionary.make_key(compression, &snap);
         vfs.entry(vfs_key)
             .or_default()
-            .insert(stripe.store.as_index(), PayloadPointer { offset, size });
-        offset += size;
-        payload.extend_from_slice(&payload_bytes);
+            .insert(store.as_index(), PayloadPointer { offset, size });
     }
+    let payload_size = payload.len() as u64;
 
     let symlinks = packed
         .symlinks
@@ -451,7 +481,7 @@ fn build_manifest_and_payload(
             symlinks,
             vfs,
             path_dictionary: path_dictionary.entries,
-            payload_size: offset,
+            payload_size,
             compression,
         },
         payload,
@@ -623,7 +653,27 @@ pub enum PlaceholderKind {
 }
 
 fn discover_placeholder(binary: &[u8], needle: &[u8], padder: u8) -> Option<Placeholder> {
-    find_subslice(binary, needle).map(|position| Placeholder {
+    discover_placeholder_from(binary, needle, padder, 0)
+}
+
+fn discover_placeholder_from(
+    binary: &[u8],
+    needle: &[u8],
+    padder: u8,
+    search_offset: usize,
+) -> Option<Placeholder> {
+    let position = search_offset + find_subslice(binary.get(search_offset..)?, needle)?;
+    // yao-pkg/pkg#86: an apostrophe before the match means this occurrence is
+    // a quoted source-code literal inside the binary, not the real injection
+    // site; prefer a later occurrence when one exists.
+    if position > 0
+        && binary.get(position - 1) == Some(&b'\'')
+        && let Some(next) =
+            discover_placeholder_from(binary, needle, padder, position + needle.len())
+    {
+        return Some(next);
+    }
+    Some(Placeholder {
         position,
         size: needle.len(),
         padder,
@@ -732,9 +782,12 @@ fn base36(mut value: usize) -> String {
     output.iter().rev().collect()
 }
 
-fn stripe_bytes(stripe: &Stripe, native_addons: &NativeAddonOptions) -> Result<Vec<u8>, PkgError> {
-    if let Some(buffer) = stripe.buffer.as_ref() {
-        return Ok(buffer.clone());
+fn take_stripe_bytes(
+    stripe: &mut Stripe,
+    native_addons: &NativeAddonOptions,
+) -> Result<Vec<u8>, PkgError> {
+    if let Some(buffer) = stripe.buffer.take() {
+        return Ok(buffer);
     }
 
     let Some(file) = stripe.file.as_ref() else {
@@ -904,38 +957,63 @@ fn restore_native_backup(backup: &Path, node_file: &Path) -> Result<(), PkgError
     })
 }
 
-fn compress_payload(payload: &[u8], compression: PayloadCompression) -> Result<Vec<u8>, PkgError> {
+/// Append a stripe's bytes to `payload`, compressing in place so no per-stripe
+/// intermediate buffer is allocated. The produced bytes are identical to
+/// compressing into a fresh buffer and copying it in.
+fn append_payload(
+    payload: &mut Vec<u8>,
+    bytes: &[u8],
+    compression: PayloadCompression,
+) -> Result<(), PkgError> {
     match compression {
-        PayloadCompression::None => Ok(payload.to_vec()),
-        PayloadCompression::Gzip => gzip_payload(payload),
-        PayloadCompression::Brotli => brotli_payload(payload),
+        PayloadCompression::None => {
+            payload.extend_from_slice(bytes);
+            Ok(())
+        }
+        PayloadCompression::Gzip => {
+            let mut encoder =
+                flate2::write::GzEncoder::new(payload, flate2::Compression::default());
+            encoder
+                .write_all(bytes)
+                .map_err(|error| PkgError::Pack(format!("gzip write failed: {error}")))?;
+            encoder
+                .finish()
+                .map_err(|error| PkgError::Pack(format!("gzip finish failed: {error}")))?;
+            Ok(())
+        }
+        PayloadCompression::Brotli => {
+            // DECISION: Node's `createBrotliCompress()` uses zlib's default Brotli
+            // parameters. The Rust port uses the standard max-quality/window
+            // defaults exposed by the `brotli` crate until fixture parity
+            // requires tuning.
+            let mut reader = brotli::CompressorReader::new(bytes, 4096, 11, 22);
+            reader
+                .read_to_end(payload)
+                .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
+            Ok(())
+        }
+        PayloadCompression::Zstd => {
+            // DECISION: the JS producer compresses through Node's
+            // `createZstdCompress()` and therefore needs a Node >= 22.15 build
+            // host; the Rust port encodes natively with libzstd at the same
+            // default level (3), so only the produced binary keeps the
+            // Node >= 22.15 requirement (enforced by the runtime prelude).
+            let mut encoder = zstd::stream::write::Encoder::new(payload, 3)
+                .map_err(|error| PkgError::Pack(format!("zstd encoder failed: {error}")))?;
+            encoder
+                .write_all(bytes)
+                .map_err(|error| PkgError::Pack(format!("zstd write failed: {error}")))?;
+            encoder
+                .finish()
+                .map_err(|error| PkgError::Pack(format!("zstd finish failed: {error}")))?;
+            Ok(())
+        }
     }
-}
-
-fn gzip_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
-    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    encoder
-        .write_all(payload)
-        .map_err(|error| PkgError::Pack(format!("gzip write failed: {error}")))?;
-    encoder
-        .finish()
-        .map_err(|error| PkgError::Pack(format!("gzip finish failed: {error}")))
-}
-
-fn brotli_payload(payload: &[u8]) -> Result<Vec<u8>, PkgError> {
-    // DECISION: Node's `createBrotliCompress()` uses zlib's default Brotli
-    // parameters. The Rust port uses the standard max-quality/window defaults
-    // exposed by the `brotli` crate until fixture parity requires tuning.
-    let mut reader = brotli::CompressorReader::new(payload, 4096, 11, 22);
-    let mut output = Vec::new();
-    reader
-        .read_to_end(&mut output)
-        .map_err(|error| PkgError::Pack(format!("brotli compression failed: {error}")))?;
-    Ok(output)
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
@@ -1006,6 +1084,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &bakes,
                 fabricator_path: Some(&fabricator),
+                fallback_to_source: false,
                 native_addons: NativeAddonOptions::default(),
             },
         )?;
@@ -1077,6 +1156,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &[],
                 fabricator_path: Some(&fabricator),
+                fallback_to_source: false,
                 native_addons: NativeAddonOptions::default(),
             },
         )?;
@@ -1092,7 +1172,7 @@ process.stdin.resume();
         assert!(
             warning
                 .to_cli_message()
-                .contains("Failed to make bytecode for /snapshot/esm.js")
+                .contains("Failed to generate V8 bytecode for /snapshot/esm.js")
         );
         let produced = produced.executable;
 
@@ -1113,6 +1193,85 @@ process.stdin.resume();
                 .get(start..end)
                 .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
             b"export default 42;"
+        );
+
+        fs::remove_dir_all(temp_dir)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_blob_fabrication_ships_source_with_fallback_to_source()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pkg-rust-fabricator-fallback-{}",
+            std::process::id()
+        ));
+        let _ignored = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir)?;
+        let fabricator = temp_dir.join("failing-node");
+        fs::write(&fabricator, "#!/bin/sh\nexit 7\n")?;
+        let mut permissions = fs::metadata(&fabricator)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fabricator, permissions)?;
+
+        let produced = write_executable_image_with_fabricator_diagnostics(
+            temp_dir.join("out"),
+            binary_with_placeholders(),
+            PackedOutput {
+                entrypoint: "/app.js".to_owned(),
+                symlinks: BTreeMap::new(),
+                stripes: vec![Stripe {
+                    snap: "/app.js".to_owned(),
+                    store: StoreKind::Blob,
+                    file: None,
+                    buffer: Some(b"module.exports = 42;".to_vec()),
+                }],
+            },
+            "%VIRTUAL_FILESYSTEM%\n%DEFAULT_ENTRYPOINT%\n%SYMLINKS%\n%DICT%\n%DOCOMPRESS%",
+            ProducerBuildOptions {
+                compression: PayloadCompression::None,
+                style: PathStyle::Posix,
+                bakery: Vec::new(),
+                bakes: &[],
+                fabricator_path: Some(&fabricator),
+                fallback_to_source: true,
+                native_addons: NativeAddonOptions::default(),
+            },
+        )?;
+        assert_eq!(produced.warnings.len(), 1);
+        let warning = produced
+            .warnings
+            .first()
+            .ok_or_else(|| PkgError::Pack("fallback warning was missing".to_owned()))?;
+        assert!(matches!(
+            warning,
+            PackageWarning::BytecodeFallbackToSource { snap, .. } if snap == "/snapshot/app.js"
+        ));
+        assert!(
+            warning
+                .to_cli_message()
+                .contains("Shipping source instead.")
+        );
+        let produced = produced.executable;
+
+        let stores = produced
+            .manifest
+            .vfs
+            .get("/snapshot/app.js")
+            .ok_or_else(|| PkgError::Pack("payload pointers were missing".to_owned()))?;
+        assert!(!stores.contains_key(&StoreKind::Blob.as_index()));
+        let pointer = stores
+            .get(&StoreKind::Content.as_index())
+            .ok_or_else(|| PkgError::Pack("content payload pointer was missing".to_owned()))?;
+        let start = produced.payload_position as usize + pointer.offset as usize;
+        let end = start + pointer.size as usize;
+        assert_eq!(
+            produced
+                .bytes
+                .get(start..end)
+                .ok_or_else(|| PkgError::Pack("payload range was outside image".to_owned()))?,
+            b"module.exports = 42;"
         );
 
         fs::remove_dir_all(temp_dir)?;
@@ -1292,6 +1451,7 @@ process.stdin.resume();
                 bakery: Vec::new(),
                 bakes: &[],
                 fabricator_path: None,
+                fallback_to_source: false,
                 native_addons,
             },
         )
