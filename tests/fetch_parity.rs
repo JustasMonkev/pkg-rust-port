@@ -26,7 +26,8 @@ fn cache_path_matches_pkg_fetch_local_place() -> Result<(), Box<dyn std::error::
 }
 
 #[test]
-fn cache_provider_removes_bad_fetched_and_reads_built() -> Result<(), Box<dyn std::error::Error>> {
+fn cache_provider_removes_bad_fetched_and_rejects_unverified_built()
+-> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::temp_dir().join(format!("pkg-rust-fetch-cache-{}", std::process::id()));
     let cache = PkgFetchCache::new(&root);
     let defaults = TargetDefaults::host("node18");
@@ -41,10 +42,67 @@ fn cache_provider_removes_bad_fetched_and_reads_built() -> Result<(), Box<dyn st
     fs::write(&built, b"built")?;
     fs::write(&fetched, b"fetched")?;
 
+    let error = cache.binary_artifact_for(&target).err();
+
+    assert!(
+        matches!(error, Some(PkgError::Fetch(message)) if message.contains("refusing unverified built binary"))
+    );
+    assert!(!fetched.exists());
+    fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn cache_provider_can_opt_into_unverified_built_cache() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-built-opt-in-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root).with_unverified_built_cache();
+    let defaults = TargetDefaults::host("node18");
+    let target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
+    let built = cache.binary_path(&target, BinaryKind::Built)?;
+    fs::create_dir_all(
+        built
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&built, b"built")?;
+
     let artifact = cache.binary_artifact_for(&target)?;
+
     assert_eq!(artifact.bytes(), b"built");
     assert_eq!(artifact.path(), Some(built.as_path()));
-    assert!(!fetched.exists());
+    fs::remove_file(built)?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn force_build_rejects_unverified_built_cache_artifacts() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = std::env::temp_dir().join(format!(
+        "pkg-rust-fetch-cache-force-build-reject-{}",
+        std::process::id()
+    ));
+    let cache = PkgFetchCache::new(&root);
+    let defaults = TargetDefaults::host("node18");
+    let mut target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
+    target.force_build = true;
+    let built = cache.binary_path(&target, BinaryKind::Built)?;
+    fs::create_dir_all(
+        built
+            .parent()
+            .ok_or_else(|| PkgError::Fetch("cache path has no parent".to_owned()))?,
+    )?;
+    fs::write(&built, b"built")?;
+
+    let error = cache.binary_for(&target).err();
+
+    assert!(
+        matches!(error, Some(PkgError::Fetch(message)) if message.contains("refusing unverified built binary"))
+    );
     fs::remove_file(built)?;
     fs::remove_dir_all(root)?;
     Ok(())
@@ -102,7 +160,7 @@ fn force_build_reads_only_built_cache_artifacts() -> Result<(), Box<dyn std::err
         "pkg-rust-fetch-cache-force-build-{}",
         std::process::id()
     ));
-    let cache = PkgFetchCache::new(&root);
+    let cache = PkgFetchCache::new(&root).with_unverified_built_cache();
     let defaults = TargetDefaults::host("node18");
     let mut target = parse_targets("linux-x64", &defaults)?.targets.remove(0);
     target.force_build = true;

@@ -53,6 +53,7 @@ impl BinaryKind {
 pub struct PkgFetchCache {
     root: PathBuf,
     download_on_miss: bool,
+    allow_unverified_built_cache: bool,
 }
 
 impl PkgFetchCache {
@@ -65,6 +66,7 @@ impl PkgFetchCache {
         Self {
             root: root.into(),
             download_on_miss: false,
+            allow_unverified_built_cache: false,
         }
     }
 
@@ -86,6 +88,19 @@ impl PkgFetchCache {
     #[must_use]
     pub fn with_downloads(mut self) -> Self {
         self.download_on_miss = true;
+        self
+    }
+
+    /// Allow reading unverified `built-*` cache artifacts.
+    ///
+    /// Built cache entries are local build products and do not have embedded
+    /// pkg-fetch release hashes. They are therefore disabled by default so a
+    /// poisoned reusable cache cannot silently replace the trusted base
+    /// executable. Callers that deliberately manage a private build cache can
+    /// opt in to the legacy behavior.
+    #[must_use]
+    pub fn with_unverified_built_cache(mut self) -> Self {
+        self.allow_unverified_built_cache = true;
         self
     }
 
@@ -225,11 +240,10 @@ impl TargetBinaryProvider for PkgFetchCache {
     }
 
     fn binary_artifact_for(&self, target: &NodeTarget) -> Result<TargetBinary, PkgError> {
+        let built = self.binary_path(target, BinaryKind::Built)?;
         if target.force_build {
-            let built = self.binary_path(target, BinaryKind::Built)?;
             if built.is_file() {
-                return read_binary(&built)
-                    .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
+                return self.read_built_artifact(target, built);
             }
             return Err(PkgError::Fetch(format!(
                 "no built binary for force-build target {target}; expected {}",
@@ -243,16 +257,15 @@ impl TargetBinaryProvider for PkgFetchCache {
                 .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
         }
 
-        let built = self.binary_path(target, BinaryKind::Built)?;
-        if built.is_file() {
-            return read_binary(&built)
-                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(built));
-        }
         if self.download_on_miss {
             let fetched = self.binary_path(target, BinaryKind::Fetched)?;
             return self
                 .download_fetched(target)
                 .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
+        }
+
+        if built.is_file() {
+            return self.read_built_artifact(target, built);
         }
 
         // DECISION: explicit `new` caches stay offline so tests and callers can
@@ -266,6 +279,20 @@ impl TargetBinaryProvider for PkgFetchCache {
 }
 
 impl PkgFetchCache {
+    fn read_built_artifact(
+        &self,
+        target: &NodeTarget,
+        path: PathBuf,
+    ) -> Result<TargetBinary, PkgError> {
+        if !self.allow_unverified_built_cache {
+            return Err(PkgError::Fetch(format!(
+                "refusing unverified built binary for target {target}; {} has no embedded pkg-fetch hash",
+                path.display()
+            )));
+        }
+        read_binary(&path).map(|bytes| TargetBinary::from_bytes(bytes).with_path(path))
+    }
+
     fn verify_fetched(&self, target: &NodeTarget, path: &Path) -> Result<bool, PkgError> {
         let expected = expected_hash(target)?;
         let actual = sha256_hex(path)?;
