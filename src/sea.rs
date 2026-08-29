@@ -381,7 +381,11 @@ fn download_file(url: &str, path: &Path) -> Result<(), PkgError> {
 }
 
 /// Verify the SHA-256 of `path` against the `SHASUMS256.txt` at `checksum_url`.
-fn verify_checksum(path: &Path, checksum_url: &str, filename: &str) -> Result<(), PkgError> {
+///
+/// Returns the verified archive digest so extracted-cache sentinels can be
+/// bound to the exact archive they came from instead of trusting stale `.ok`
+/// files on their own.
+fn verify_checksum(path: &Path, checksum_url: &str, filename: &str) -> Result<String, PkgError> {
     let response = reqwest::blocking::get(checksum_url).map_err(|source| {
         PkgError::Sea(format!(
             "Failed to download checksum file from {checksum_url}: {source}"
@@ -413,7 +417,7 @@ fn verify_checksum(path: &Path, checksum_url: &str, filename: &str) -> Result<()
             "Checksum verification failed for {filename}"
         )));
     }
-    Ok(())
+    Ok(actual)
 }
 
 fn hex_lower(bytes: &[u8]) -> String {
@@ -426,9 +430,10 @@ fn hex_lower(bytes: &[u8]) -> String {
 
 /// Extract the Node executable from a downloaded archive (`extract`).
 ///
-/// Returns the path to the extracted binary, using the same `.ok` sentinel
-/// scheme as yao-pkg so an interrupted extract is re-run rather than trusted.
-fn extract(os: &str, archive_path: &Path) -> Result<PathBuf, PkgError> {
+/// Returns the path to the extracted binary. The `.ok` sentinel stores the
+/// verified archive digest so stale or forged extracted binaries are re-read
+/// from the archive instead of being trusted by sentinel presence alone.
+fn extract(os: &str, archive_path: &Path, archive_digest: &str) -> Result<PathBuf, PkgError> {
     let archive_dir = archive_path.parent().ok_or_else(|| {
         PkgError::Sea(format!(
             "archive path has no parent: {}",
@@ -452,7 +457,11 @@ fn extract(os: &str, archive_path: &Path) -> Result<PathBuf, PkgError> {
     };
     let sentinel = sentinel_path(&node_path);
 
-    if sentinel.exists() && node_path.exists() {
+    if node_path.exists()
+        && fs::read_to_string(&sentinel)
+            .ok()
+            .is_some_and(|digest| digest.trim() == archive_digest)
+    {
         return Ok(node_path);
     }
     let _ = fs::remove_file(&node_path);
@@ -469,7 +478,7 @@ fn extract(os: &str, archive_path: &Path) -> Result<PathBuf, PkgError> {
             "Node executable not found in the archive".to_owned(),
         ));
     }
-    fs::write(&sentinel, b"").map_err(|source| PkgError::Io {
+    fs::write(&sentinel, format!("{archive_digest}\n")).map_err(|source| PkgError::Io {
         path: sentinel.display().to_string(),
         source,
     })?;
@@ -576,16 +585,17 @@ fn get_nodejs_executable_for_version(
         let _ = fs::remove_file(&archive_sentinel);
         log(&format!("Downloading nodejs executable from {url}..."));
         download_file(&url, &archive_path)?;
-        log(&format!("Verifying checksum of {filename}"));
-        verify_checksum(&archive_path, &checksum_url, &filename)?;
-        fs::write(&archive_sentinel, b"").map_err(|source| PkgError::Io {
-            path: archive_sentinel.display().to_string(),
-            source,
-        })?;
     }
 
+    log(&format!("Verifying checksum of {filename}"));
+    let archive_digest = verify_checksum(&archive_path, &checksum_url, &filename)?;
+    fs::write(&archive_sentinel, format!("{archive_digest}\n")).map_err(|source| PkgError::Io {
+        path: archive_sentinel.display().to_string(),
+        source,
+    })?;
+
     log(&format!("Extracting node binary from {filename}"));
-    extract(os, &archive_path)
+    extract(os, &archive_path, &archive_digest)
 }
 
 // ---------------------------------------------------------------------------
@@ -1562,7 +1572,7 @@ mod tests {
         builder.append_data(&mut header, format!("{node_dir}/bin/node"), &payload[..])?;
         builder.into_inner()?.finish()?;
 
-        let node_path = extract("linux", &archive)?;
+        let node_path = extract("linux", &archive, "digest-a")?;
         assert_eq!(node_path, dir.join(node_dir).join("bin").join("node"));
         assert_eq!(fs::read(&node_path)?, payload);
         assert!(
@@ -1571,8 +1581,17 @@ mod tests {
         );
 
         // Second call is a no-op short-circuit on the sentinel.
-        let again = extract("linux", &archive)?;
+        let again = extract("linux", &archive, "digest-a")?;
         assert_eq!(again, node_path);
+
+        // A mismatched sentinel represents an extracted binary that was not
+        // produced from the just-verified archive; it must be replaced.
+        fs::write(sentinel_path(&node_path), b"different-digest\n")?;
+        fs::write(&node_path, b"poisoned")?;
+        let reextracted = extract("linux", &archive, "digest-a")?;
+        assert_eq!(reextracted, node_path);
+        assert_eq!(fs::read(&node_path)?, payload);
+        assert_eq!(fs::read_to_string(sentinel_path(&node_path))?, "digest-a\n");
 
         let _ = fs::remove_dir_all(&dir);
         Ok(())
@@ -1593,7 +1612,7 @@ mod tests {
         writer.write_all(b"MZ-fake-windows-node")?;
         writer.finish()?;
 
-        let node_path = extract("win", &archive)?;
+        let node_path = extract("win", &archive, "digest-a")?;
         assert_eq!(node_path, dir.join(format!("{node_dir}.exe")));
         assert_eq!(fs::read(&node_path)?, b"MZ-fake-windows-node");
         assert!(sentinel_path(&node_path).exists());
@@ -1620,7 +1639,7 @@ mod tests {
         builder.into_inner()?.finish()?;
 
         assert!(matches!(
-            extract("linux", &archive),
+            extract("linux", &archive, "digest-a"),
             Err(PkgError::Sea(message)) if message == "Node executable not found in the archive"
         ));
 
