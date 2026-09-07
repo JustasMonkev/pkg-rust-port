@@ -258,7 +258,9 @@ fn write_u64(bytes: &mut [u8], offset: usize, value: u64) -> Result<(), PkgError
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::fs;
+    #[cfg(unix)]
     use std::path::{Path, PathBuf};
 
     use super::*;

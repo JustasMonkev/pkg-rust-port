@@ -58,6 +58,7 @@ impl Platform {
             "macos" => Self::Macos,
             "windows" => Self::Win,
             "freebsd" => Self::Freebsd,
+            "linux" if cfg!(target_env = "musl") => Self::Alpine,
             _ => Self::Linux,
         }
     }
@@ -121,6 +122,11 @@ impl Arch {
         match std::env::consts::ARCH {
             "aarch64" => Self::Arm64,
             "arm" => Self::Armv7,
+            "x86" => Self::X86,
+            "powerpc64" => Self::Ppc64,
+            "s390x" => Self::S390x,
+            "riscv64" => Self::Riscv64,
+            "loongarch64" => Self::Loong64,
             _ => Self::X64,
         }
     }

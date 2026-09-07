@@ -1441,7 +1441,8 @@ fn contained_deploy_source(base_dir: &Path, source: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    Some(base_dir.join(relative))
+    let source = base_dir.join(relative);
+    inside_root(base_dir, &source).then_some(source)
 }
 
 fn expand_config_value(value: &Value, base_dir: &Path) -> Result<Vec<PathBuf>, PkgError> {

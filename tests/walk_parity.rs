@@ -171,7 +171,7 @@ fn public_package_wildcard_discloses_dependency_source() -> Result<(), PkgError>
 
 #[test]
 fn builtin_like_package_subpaths_are_resolved_like_js() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = PathBuf::from("/private/tmp").join(format!(
+    let fixture_dir = std::env::temp_dir().join(format!(
         "pkg-rust-walk-builtin-subpath-{}",
         std::process::id()
     ));
@@ -846,8 +846,7 @@ fn dictionary_patches_apply_before_dependency_blob_detection()
 #[cfg(unix)]
 #[test]
 fn tracks_blob_symlinks_to_real_files() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir =
-        PathBuf::from("/private/tmp").join(format!("pkg-rust-symlink-{}", std::process::id()));
+    let fixture_dir = std::env::temp_dir().join(format!("pkg-rust-symlink-{}", std::process::id()));
     let real_file = fixture_dir.join("real.js");
     let link_file = fixture_dir.join("link.js");
     let _ignored = fs::remove_dir_all(&fixture_dir);

@@ -78,7 +78,7 @@ fn no_bytecode_requires_content_for_blob_records() -> Result<(), PkgError> {
 
 #[test]
 fn blob_and_content_records_keep_shebang_stripped_body() -> Result<(), Box<dyn std::error::Error>> {
-    let fixture_dir = PathBuf::from("/private/tmp").join(format!(
+    let fixture_dir = std::env::temp_dir().join(format!(
         "pkg-rust-pack-shebang-public-{}",
         std::process::id()
     ));
@@ -126,7 +126,7 @@ fn blob_and_content_records_keep_shebang_stripped_body() -> Result<(), Box<dyn s
 #[test]
 fn carries_walker_symlinks_into_packed_output() -> Result<(), Box<dyn std::error::Error>> {
     let fixture_dir =
-        PathBuf::from("/private/tmp").join(format!("pkg-rust-pack-symlink-{}", std::process::id()));
+        std::env::temp_dir().join(format!("pkg-rust-pack-symlink-{}", std::process::id()));
     let real_file = fixture_dir.join("real.js");
     let link_file = fixture_dir.join("link.js");
     let _ignored = fs::remove_dir_all(&fixture_dir);

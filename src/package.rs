@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -224,7 +225,14 @@ pub fn build_package_with_provider(
 }
 
 fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), PkgError> {
-    let output_dir = output.parent().unwrap_or_else(|| Path::new(""));
+    let output_dir = output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let output_dir = fs::canonicalize(output_dir).map_err(|source| PkgError::Io {
+        path: output_dir.display().to_string(),
+        source,
+    })?;
     for warning in warnings {
         let PackageWarning::DeployFile { source, target, .. } = warning else {
             continue;
@@ -233,13 +241,31 @@ fn copy_deploy_files(warnings: &[PackageWarning], output: &Path) -> Result<(), P
         // attacker-controlled (for example a dependency's `pkg.deployFiles`).
         // Contain the target inside the output directory so an absolute path or
         // `..` traversal cannot write or overwrite files elsewhere.
-        let Some(target) = contained_deploy_target(output_dir, target) else {
+        let Some(target) = contained_deploy_target(&output_dir, target) else {
             continue;
         };
-        let Some(target) = resolve_safe_deploy_target(output_dir, &target)? else {
-            continue;
+        let source_root = if source.is_dir() {
+            source.as_path()
+        } else {
+            source.parent().unwrap_or_else(|| Path::new("."))
         };
-        copy_deploy_path(source, &target)?;
+        let source_root = match fs::canonicalize(source_root) {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(PkgError::Io {
+                    path: source_root.display().to_string(),
+                    source: error,
+                });
+            }
+        };
+        copy_deploy_path(
+            source,
+            &target,
+            &source_root,
+            &output_dir,
+            &mut BTreeSet::new(),
+        )?;
     }
     Ok(())
 }
@@ -270,45 +296,78 @@ fn resolve_safe_deploy_target(
     output_dir: &Path,
     target: &Path,
 ) -> Result<Option<PathBuf>, PkgError> {
-    let Some(parent) = target.parent() else {
-        return Ok(None);
-    };
-    if !parent.as_os_str().is_empty() {
-        fs::create_dir_all(parent).map_err(|source_error| PkgError::Io {
-            path: parent.display().to_string(),
-            source: source_error,
-        })?;
+    // Check the leaf and nearest existing ancestor before creating anything.
+    // symlink_metadata also detects dangling links, which must not be followed.
+    for ancestor in target.ancestors() {
+        match fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                return Ok(fs::canonicalize(ancestor)
+                    .ok()
+                    .filter(|path| path.starts_with(output_dir))
+                    .map(|_| target.to_path_buf()));
+            }
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(source) => {
+                return Err(PkgError::Io {
+                    path: ancestor.display().to_string(),
+                    source,
+                });
+            }
+        }
     }
-
-    let output_dir = fs::canonicalize(output_dir).map_err(|source_error| PkgError::Io {
-        path: output_dir.display().to_string(),
-        source: source_error,
-    })?;
-    let parent = fs::canonicalize(parent).map_err(|source_error| PkgError::Io {
-        path: parent.display().to_string(),
-        source: source_error,
-    })?;
-    if !parent.starts_with(&output_dir) {
-        return Ok(None);
-    }
-
-    Ok(Some(target.to_path_buf()))
+    Ok(None)
 }
 
-fn copy_deploy_path(source: &Path, target: &Path) -> Result<(), PkgError> {
-    let Ok(metadata) = fs::metadata(source) else {
+fn copy_deploy_path(
+    source: &Path,
+    target: &Path,
+    source_root: &Path,
+    output_dir: &Path,
+    ancestors: &mut BTreeSet<PathBuf>,
+) -> Result<(), PkgError> {
+    let metadata = match fs::metadata(source) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(PkgError::Io {
+                path: source.display().to_string(),
+                source: error,
+            });
+        }
+    };
+    let real_source = fs::canonicalize(source).map_err(|error| PkgError::Io {
+        path: source.display().to_string(),
+        source: error,
+    })?;
+    if !real_source.starts_with(source_root) || ancestors.contains(&real_source) {
+        return Ok(());
+    }
+    let Some(target) = resolve_safe_deploy_target(output_dir, target)? else {
         return Ok(());
     };
 
     if metadata.is_file() {
-        copy_deploy_file(source, target, &metadata)?;
+        copy_deploy_file(source, &target, &metadata)?;
     } else if metadata.is_dir() {
-        copy_deploy_directory(source, target)?;
+        ancestors.insert(real_source.clone());
+        let result = copy_deploy_directory(source, &target, source_root, output_dir, ancestors);
+        ancestors.remove(&real_source);
+        result?;
     }
     Ok(())
 }
 
-fn copy_deploy_directory(source: &Path, target: &Path) -> Result<(), PkgError> {
+fn copy_deploy_directory(
+    source: &Path,
+    target: &Path,
+    source_root: &Path,
+    output_dir: &Path,
+    ancestors: &mut BTreeSet<PathBuf>,
+) -> Result<(), PkgError> {
+    fs::create_dir_all(target).map_err(|source| PkgError::Io {
+        path: target.display().to_string(),
+        source,
+    })?;
     let mut entries = fs::read_dir(source)
         .map_err(|source_error| PkgError::Io {
             path: source.display().to_string(),
@@ -324,7 +383,13 @@ fn copy_deploy_directory(source: &Path, target: &Path) -> Result<(), PkgError> {
     for entry in entries {
         let source_path = entry.path();
         let target_path = target.join(entry.file_name());
-        copy_deploy_path(&source_path, &target_path)?;
+        copy_deploy_path(
+            &source_path,
+            &target_path,
+            source_root,
+            output_dir,
+            ancestors,
+        )?;
     }
     Ok(())
 }
@@ -338,13 +403,24 @@ fn copy_deploy_file(source: &Path, target: &Path, metadata: &fs::Metadata) -> Re
             source: source_error,
         })?;
     }
-    fs::copy(source, target).map_err(|source_error| PkgError::Io {
-        path: target.display().to_string(),
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    let temp = tempfile::NamedTempFile::new_in(parent).map_err(|source| PkgError::Io {
+        path: parent.display().to_string(),
+        source,
+    })?;
+    fs::copy(source, temp.path()).map_err(|source_error| PkgError::Io {
+        path: temp.path().display().to_string(),
         source: source_error,
     })?;
-    fs::set_permissions(target, metadata.permissions()).map_err(|source_error| PkgError::Io {
+    fs::set_permissions(temp.path(), metadata.permissions()).map_err(|source_error| {
+        PkgError::Io {
+            path: temp.path().display().to_string(),
+            source: source_error,
+        }
+    })?;
+    temp.persist(target).map_err(|error| PkgError::Io {
         path: target.display().to_string(),
-        source: source_error,
+        source: error.error,
     })?;
     Ok(())
 }
@@ -465,28 +541,33 @@ fn prepare_fabricator_binary(
     path: &Path,
     platform: Platform,
 ) -> Result<FabricatorBinary, PkgError> {
+    let path = fs::canonicalize(path).map_err(|source| PkgError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
     if platform == Platform::Macos {
         // macOS mandates signed executables, so ad-hoc sign a copy of the base
         // binary and fabricate bytecode with the signed copy.
-        let signed = signed_fabricator_path(path);
+        let signed = signed_fabricator_path(&path);
         let _ignored = fs::remove_file(&signed);
-        fs::copy(path, &signed).map_err(|source| PkgError::Io {
-            path: signed.display().to_string(),
-            source,
-        })?;
-        sign_macho_executable(&signed)?;
-        plus_x(&signed)?;
-        return Ok(FabricatorBinary {
+        let fabricator = FabricatorBinary {
             path: signed,
             temporary: true,
-        });
+        };
+        fs::copy(path, fabricator.as_path()).map_err(|source| PkgError::Io {
+            path: fabricator.path.display().to_string(),
+            source,
+        })?;
+        sign_macho_executable(fabricator.as_path())?;
+        plus_x(fabricator.as_path())?;
+        return Ok(fabricator);
     }
 
     if platform != Platform::Win {
-        plus_x(path)?;
+        plus_x(&path)?;
     }
     Ok(FabricatorBinary {
-        path: path.to_path_buf(),
+        path,
         temporary: false,
     })
 }
@@ -629,12 +710,7 @@ fn looks_like_executable(binary: &[u8]) -> bool {
 
 fn prepare_output_path(output: &Path) -> Result<(), PkgError> {
     match fs::metadata(output) {
-        Ok(metadata) if metadata.is_file() => {
-            fs::remove_file(output).map_err(|source| PkgError::Io {
-                path: output.display().to_string(),
-                source,
-            })
-        }
+        Ok(metadata) if metadata.is_file() => Ok(()),
         Ok(_) => Err(PkgError::Cli(
             "Refusing to overwrite non-file output".to_owned(),
         )),
@@ -653,5 +729,74 @@ fn prepare_output_path(output: &Path) -> Result<(), PkgError> {
             path: output.display().to_string(),
             source,
         }),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn deploy_copy_checks_leaf_and_recursive_targets_before_creating_directories()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root =
+            std::env::temp_dir().join(format!("pkg-rust-deploy-links-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let dist = root.join("dist");
+        let outside = root.join("outside");
+        fs::create_dir_all(&dist)?;
+        fs::create_dir_all(&outside)?;
+        fs::create_dir_all(root.join("source/nested"))?;
+        fs::create_dir_all(root.join("source/empty"))?;
+        fs::write(root.join("source/nested/data"), b"payload")?;
+        fs::write(outside.join("victim"), b"keep")?;
+        symlink(&outside, root.join("source/escape"))?;
+        symlink(root.join("source"), root.join("source/cycle"))?;
+        symlink(root.join("source/nested"), root.join("source/alias"))?;
+        symlink(outside.join("victim"), dist.join("leaf"))?;
+        fs::hard_link(outside.join("victim"), dist.join("hardlink"))?;
+        symlink(outside.join("missing"), dist.join("dangling"))?;
+        symlink(&outside, dist.join("parent"))?;
+        fs::create_dir_all(dist.join("tree"))?;
+        symlink(&outside, dist.join("tree/nested"))?;
+        let warnings = [
+            ("source/nested/data", "leaf"),
+            ("source/nested/data", "hardlink"),
+            ("source/nested/data", "dangling"),
+            ("source/nested/data", "parent/new/data"),
+            ("source", "tree"),
+            ("source", "safe"),
+        ]
+        .map(|(source, target)| PackageWarning::DeployFile {
+            file_type: "file".to_owned(),
+            source: root.join(source),
+            target: target.into(),
+        });
+
+        copy_deploy_files(&warnings, &dist.join("app"))?;
+
+        assert_eq!(fs::read(outside.join("victim"))?, b"keep");
+        assert_eq!(fs::read(dist.join("hardlink"))?, b"payload");
+        assert!(!outside.join("missing").exists());
+        assert!(!outside.join("new").exists());
+        assert!(!outside.join("data").exists());
+        assert_eq!(fs::read(dist.join("safe/nested/data"))?, b"payload");
+        assert_eq!(fs::read(dist.join("safe/alias/data"))?, b"payload");
+        assert!(dist.join("safe/empty").is_dir());
+        assert!(!dist.join("safe/cycle").exists());
+        assert!(!dist.join("safe/escape").exists());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn relative_fabricator_cache_path_becomes_absolute() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempfile::NamedTempFile::new_in(".")?;
+        let relative = Path::new(temp.path().file_name().ok_or("missing filename")?);
+        let fabricator = prepare_fabricator_binary(relative, Platform::Linux)?;
+        assert!(fabricator.as_path().is_absolute());
+        assert_eq!(fabricator.as_path(), temp.path().canonicalize()?);
+        Ok(())
     }
 }

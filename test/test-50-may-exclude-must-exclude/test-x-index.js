@@ -1,26 +1,35 @@
-/* eslint-disable max-statements-per-line */
-/* eslint-disable no-empty */
-
 'use strict';
 
 try {
   require.resolve('reqResSomeLit');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require.resolve('reqResSomeLitMay', 'may-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require.resolve('reqResSomeLitMust', 'must-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require('reqSomeLit');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require('reqSomeLitMay', 'may-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require('reqSomeLitMust', 'must-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 
 var tryReqResSomeVar = 'some';
 var tryReqResSomeVarMay = 'some';
@@ -32,22 +41,34 @@ var tryReqSomeVarMust = 'some';
 
 try {
   require.resolve(tryReqResSomeVar);
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require.resolve(tryReqResSomeVarMay, 'may-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require.resolve(tryReqResSomeVarMust, 'must-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require(tryReqSomeVar);
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require(tryReqSomeVarMay, 'may-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 try {
   require(tryReqSomeVarMust, 'must-exclude');
-} catch (_) {}
+} catch (_) {
+  // Missing modules are expected; this fixture exercises exclusion diagnostics.
+}
 
 var reqResSomeVar = 'some';
 var reqResSomeVarMay = 'some';

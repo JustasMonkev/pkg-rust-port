@@ -18,7 +18,7 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
     let output = temp_root.join("demo-bin");
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let input = "test/test-50-require-resolve/test-x-index.js";
-    let target = parse_targets("node18-macos-arm64", &TargetDefaults::host("node18"))?
+    let target = parse_targets("node12-macos-arm64", &TargetDefaults::host("node18"))?
         .targets
         .into_iter()
         .next()
@@ -28,8 +28,9 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
     let output_result = Command::new(env!("CARGO_BIN_EXE_pkg"))
         .current_dir(manifest_dir)
         .env("PKG_CACHE_PATH", &cache_root)
+        .env("PKG_ALLOW_UNVERIFIED_BUILT_CACHE", "1")
         .arg("--target")
-        .arg("node18-macos-arm64")
+        .arg("node12-macos-arm64")
         .arg("--no-signature")
         .arg("--output")
         .arg(&output)
@@ -67,7 +68,7 @@ fn cli_packages_with_cached_built_target_binary() -> TestResult {
 fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> TestResult {
     let temp_root = temp_root("missing-dependency-main-warning")?;
     let cache_root = temp_root.join("cache");
-    seed_cached_binary(&cache_root, "node18-macos-arm64")?;
+    seed_cached_binary(&cache_root, "node12-macos-arm64")?;
     let output_path = temp_root.join("test-output.exe");
     let output_text = output_path
         .to_str()
@@ -78,13 +79,19 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
         &fixture,
         [
             "--target",
-            "node18-macos-arm64",
+            "node12-macos-arm64",
             "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",
         ],
-        [("PKG_CACHE_PATH", cache_root.as_os_str())],
+        [
+            ("PKG_CACHE_PATH", cache_root.as_os_str()),
+            (
+                "PKG_ALLOW_UNVERIFIED_BUILT_CACHE",
+                std::ffi::OsStr::new("1"),
+            ),
+        ],
     )?;
 
     assert!(
@@ -115,7 +122,7 @@ fn cli_reports_missing_dependency_main_warning_like_js_invalid_fixture() -> Test
 fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
     let temp_root = temp_root("dictionary-config-log")?;
     let cache_root = temp_root.join("cache");
-    seed_cached_binary(&cache_root, "node18-macos-arm64")?;
+    seed_cached_binary(&cache_root, "node12-macos-arm64")?;
     let output_path = temp_root.join("test-output.exe");
     let output_text = output_path
         .to_str()
@@ -125,13 +132,19 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
         &fixture,
         [
             "--target",
-            "node18-macos-arm64",
+            "node12-macos-arm64",
             "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",
         ],
-        [("PKG_CACHE_PATH", cache_root.as_os_str())],
+        [
+            ("PKG_CACHE_PATH", cache_root.as_os_str()),
+            (
+                "PKG_ALLOW_UNVERIFIED_BUILT_CACHE",
+                std::ffi::OsStr::new("1"),
+            ),
+        ],
     )?;
 
     assert!(
@@ -160,7 +173,7 @@ fn cli_reports_dictionary_config_log_like_js_fixture() -> TestResult {
 fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
     let temp_root = temp_root("may-exclude-debug-diagnostics")?;
     let cache_root = temp_root.join("cache");
-    seed_cached_binary(&cache_root, "node18-macos-arm64")?;
+    seed_cached_binary(&cache_root, "node12-macos-arm64")?;
     let output_path = temp_root.join("test-output.exe");
     let output_text = output_path
         .to_str()
@@ -172,13 +185,19 @@ fn cli_reports_may_exclude_debug_diagnostics_like_js_fixture() -> TestResult {
         [
             "--debug",
             "--target",
-            "node18-macos-arm64",
+            "node12-macos-arm64",
             "--no-signature",
             "--output",
             output_text,
             "./test-x-index.js",
         ],
-        [("PKG_CACHE_PATH", cache_root.as_os_str())],
+        [
+            ("PKG_CACHE_PATH", cache_root.as_os_str()),
+            (
+                "PKG_ALLOW_UNVERIFIED_BUILT_CACHE",
+                std::ffi::OsStr::new("1"),
+            ),
+        ],
     )?;
 
     assert!(
@@ -411,7 +430,8 @@ fn seed_cached_binary(cache_root: &Path, target: &str) -> Result<(), Box<dyn std
 
 /// Seed the output target binary and its host-platform fabricator binary so
 /// bytecode packaging stays offline. The fabricator binary holds placeholder
-/// bytes, so fabrication falls back to host `node` like the other stub tests.
+/// bytes, so fabrication fails closed without spawning a host `node`.
+/// Node 12 has no prebuilt release hashes, keeping explicit built-cache opt-ins offline.
 fn seed_cached_target(
     cache_root: &Path,
     target: &pkg_rust::NodeTarget,

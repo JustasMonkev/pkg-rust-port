@@ -202,13 +202,7 @@ inputs.some(function (input) {
     meta = {};
   }
 
-  let allow;
-
-  if (typeof meta.allow !== 'undefined') {
-    allow = meta.allow;
-  } else {
-    allow = true;
-  }
+  const allow = typeof meta.allow !== 'undefined' ? meta.allow : true;
 
   const note = meta.note;
 

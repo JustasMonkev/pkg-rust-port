@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -269,25 +269,27 @@ impl PkgFetchCache {
             path: parent.display().to_string(),
             source,
         })?;
-        let temp = downloading_path(&fetched);
-        fs::write(&temp, bytes).map_err(|source| PkgError::Io {
-            path: temp.display().to_string(),
-            source,
-        })?;
-        plus_x(&temp)?;
-        let actual_hash = sha256_hex(&temp)?;
+        let actual_hash = sha256_hex(bytes);
         if actual_hash != expected_hash {
-            remove_file_if_exists(&temp)?;
             return Err(PkgError::Fetch(format!(
                 "downloaded binary hash does not match for {}",
                 remote_name(target)?
             )));
         }
-        fs::rename(&temp, &fetched).map_err(|source| PkgError::Io {
-            path: fetched.display().to_string(),
+        let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(|source| PkgError::Io {
+            path: parent.display().to_string(),
             source,
         })?;
-        read_binary(&fetched)
+        temp.write_all(bytes).map_err(|source| PkgError::Io {
+            path: temp.path().display().to_string(),
+            source,
+        })?;
+        plus_x(temp.path())?;
+        temp.persist(&fetched).map_err(|error| PkgError::Io {
+            path: fetched.display().to_string(),
+            source: error.error,
+        })?;
+        Ok(bytes.to_vec())
     }
 
     fn cache_dir(&self) -> PathBuf {
@@ -312,9 +314,15 @@ impl TargetBinaryProvider for PkgFetchCache {
         }
 
         let fetched = self.binary_path(target, BinaryKind::Fetched)?;
-        if fetched.is_file() && self.verify_fetched(target, &fetched)? {
-            return read_binary(&fetched)
-                .map(|bytes| TargetBinary::from_bytes(bytes).with_path(fetched));
+        if fetched.is_file() {
+            let bytes = read_binary(&fetched)?;
+            if sha256_hex(&bytes) == expected_hash(target)? {
+                return Ok(TargetBinary::from_bytes(bytes).with_path(fetched));
+            }
+            fs::remove_file(&fetched).map_err(|source| PkgError::Io {
+                path: fetched.display().to_string(),
+                source,
+            })?;
         }
 
         if self.download_on_miss {
@@ -364,19 +372,6 @@ impl PkgFetchCache {
         }
         read_binary(&path).map(|bytes| TargetBinary::from_bytes(bytes).with_path(path))
     }
-
-    fn verify_fetched(&self, target: &NodeTarget, path: &Path) -> Result<bool, PkgError> {
-        let expected = expected_hash(target)?;
-        let actual = sha256_hex(path)?;
-        if actual == expected {
-            return Ok(true);
-        }
-        fs::remove_file(path).map_err(|source| PkgError::Io {
-            path: path.display().to_string(),
-            source,
-        })?;
-        Ok(false)
-    }
 }
 
 fn read_binary(path: &Path) -> Result<Vec<u8>, PkgError> {
@@ -386,40 +381,11 @@ fn read_binary(path: &Path) -> Result<Vec<u8>, PkgError> {
     })
 }
 
-fn remove_file_if_exists(path: &Path) -> Result<(), PkgError> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(PkgError::Io {
-            path: path.display().to_string(),
-            source,
-        }),
-    }
-}
-
-fn sha256_hex(path: &Path) -> Result<String, PkgError> {
-    let mut file = fs::File::open(path).map_err(|source| PkgError::Io {
-        path: path.display().to_string(),
-        source,
-    })?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|source| PkgError::Io {
-            path: path.display().to_string(),
-            source,
-        })?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    let digest = hasher.finalize();
-    let mut output = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        output.push_str(&format!("{byte:02x}"));
-    }
-    Ok(output)
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn expected_hash(target: &NodeTarget) -> Result<String, PkgError> {
@@ -444,10 +410,6 @@ fn remote_name(target: &NodeTarget) -> Result<String, PkgError> {
         "node-v{}-{}-{}",
         node_version, target.platform, target.arch
     ))
-}
-
-fn downloading_path(path: &Path) -> PathBuf {
-    PathBuf::from(format!("{}.downloading", path.display()))
 }
 
 /// Interpret an environment-style opt-in flag.
@@ -500,8 +462,6 @@ pub(crate) fn satisfying_node_version(node_range: &str) -> Result<&'static str, 
 mod tests {
     use std::fs;
 
-    use sha2::{Digest, Sha256};
-
     use super::*;
     use crate::target::{TargetDefaults, parse_targets};
 
@@ -527,7 +487,7 @@ mod tests {
         let body = b"downloaded binary";
         let cache = PkgFetchCache::new(temp_root("download-ok"));
         let target = target()?;
-        let expected = hex_digest(body);
+        let expected = sha256_hex(body);
 
         let binary = cache.store_fetched_bytes_with_expected(&target, body, &expected)?;
 
@@ -555,6 +515,67 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn download_does_not_follow_preexisting_temporary_symlink()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let cache = PkgFetchCache::new(temp_root("download-symlink"));
+        let _ = fs::remove_dir_all(&cache.root);
+        fs::create_dir_all(cache.cache_dir())?;
+        let target = target()?;
+        let fetched = cache.binary_path(&target, BinaryKind::Fetched)?;
+        let victim = cache.root.join("victim");
+        fs::write(&victim, b"keep")?;
+        std::os::unix::fs::symlink(&victim, format!("{}.downloading", fetched.display()))?;
+
+        let body = b"verified download";
+        assert_eq!(
+            cache.store_fetched_bytes_with_expected(&target, body, &sha256_hex(body))?,
+            body
+        );
+        assert_eq!(fs::read(&victim)?, b"keep");
+        assert_eq!(fs::read(&fetched)?, body);
+        fs::remove_dir_all(cache.root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn concurrent_downloads_preserve_verified_cache_and_clean_temporary_files()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let cache = PkgFetchCache::new(temp_root("download-concurrent"));
+        let target = target()?;
+        let body = vec![42; 128 * 1024];
+        let expected = sha256_hex(&body);
+        let barrier = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        cache.store_fetched_bytes_with_expected(&target, &body, &expected)
+                    })
+                })
+                .collect();
+            for worker in workers {
+                assert_eq!(
+                    worker.join().map_err(|_| "download worker panicked")??,
+                    body
+                );
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })?;
+        let fetched = cache.binary_path(&target, BinaryKind::Fetched)?;
+        assert!(
+            cache
+                .store_fetched_bytes_with_expected(&target, b"bad", &expected)
+                .is_err()
+        );
+        assert_eq!(fs::read(&fetched)?, body);
+        assert_eq!(fs::read_dir(cache.cache_dir())?.count(), 1);
+        fs::remove_dir_all(cache.root)?;
+        Ok(())
+    }
+
     fn target() -> Result<NodeTarget, PkgError> {
         let defaults = TargetDefaults::host("node18");
         parse_targets("linux-x64", &defaults)
@@ -564,16 +585,5 @@ mod tests {
 
     fn temp_root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("pkg-rust-fetch-{label}-{}", std::process::id()))
-    }
-
-    fn hex_digest(body: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(body);
-        let digest = hasher.finalize();
-        let mut output = String::with_capacity(digest.len() * 2);
-        for byte in digest {
-            output.push_str(&format!("{byte:02x}"));
-        }
-        output
     }
 }
