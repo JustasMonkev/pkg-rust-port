@@ -22,7 +22,7 @@ const thisFolder = __dirname;
 try {
   utils.exec.sync(`subst H: /D`);
 } catch (err) {
-  /* */
+  // The H: mapping may not exist before this test creates it.
 }
 utils.exec.sync(`subst H: ${thisFolder}`);
 

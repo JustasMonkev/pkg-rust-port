@@ -350,6 +350,29 @@ fn injection_errors_when_placeholder_is_missing() {
 }
 
 #[test]
+fn injection_rejects_overflowing_placeholder_ranges() -> Result<(), PkgError> {
+    let mut binary = binary_with_placeholders();
+    let mut placeholders = discover_placeholders(&binary);
+    let placeholder = placeholders
+        .payload_size
+        .as_mut()
+        .ok_or_else(|| PkgError::Pack("missing test placeholder".to_owned()))?;
+    placeholder.position = usize::MAX;
+    let values = PlaceholderValues {
+        bakery: Vec::new(),
+        payload_position: 1,
+        payload_size: 2,
+        prelude_position: 3,
+        prelude_size: 4,
+    };
+    assert!(
+        matches!(inject_placeholders(&mut binary, &placeholders, &values,
+        &[PlaceholderKind::PayloadSize]), Err(PkgError::Pack(message)) if message.contains("outside binary"))
+    );
+    Ok(())
+}
+
+#[test]
 fn produces_executable_image_and_injects_layout_placeholders() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");

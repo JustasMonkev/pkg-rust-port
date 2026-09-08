@@ -4,7 +4,8 @@ Rust port of `pkg`, the Node.js project packager. The goal is to preserve the
 original `pkg` CLI shape while replacing the TypeScript implementation with
 typed Rust modules and parity tests against the original JS fixtures.
 
-This port covers the offline-testable pkg 5.8.1 behavior with Rust parity tests.
+This port tracks @yao-pkg/pkg 6.19.0 behavior with Rust parity tests, including
+fixtures inherited from pkg 5.8.1.
 It parses targets/configs, walks and packs dependency fixtures, fetches
 pkg-fetch binaries, assembles executable payloads, and runs real packaged
 runtime fixtures when a cache is provided.
@@ -75,7 +76,7 @@ node18-win-x64
 ```
 
 Omitted pieces are filled from the host defaults. Base binaries are read from
-`$PKG_CACHE_PATH` or `~/.pkg-cache` using the pkg-fetch 3.5 cache layout. Missing
+`$PKG_CACHE_PATH` or `~/.pkg-cache` using the @yao-pkg/pkg-fetch 3.6 cache layout. Missing
 fetched binaries are downloaded from the pkg-fetch GitHub release and verified
 against the embedded SHA-256 table.
 
@@ -89,12 +90,15 @@ against the embedded SHA-256 table.
   `--no-signature`.
 - Bytecode is fabricated by a host-platform fabricator binary that matches the
   output target's node range and arch (pkg's `fabricatorForTarget`), so
-  cross-platform builds do not run the output target binary; in-memory test
-  providers fall back to host `node`.
+  cross-platform builds use a host-platform fabricator. In-memory providers
+  without an executable path report failed bytecode fabrication without
+  resolving `node` through `PATH`.
 - The `--build` Node-from-source path is an explicit external boundary. The CLI
   passes `forceBuild` through, `PkgFetchCache::source_build_requirement` reports
   the exact `built-*` cache artifact required, and the source build itself must
-  be produced by pkg-fetch-compatible tooling.
+  be produced by pkg-fetch-compatible tooling. Reading a deliberately trusted
+  built cache requires `PKG_ALLOW_UNVERIFIED_BUILT_CACHE=1` in the CLI or
+  `with_unverified_built_cache()` in the library.
 - The JS suite remains the behavioral oracle only for the opt-in network, npm,
   and native fixtures; every offline-testable mapped fixture has a Rust parity
   test.
@@ -124,16 +128,10 @@ npm test
 npm_config_cache=/private/tmp/npm-cache npm pack --dry-run --json
 ```
 
-The release workflow builds native packages for macOS x64/arm64, Linux
-x64/arm64 with glibc and musl, and Windows x64. It publishes the native
-optional-dependency packages before publishing `@justasmonkev/pkg-rust`.
-Publishing requires `NPM_TOKEN`; macOS release binaries also require
-`APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`,
-`APPLE_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, and
-`APPLE_APP_SPECIFIC_PASSWORD` so the workflow can codesign and notarize them.
-
-The release profile strips symbols. On this machine, a warm-cache release
-rebuild completed in `0.13s` with `target/release/pkg` already stripped.
+Native package manifests cover macOS x64/arm64, Linux x64/arm64 with glibc and
+musl, and Windows x64. Build and stage their binaries before publishing the
+native packages, then publish `@justasmonkev/pkg-rust`. An automated npm release
+workflow is not included in this checkout. The Rust release profile strips symbols.
 
 Benchmarks:
 

@@ -89,6 +89,42 @@ fn empty_package_main_falls_through_to_index_resolution() -> Result<(), Box<dyn 
     Ok(())
 }
 
+#[test]
+fn directory_main_uses_index_without_recursing_into_package_json()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = temp_root("directory-main")?;
+    std::fs::create_dir_all(root.join("lib"))?;
+    std::fs::write(root.join("package.json"), r#"{"main":"lib"}"#)?;
+    std::fs::write(root.join("lib/package.json"), r#"{"main":"other.js"}"#)?;
+    std::fs::write(root.join("lib/other.js"), "module.exports = 'wrong';")?;
+    std::fs::write(root.join("lib/index.js"), "module.exports = 'right';")?;
+    let options = ResolveOptions::new(&root);
+
+    assert_eq!(
+        resolve_module("./", &options)?,
+        root.join("lib/index.js").canonicalize()?
+    );
+
+    for main in [".", "./", "missing"] {
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::json!({"main": main}).to_string(),
+        )?;
+        std::fs::write(root.join("index.js"), "module.exports = 42;")?;
+        assert_eq!(
+            resolve_module("./", &options)?,
+            root.join("index.js").canonicalize()?
+        );
+        std::fs::remove_file(root.join("index.js"))?;
+        assert!(matches!(
+            resolve_module("./", &options),
+            Err(PkgError::Resolve(_))
+        ));
+    }
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
 fn temp_root(name: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     Ok(std::env::temp_dir().join(format!(

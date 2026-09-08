@@ -638,7 +638,8 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
                     ["payload.txt", absolute_target],
                     ["../outside-source.txt", "source-victim.txt"],
                     [absolute_source, "absolute-source-victim.txt"],
-                    ["payload.txt", "symlink/payload.txt"]
+                    ["payload.txt", "symlink/payload.txt"],
+                    ["source-link.txt", "source-link-victim.txt"]
                 ]
             }
         })
@@ -648,6 +649,10 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
     {
         std::fs::create_dir_all(root.join("dist"))?;
         std::os::unix::fs::symlink(&symlink_victim_dir, root.join("dist/symlink"))?;
+        std::os::unix::fs::symlink(
+            root.join("outside-source.txt"),
+            package_dir.join("node_modules/evil/source-link.txt"),
+        )?;
     }
 
     let output_text = output
@@ -686,6 +691,7 @@ fn skips_deploy_files_with_targets_outside_output_dir() -> Result<(), Box<dyn st
         !source_victim.exists(),
         "relative source traversal copied a file from outside the package"
     );
+    assert!(!root.join("dist/source-link-victim.txt").exists());
     assert!(
         !absolute_source_victim.exists(),
         "absolute source copied a file from outside the package"
@@ -894,6 +900,38 @@ fn refuses_to_overwrite_non_file_output() -> Result<(), Box<dyn std::error::Erro
         matches!(error, Some(PkgError::Cli(message)) if message.contains("Refusing to overwrite non-file output"))
     );
     std::fs::remove_dir_all(output)?;
+    Ok(())
+}
+
+#[test]
+fn failed_production_preserves_existing_output() -> Result<(), Box<dyn std::error::Error>> {
+    struct InvalidBinary;
+    impl TargetBinaryProvider for InvalidBinary {
+        fn binary_for(&self, _: &NodeTarget) -> Result<Vec<u8>, PkgError> {
+            Ok(b"missing placeholders".to_vec())
+        }
+    }
+    let root = tempfile::tempdir()?;
+    let output = root.path().join("app");
+    std::fs::write(&output, b"previous executable")?;
+    let plan = plan_package([
+        "--target",
+        "node18-linux-x64",
+        "--no-bytecode",
+        "--public",
+        "--output",
+        output.to_str().ok_or("non-utf8 output")?,
+        "test/test-50-api/test-x-index.js",
+    ])?;
+    let prelude = pkg_rust::prelude_template(false);
+    assert!(matches!(
+        build_package_with_provider(&plan, &InvalidBinary, &prelude),
+        Err(PkgError::Pack(_))
+    ));
+    assert_eq!(std::fs::read(&output)?, b"previous executable");
+    let build = build_package_with_provider(&plan, &StubBinary, &prelude)?;
+    assert_eq!(std::fs::read(&output)?, build.outputs[0].image.bytes);
+    assert_eq!(std::fs::read_dir(root.path())?.count(), 1);
     Ok(())
 }
 

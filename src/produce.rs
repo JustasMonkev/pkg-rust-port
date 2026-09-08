@@ -383,10 +383,31 @@ fn fail_on_hidden_bytecode_warnings(warnings: &[PackageWarning]) -> Result<(), P
 }
 
 fn write_produced_executable(output: &Path, produced: &ProducedExecutable) -> Result<(), PkgError> {
-    fs::write(output, &produced.bytes).map_err(|source| PkgError::Io {
-        path: output.display().to_string(),
+    let parent = output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".pkg-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+    let mut temp = builder.tempfile_in(parent).map_err(|source| PkgError::Io {
+        path: parent.display().to_string(),
         source,
-    })
+    })?;
+    temp.write_all(&produced.bytes)
+        .map_err(|source| PkgError::Io {
+            path: temp.path().display().to_string(),
+            source,
+        })?;
+    temp.persist(output).map_err(|error| PkgError::Io {
+        path: output.display().to_string(),
+        source: error.error,
+    })?;
+    Ok(())
 }
 
 fn build_manifest_and_payload(
@@ -697,8 +718,10 @@ fn inject_placeholder(
         )));
     }
 
-    let Some(target) =
-        binary.get_mut(placeholder.position..placeholder.position + placeholder.size)
+    let Some(target) = placeholder
+        .position
+        .checked_add(placeholder.size)
+        .and_then(|end| binary.get_mut(placeholder.position..end))
     else {
         return Err(PkgError::Pack(format!(
             "placeholder {kind:?} range is outside binary"
@@ -1011,7 +1034,7 @@ fn append_payload(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;

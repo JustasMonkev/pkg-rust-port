@@ -128,7 +128,8 @@ fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<Re
     let package_path = candidate.join("package.json");
     if package_path.is_file()
         && let Some(main) = package_main(&package_path)
-        && let Some(mut resolved) = resolve_as_path(&candidate.join(main), options)
+        && let Some(mut resolved) = resolve_as_file(&candidate.join(&main), options)
+            .or_else(|| resolve_as_file(&candidate.join(main).join("index"), options))
     {
         resolved.package_json = normalize(&package_path);
         return Some(resolved);
