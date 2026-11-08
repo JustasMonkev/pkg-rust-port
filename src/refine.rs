@@ -40,11 +40,7 @@ pub fn refine(
     symlinks: SymlinkMap,
     style: PathStyle,
 ) -> RefinedOutput {
-    let WalkOutput {
-        mut records,
-        warnings: _,
-        ..
-    } = output;
+    let WalkOutput { mut records, .. } = output;
     purge_top_directories(&mut records);
     let entrypoint = canonicalize_or_self(entrypoint.as_ref());
 

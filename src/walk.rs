@@ -665,7 +665,7 @@ impl WalkerState {
                 true
             }
             StoreKind::Stat => {
-                self.step_stat(&task.file, &task.marker)?;
+                self.step_stat(&task.file, &task.marker);
                 true
             }
         };
@@ -978,7 +978,7 @@ impl WalkerState {
         self.record_mut(directory).children = children;
     }
 
-    fn step_stat(&mut self, file: &Path, marker: &Marker) -> Result<(), PkgError> {
+    fn step_stat(&mut self, file: &Path, marker: &Marker) {
         if let Ok(metadata) = fs::symlink_metadata(file) {
             self.record_mut(file).metadata = Some(FileStat {
                 is_file: metadata.is_file(),
@@ -1000,7 +1000,6 @@ impl WalkerState {
                 self.append(parent.to_path_buf(), StoreKind::Links, marker.clone());
             }
         }
-        Ok(())
     }
 
     fn append_resolvable(
