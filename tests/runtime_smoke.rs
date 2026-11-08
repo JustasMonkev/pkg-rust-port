@@ -1346,10 +1346,10 @@ fn normalize_node_warning_stderr(stderr: &[u8]) -> Vec<String> {
 }
 
 fn normalize_node_warning_line(line: &str) -> String {
-    if let Some(rest) = line.strip_prefix("(node:") {
-        if let Some(warning) = rest.split_once(") Warning: ") {
-            return format!("(node:<pid>) Warning: {}", warning.1);
-        }
+    if let Some(rest) = line.strip_prefix("(node:")
+        && let Some(warning) = rest.split_once(") Warning: ")
+    {
+        return format!("(node:<pid>) Warning: {}", warning.1);
     }
 
     if let Some(command) = line
@@ -2054,7 +2054,7 @@ fn package_and_run_real_fixture_with_options(
     let target = real_target();
 
     let output = if options.run_from_output_dir || options.prepare_output_dir.is_some() {
-        real_output_dir(name).join("test-output")
+        real_output_path(name).join("test-output")
     } else {
         real_output_path(name)
     };
@@ -2101,7 +2101,7 @@ fn package_and_run_real_fixture_with_options(
         .output()?;
     fs::remove_file(output)?;
     if options.run_from_output_dir || options.prepare_output_dir.is_some() {
-        let output_dir = real_output_dir(name);
+        let output_dir = real_output_path(name);
         if output_dir.is_dir() {
             fs::remove_dir_all(output_dir)?;
         }
@@ -2238,10 +2238,6 @@ fn real_output_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
 }
 
-fn real_output_dir(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("pkg-rust-real-{name}-{}", std::process::id()))
-}
-
 fn real_target() -> String {
     std::env::var("PKG_RUST_REAL_TARGET").unwrap_or_else(|_| {
         if cfg!(windows) {
@@ -2276,7 +2272,7 @@ impl Drop for SubstDriveGuard {
 }
 
 fn copied_fixture(name: &str, source: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let target = real_output_dir(name).join("fixture");
+    let target = real_output_path(name).join("fixture");
     if target.exists() {
         fs::remove_dir_all(&target)?;
     }

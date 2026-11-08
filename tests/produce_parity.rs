@@ -540,7 +540,7 @@ fn packed_content_and_stat(entrypoint: &str, content: &[u8]) -> pkg_rust::Packed
 }
 
 fn bakery_placeholder() -> Vec<u8> {
-    let mut value = Vec::from([b'\0']);
+    let mut value = vec![0_u8];
     for _index in 0..20 {
         value.extend_from_slice(b"// BAKERY ");
     }
