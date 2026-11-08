@@ -141,7 +141,7 @@ pub fn sea_node_dist_urls(version: &str, os: &str, arch: &str) -> (String, Strin
 /// `^\d{1,2}(\.\d{1,2}){0,2}$` (e.g. `16`, `16.0`, `16.0.0`).
 pub fn sea_validate_node_version_format(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
-    if parts.is_empty() || parts.len() > 3 {
+    if parts.len() > 3 {
         return false;
     }
     parts.iter().all(|part| {
@@ -800,12 +800,12 @@ fn sign_macos_if_needed(
     if !signature || target.platform != Platform::Macos {
         return Ok(());
     }
-    if let Err(error) = sign_macho_executable(output) {
-        if target.arch == Arch::Arm64 {
-            log(&format!(
-                "Warning Unable to sign the macOS executable: {error}"
-            ));
-        }
+    if let Err(error) = sign_macho_executable(output)
+        && target.arch == Arch::Arm64
+    {
+        log(&format!(
+            "Warning Unable to sign the macOS executable: {error}"
+        ));
     }
     Ok(())
 }

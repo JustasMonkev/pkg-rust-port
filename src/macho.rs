@@ -62,12 +62,6 @@ pub fn patch_macho_executable(file: &mut [u8]) -> Result<(), PkgError> {
 
         patch_command(command_type, command_body_start, command_body_end, file)?;
         offset = command_body_end;
-        let padding = offset & 8;
-        if padding != 0 {
-            offset = offset.checked_add(8 - padding).ok_or_else(|| {
-                PkgError::Pack("Mach-O load command alignment overflowed".to_owned())
-            })?;
-        }
     }
 
     Ok(())
