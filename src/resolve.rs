@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::PackageJson;
 use crate::error::PkgError;
+use crate::esm::is_esm_file;
 
 /// Resolved module path plus package metadata consumed during resolution.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,8 +102,8 @@ fn resolve_as_path(candidate: &Path, options: &ResolveOptions) -> Option<Resolve
 
 fn resolve_as_file(candidate: &Path, options: &ResolveOptions) -> Option<ResolvedModule> {
     if candidate.is_file() {
-        return normalize(candidate).map(|path| ResolvedModule {
-            path,
+        return Some(ResolvedModule {
+            path: normalize(candidate),
             package_json: None,
         });
     }
@@ -110,8 +111,8 @@ fn resolve_as_file(candidate: &Path, options: &ResolveOptions) -> Option<Resolve
     for extension in &options.extensions {
         let with_extension = PathBuf::from(format!("{}{}", candidate.display(), extension));
         if with_extension.is_file() {
-            return normalize(&with_extension).map(|path| ResolvedModule {
-                path,
+            return Some(ResolvedModule {
+                path: normalize(&with_extension),
                 package_json: None,
             });
         }
@@ -131,7 +132,7 @@ fn resolve_as_directory(candidate: &Path, options: &ResolveOptions) -> Option<Re
         && let Some(mut resolved) = resolve_as_file(&candidate.join(&main), options)
             .or_else(|| resolve_as_file(&candidate.join(main).join("index"), options))
     {
-        resolved.package_json = normalize(&package_path);
+        resolved.package_json = Some(normalize(&package_path));
         return Some(resolved);
     }
 
@@ -156,7 +157,7 @@ fn resolve_node_module(request: &str, options: &ResolveOptions) -> Option<Resolv
     {
         return Some(resolved);
     }
-    for directory in ancestor_directories(&options.basedir) {
+    for directory in options.basedir.ancestors() {
         let candidate = directory.join("node_modules").join(request);
         if let Some(resolved) = resolve_as_path(&candidate, options) {
             return Some(resolved);
@@ -213,7 +214,7 @@ fn split_specifier(specifier: &str) -> Option<(String, String)> {
 /// ESM-only packages (JS `resolveWithExports`).
 fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<ResolvedModule> {
     let (package_name, subpath) = split_specifier(request)?;
-    for directory in ancestor_directories(&options.basedir) {
+    for directory in options.basedir.ancestors() {
         let package_json = directory
             .join("node_modules")
             .join(&package_name)
@@ -226,15 +227,14 @@ fn resolve_with_exports(request: &str, options: &ResolveOptions) -> Option<Resol
         let exports = json.get("exports")?;
         let package_root = package_json.parent()?;
         for condition in ["require", "import"] {
-            if let Some(target) = resolve_exports_subpath(exports, &subpath, condition) {
-                if let Some(full) = resolve_exports_target_path(package_root, &target)
-                    && full.is_file()
-                {
-                    return Some(ResolvedModule {
-                        path: normalize(&full)?,
-                        package_json: normalize(&package_json),
-                    });
-                }
+            if let Some(target) = resolve_exports_subpath(exports, &subpath, condition)
+                && let Some(full) = resolve_exports_target_path(package_root, &target)
+                && full.is_file()
+            {
+                return Some(ResolvedModule {
+                    path: normalize(&full),
+                    package_json: Some(normalize(&package_json)),
+                });
             }
         }
         return None;
@@ -263,7 +263,7 @@ pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Optio
         return None;
     }
     let (package_name, subpath) = split_specifier(request)?;
-    for directory in ancestor_directories(basedir) {
+    for directory in basedir.ancestors() {
         let package_json = directory
             .join("node_modules")
             .join(&package_name)
@@ -275,22 +275,21 @@ pub(crate) fn esm_only_import_resolution(request: &str, basedir: &Path) -> Optio
         let json: serde_json::Value = serde_json::from_str(&body).ok()?;
         let exports = json.get("exports")?;
         let package_root = package_json.parent()?;
-        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require") {
-            if let Some(full) = resolve_exports_target_path(package_root, &target)
-                && full.is_file()
-            {
-                if full.extension().and_then(|extension| extension.to_str()) == Some("mjs") {
-                    return normalize(&full);
-                }
-                return None;
+        if let Some(target) = resolve_exports_subpath(exports, &subpath, "require")
+            && let Some(full) = resolve_exports_target_path(package_root, &target)
+            && full.is_file()
+        {
+            if full.extension().and_then(|extension| extension.to_str()) == Some("mjs") {
+                return Some(normalize(&full));
             }
+            return None;
         }
         let target = resolve_exports_subpath(exports, &subpath, "import")?;
         let full = resolve_exports_target_path(package_root, &target)?;
         if !full.is_file() {
             return None;
         }
-        let full = normalize(&full)?;
+        let full = normalize(&full);
         if !is_esm_file(&full) {
             return None;
         }
@@ -384,49 +383,6 @@ fn resolve_exports_target_path(package_root: &Path, target: &str) -> Option<Path
     Some(package_root.join(relative_path))
 }
 
-/// JS `common.isESMFile`: `.mjs` is ESM, `.cjs` is CJS, `.js` follows the
-/// nearest `package.json` `"type": "module"` marker.
-fn is_esm_file(path: &Path) -> bool {
-    let extension = path.extension().and_then(|extension| extension.to_str());
-    match extension {
-        Some("mjs") => return true,
-        Some("cjs") => return false,
-        Some("js") => {}
-        _ => return false,
-    }
-    let mut current = path.parent();
-    while let Some(directory) = current {
-        let package_json = directory.join("package.json");
-        if package_json.is_file() {
-            return std::fs::read_to_string(&package_json)
-                .ok()
-                .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok())
-                .and_then(|json| {
-                    json.get("type")
-                        .and_then(|value| value.as_str())
-                        .map(|value| value == "module")
-                })
-                .unwrap_or(false);
-        }
-        current = directory.parent();
-    }
-    false
-}
-
-fn ancestor_directories(start: &Path) -> Vec<PathBuf> {
-    let mut current = Some(start);
-    let mut directories = Vec::new();
-
-    while let Some(directory) = current {
-        directories.push(directory.to_path_buf());
-        current = directory.parent();
-    }
-
-    directories
-}
-
-fn normalize(path: &Path) -> Option<PathBuf> {
-    path.canonicalize()
-        .ok()
-        .or_else(|| Some(path.to_path_buf()))
+fn normalize(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }

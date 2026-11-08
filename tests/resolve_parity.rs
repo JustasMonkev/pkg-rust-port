@@ -266,3 +266,54 @@ fn rejects_traversing_exports_pattern_targets() -> Result<(), Box<dyn std::error
     std::fs::remove_dir_all(&fixture_dir)?;
     Ok(())
 }
+
+#[test]
+fn exports_resolution_respects_nearest_package_type_and_extension()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = tempfile::tempdir()?;
+    let basedir = root.path().join("src/deep");
+    let package_dir = root.path().join("node_modules/nested");
+    std::fs::create_dir_all(&basedir)?;
+    std::fs::create_dir_all(package_dir.join("lib"))?;
+    std::fs::write(package_dir.join("fallback.cjs"), "module.exports = 1;")?;
+    let options = ResolveOptions::new(&basedir);
+
+    for (extension, nested_config, use_exports) in [
+        ("js", None, true),
+        ("js", Some(r#"{"type":"module"}"#), true),
+        ("js", Some(r#"{"type":"commonjs"}"#), false),
+        ("js", Some("{}"), false),
+        ("js", Some("invalid json"), false),
+        ("mjs", Some("invalid json"), true),
+        ("cjs", Some(r#"{"type":"module"}"#), false),
+    ] {
+        let entry = format!("lib/entry.{extension}");
+        std::fs::write(package_dir.join(&entry), "module.exports = 2;")?;
+        std::fs::write(
+            package_dir.join("package.json"),
+            serde_json::json!({
+                "type": "module", "main": "fallback.cjs", "exports": format!("./{entry}")
+            })
+            .to_string(),
+        )?;
+        if let Some(config) = nested_config {
+            std::fs::write(package_dir.join("lib/package.json"), config)?;
+        }
+        let resolved = resolve_module_with_metadata("nested", &options)?;
+        let expected = if use_exports {
+            entry.as_str()
+        } else {
+            "fallback.cjs"
+        };
+        assert_eq!(
+            resolved.path,
+            package_dir.join(expected).canonicalize()?,
+            "extension={extension}, nested_config={nested_config:?}"
+        );
+        assert_eq!(
+            resolved.package_json,
+            Some(package_dir.join("package.json").canonicalize()?)
+        );
+    }
+    Ok(())
+}
