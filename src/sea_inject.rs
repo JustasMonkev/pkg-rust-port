@@ -214,7 +214,6 @@ const PF_R: u32 = 4;
 const PHDR64_SIZE: usize = 56;
 
 /// ELF header field offsets (ELF64).
-const E_TYPE: usize = 16;
 const E_PHOFF: usize = 32;
 const E_PHENTSIZE: usize = 54;
 const E_PHNUM: usize = 56;
@@ -354,7 +353,6 @@ fn inject_elf(mut image: Vec<u8>, blob: &[u8]) -> Result<Vec<u8>, PkgError> {
     // ET_EXEC binaries keep absolute addresses; nothing else needs touching. The
     // caller flips the SEA fuse before appending the blob so payload bytes cannot
     // create false duplicate fuse matches.
-    let _ = E_TYPE;
 
     Ok(image)
 }
@@ -395,6 +393,8 @@ fn inject_pe(_image: Vec<u8>, _blob: &[u8]) -> Result<Vec<u8>, PkgError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const E_TYPE: usize = 16;
 
     /// Minimal ELF64 LE image with an ELF header + one PT_PHDR + one PT_LOAD,
     /// plus a fuse sentinel, used to exercise the note/phdr surgery offline.

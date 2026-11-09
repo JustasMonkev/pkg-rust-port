@@ -86,6 +86,46 @@ fn gzip_manifest_compresses_payload_accounting_and_vfs_keys() -> Result<(), PkgE
 }
 
 #[test]
+fn compressed_paths_reuse_dictionary_ids_across_stores_and_symlinks() -> Result<(), PkgError> {
+    let entrypoint = format!(
+        "/{}",
+        (0..37)
+            .map(|index| format!("p{index}"))
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+    let mut packed = packed_content_and_stat(&entrypoint, b"console.log('hi');");
+    packed
+        .symlinks
+        .insert("/alias/p0".to_owned(), entrypoint.clone());
+    let manifest = produce_manifest(packed, Compression::Gzip, PathStyle::Posix)?;
+
+    let key = "0/1/2/3/4/5/6/7/8/9/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/10/11/12";
+    assert_eq!(manifest.entrypoint, format!("/snapshot{entrypoint}"));
+    assert_eq!(manifest.path_dictionary.len(), 40);
+    for (component, id) in [("p33", "z"), ("p34", "10"), ("p36", "12"), ("alias", "13")] {
+        assert_eq!(
+            manifest.path_dictionary.get(component).map(String::as_str),
+            Some(id)
+        );
+    }
+    assert_eq!(
+        manifest.symlinks,
+        BTreeMap::from([("0/1/13/2".to_owned(), key.to_owned())])
+    );
+    assert_eq!(manifest.vfs.len(), 1);
+    let stores = &manifest.vfs[key];
+    assert_eq!(stores.len(), 2);
+    let content = &stores[&StoreKind::Content.as_index()];
+    let stat = &stores[&StoreKind::Stat.as_index()];
+    assert!(content.size > 0 && stat.size > 0);
+    assert_eq!(content.offset, 0);
+    assert_eq!(stat.offset, content.size);
+    assert_eq!(stat.offset + stat.size, manifest.payload_size);
+    Ok(())
+}
+
+#[test]
 fn brotli_manifest_compresses_payload_accounting() -> Result<(), PkgError> {
     let fixture_dir = PathBuf::from("test/test-50-require-resolve");
     let entrypoint = fixture_dir.join("test-z-require-content.css");
@@ -500,7 +540,7 @@ fn packed_content_and_stat(entrypoint: &str, content: &[u8]) -> pkg_rust::Packed
 }
 
 fn bakery_placeholder() -> Vec<u8> {
-    let mut value = Vec::from([b'\0']);
+    let mut value = vec![0_u8];
     for _index in 0..20 {
         value.extend_from_slice(b"// BAKERY ");
     }

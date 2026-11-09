@@ -602,7 +602,7 @@ pub fn discover_placeholders(binary: &[u8]) -> PlaceholderSet {
 }
 
 fn bakery_placeholder() -> Vec<u8> {
-    let mut value = Vec::from([b'\0']);
+    let mut value = vec![0_u8];
     for _index in 0..20 {
         value.extend_from_slice(b"// BAKERY ");
     }
@@ -760,7 +760,6 @@ fn manifest_vfs_json(manifest: &ProducerManifest) -> BTreeMap<String, BTreeMap<S
 #[derive(Default)]
 struct PathDictionary {
     entries: BTreeMap<String, String>,
-    counter: usize,
 }
 
 impl PathDictionary {
@@ -781,8 +780,7 @@ impl PathDictionary {
             return existing.clone();
         }
 
-        let next = base36(self.counter);
-        self.counter += 1;
+        let next = base36(self.entries.len());
         self.entries.insert(value.to_owned(), next.clone());
         next
     }
@@ -797,9 +795,7 @@ fn base36(mut value: usize) -> String {
     let mut output = Vec::new();
     while value > 0 {
         let digit = value % 36;
-        if let Some(byte) = DIGITS.get(digit) {
-            output.push(char::from(*byte));
-        }
+        output.push(char::from(DIGITS[digit]));
         value /= 36;
     }
     output.iter().rev().collect()
@@ -1485,7 +1481,7 @@ process.stdin.resume();
     }
 
     fn binary_with_placeholders() -> Vec<u8> {
-        let mut binary = Vec::from([b'\0']);
+        let mut binary = vec![0_u8];
         for _index in 0..20 {
             binary.extend_from_slice(b"// BAKERY ");
         }

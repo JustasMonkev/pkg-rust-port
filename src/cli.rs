@@ -304,13 +304,12 @@ where
         // SEA downloads from nodejs.org and shells out to the host node via
         // blocking reqwest/Command, so run it on a dedicated OS thread (like the
         // classic build) instead of inside the Tokio runtime.
-        let plan_for_sea = plan.clone();
         let sea_thread = std::thread::Builder::new()
             .name("pkg-rust-sea".to_owned())
             .stack_size(8 * 1024 * 1024)
             .spawn(move || {
                 let log = |message: &str| println!("> {message}");
-                crate::sea::run_sea(&plan_for_sea, &log)
+                crate::sea::run_sea(&plan, &log)
             })
             .map_err(|source| PkgError::Io {
                 path: "pkg-rust-sea thread".to_owned(),
@@ -440,16 +439,8 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
     // flags resolve CLI > config > default.
     let flag_config = config
         .as_ref()
-        .and_then(|package| package.pkg.as_ref())
-        .or_else(|| {
-            if config.is_some() {
-                None
-            } else {
-                input_package
-                    .as_ref()
-                    .and_then(|package| package.pkg.as_ref())
-            }
-        });
+        .or(input_package.as_ref())
+        .and_then(|package| package.pkg.as_ref());
     let compression = cli
         .compress
         .as_deref()
@@ -571,8 +562,8 @@ fn plan_from_cli(cli: Cli) -> Result<PackagePlan, PkgError> {
         .filter(|option| !option.is_empty())
         .map(|option| format!("--{option}"))
         .collect();
-    let public_packages = parse_public_packages(public_packages_raw.as_deref());
-    let no_dictionary = parse_dictionary_modules(no_dict_raw.as_deref());
+    let public_packages = parse_wildcard_list(public_packages_raw.as_deref());
+    let no_dictionary = parse_wildcard_list(no_dict_raw.as_deref());
     let ignore = flag_config
         .map(|pkg| config_value_strings(&pkg.ignore))
         .unwrap_or_default();
@@ -769,34 +760,17 @@ fn wrap_bare_pkg_config(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn parse_public_packages(packages: Option<&str>) -> Vec<String> {
-    let Some(packages) = packages else {
+fn parse_wildcard_list(value: Option<&str>) -> Vec<String> {
+    let Some(value) = value else {
         return Vec::new();
     };
-    let parsed = packages
+    let parsed = value
         .split(',')
         .map(str::trim)
-        .filter(|package| !package.is_empty())
+        .filter(|item| !item.is_empty())
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
-    if parsed.iter().any(|package| package == "*") {
-        vec!["*".to_owned()]
-    } else {
-        parsed
-    }
-}
-
-fn parse_dictionary_modules(modules: Option<&str>) -> Vec<String> {
-    let Some(modules) = modules else {
-        return Vec::new();
-    };
-    let parsed = modules
-        .split(',')
-        .map(str::trim)
-        .filter(|module| !module.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-    if parsed.iter().any(|module| module == "*") {
+    if parsed.iter().any(|item| item == "*") {
         vec!["*".to_owned()]
     } else {
         parsed

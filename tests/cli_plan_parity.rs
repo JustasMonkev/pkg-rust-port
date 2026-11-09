@@ -480,7 +480,7 @@ fn plans_public_disclosure_flags() -> Result<(), Box<dyn std::error::Error>> {
         OsString::from(output_text),
         OsString::from("--public"),
         OsString::from("--public-packages"),
-        OsString::from("crusader,swordsman"),
+        OsString::from(" , crusader, swordsman, "),
         OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
@@ -501,7 +501,7 @@ fn plans_public_package_wildcard_like_js() -> Result<(), Box<dyn std::error::Err
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--public-packages"),
-        OsString::from("crusader,*,swordsman"),
+        OsString::from("crusader, *, ,swordsman"),
         OsString::from("test/test-50-public-packages/test-x-index.js"),
     ])?;
 
@@ -522,7 +522,7 @@ fn plans_disabled_dictionary_modules() -> Result<(), Box<dyn std::error::Error>>
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-dict"),
-        OsString::from("busboy.js,log4js.js"),
+        OsString::from(" , busboy.js, log4js.js, "),
         OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
@@ -542,7 +542,7 @@ fn plans_disabled_dictionary_wildcard_like_js() -> Result<(), Box<dyn std::error
         OsString::from("--output"),
         OsString::from(output_text),
         OsString::from("--no-dict"),
-        OsString::from("busboy.js,*,log4js.js"),
+        OsString::from("busboy.js, *, ,log4js.js"),
         OsString::from("test/test-50-package-json-4/test-x-index.js"),
     ])?;
 
@@ -765,6 +765,50 @@ fn discovered_pkgrc_targets_and_output_path_override_package_json()
     );
 
     fs::remove_dir_all(temp_root)?;
+    Ok(())
+}
+
+#[test]
+fn discovered_config_without_pkg_suppresses_package_options()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    fs::write(temp.path().join("app.js"), "console.log('ok');\n")?;
+    fs::write(
+        temp.path().join("package.json"),
+        r#"{"name":"no-pkg-options","bin":"app.js","pkg":{"compress":"GZip","bytecode":false,"publicPackages":["alpha"],"noDictionary":"*","targets":["node18-linux-x64"],"outputPath":"from-package"}}"#,
+    )?;
+    fs::write(temp.path().join(".pkgrc"), r#"{"name":"external"}"#)?;
+
+    let plan = plan_package([temp.path()])?;
+
+    assert_eq!(plan.compression, Compression::None);
+    assert!(plan.bytecode);
+    assert!(plan.public_packages.is_empty());
+    assert!(plan.no_dictionary.is_empty());
+    assert_output_suffixes(
+        &plan,
+        &[
+            "no-pkg-options-linux",
+            "no-pkg-options-macos",
+            "no-pkg-options-win.exe",
+        ],
+    );
+    let cwd = std::env::current_dir()?;
+    assert!(
+        plan.outputs
+            .iter()
+            .all(|output| output.output.parent() == Some(cwd.as_path()))
+    );
+    assert!(plan.marker.package().pkg.is_none());
+    assert_eq!(
+        plan.marker.package().name.as_deref(),
+        Some("no-pkg-options")
+    );
+    assert!(
+        plan.notices
+            .iter()
+            .any(|notice| notice.contains("takes precedence"))
+    );
     Ok(())
 }
 

@@ -62,23 +62,15 @@ impl Marker {
     #[must_use]
     pub fn with_package_path(package: PackageJson, package_path: impl Into<PathBuf>) -> Self {
         Self {
-            package,
             package_path: Some(package_path.into()),
-            activated: false,
-            has_dictionary: false,
-            public: false,
-            top_level: true,
+            ..Self::new(package)
         }
     }
 
     fn dependency(package: PackageJson, package_path: impl Into<PathBuf>) -> Self {
         Self {
-            package,
-            package_path: Some(package_path.into()),
-            activated: false,
-            has_dictionary: false,
-            public: false,
             top_level: false,
+            ..Self::with_package_path(package, package_path)
         }
     }
 
@@ -669,11 +661,11 @@ impl WalkerState {
                 true
             }
             StoreKind::Links => {
-                self.step_links(&task.file, &task.marker)?;
+                self.step_links(&task.file);
                 true
             }
             StoreKind::Stat => {
-                self.step_stat(&task.file, &task.marker)?;
+                self.step_stat(&task.file, &task.marker);
                 true
             }
         };
@@ -965,10 +957,9 @@ impl WalkerState {
         }
     }
 
-    fn step_links(&mut self, directory: &Path, marker: &Marker) -> Result<(), PkgError> {
-        let _ = marker;
+    fn step_links(&mut self, directory: &Path) {
         if !directory.is_dir() {
-            return Ok(());
+            return;
         }
 
         let mut children = self
@@ -985,10 +976,9 @@ impl WalkerState {
         children.sort();
         children.dedup();
         self.record_mut(directory).children = children;
-        Ok(())
     }
 
-    fn step_stat(&mut self, file: &Path, marker: &Marker) -> Result<(), PkgError> {
+    fn step_stat(&mut self, file: &Path, marker: &Marker) {
         if let Ok(metadata) = fs::symlink_metadata(file) {
             self.record_mut(file).metadata = Some(FileStat {
                 is_file: metadata.is_file(),
@@ -1010,7 +1000,6 @@ impl WalkerState {
                 self.append(parent.to_path_buf(), StoreKind::Links, marker.clone());
             }
         }
-        Ok(())
     }
 
     fn append_resolvable(

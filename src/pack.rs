@@ -83,8 +83,8 @@ pub fn pack(refined: RefinedOutput, bytecode: bool) -> Result<PackedOutput, PkgE
             }
         }
 
-        push_blob_or_content(&mut stripes, &snap, &record, StoreKind::Blob)?;
-        push_blob_or_content(&mut stripes, &snap, &record, StoreKind::Content)?;
+        push_blob_or_content(&mut stripes, &snap, &record, StoreKind::Blob);
+        push_blob_or_content(&mut stripes, &snap, &record, StoreKind::Content);
         push_links(&mut stripes, &snap, &record)?;
         push_stat(&mut stripes, &snap, &record)?;
     }
@@ -109,14 +109,14 @@ fn push_blob_or_content(
     snap: &str,
     record: &FileRecord,
     store: StoreKind,
-) -> Result<(), PkgError> {
+) {
     let enabled = match store {
         StoreKind::Blob => record.blob,
         StoreKind::Content => record.content,
         StoreKind::Links | StoreKind::Stat => false,
     };
     if !enabled {
-        return Ok(());
+        return;
     }
 
     let (file, buffer) = if let Some(body) = record.body.clone() {
@@ -131,7 +131,6 @@ fn push_blob_or_content(
         file,
         buffer,
     });
-    Ok(())
 }
 
 fn push_links(stripes: &mut Vec<Stripe>, snap: &str, record: &FileRecord) -> Result<(), PkgError> {

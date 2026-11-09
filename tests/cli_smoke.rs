@@ -408,7 +408,7 @@ fn cli_reports_invalid_compression_like_js_fixture() -> TestResult {
 }
 
 fn binary_with_placeholders() -> Vec<u8> {
-    let mut binary = Vec::from([b'\0']);
+    let mut binary = vec![0_u8];
     for _index in 0..20 {
         binary.extend_from_slice(b"// BAKERY ");
     }

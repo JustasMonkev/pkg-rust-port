@@ -936,7 +936,7 @@ fn failed_production_preserves_existing_output() -> Result<(), Box<dyn std::erro
 }
 
 fn binary_with_placeholders() -> Vec<u8> {
-    let mut binary = Vec::from([b'\0']);
+    let mut binary = vec![0_u8];
     for _index in 0..20 {
         binary.extend_from_slice(b"// BAKERY ");
     }
